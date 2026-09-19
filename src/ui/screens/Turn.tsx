@@ -269,8 +269,36 @@ function OpsPage({ g }: { g: Game }) {
               <p className="muted sm">本月暂无已实施提案。</p>
             ) : (
               <>
-                <div className="section-label">即时效果</div>
+                <div className="section-label">持续性效果</div>
                 <div className="stack-sm" style={{ marginBottom: 'var(--s3)' }}>
+                  {s.playedThisMonth.filter((c) => {
+                    const def = CARD_BY_ID[c.defId]
+                    if (!def?.base) return false
+                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
+                    const eff = def.base(ctx)
+                    return !(eff.orders || eff.flags?.length)
+                  }).map((c) => {
+                    const def = CARD_BY_ID[c.defId]
+                    return (
+                      <div key={c.uid} className={`card-item d-${def.kind}`}>
+                        <span className="spine" />
+                        <span className="card-body">
+                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}</span>
+                          <span className="card-desc">{def.text}</span>
+                        </span>
+                      </div>
+                    )
+                  })}
+                  {s.playedThisMonth.filter((c) => {
+                    const def = CARD_BY_ID[c.defId]
+                    if (!def?.base) return false
+                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
+                    const eff = def.base(ctx)
+                    return !(eff.orders || eff.flags?.length)
+                  }).length === 0 ? <p className="xs faint">无</p> : null}
+                </div>
+                <div className="section-label">即时效果</div>
+                <div className="stack-sm">
                   {s.playedThisMonth.filter((c) => {
                     const def = CARD_BY_ID[c.defId]
                     if (!def?.base) return false
@@ -294,35 +322,7 @@ function OpsPage({ g }: { g: Game }) {
                     if (!def?.base) return false
                     const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
                     const eff = def.base(ctx)
-                    return !(eff.orders || eff.flags?.length)
-                  }).length === 0 ? <p className="xs faint">无</p> : null}
-                </div>
-                <div className="section-label">持续性效果</div>
-                <div className="stack-sm">
-                  {s.playedThisMonth.filter((c) => {
-                    const def = CARD_BY_ID[c.defId]
-                    if (!def?.base) return false
-                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
-                    const eff = def.base(ctx)
-                    return !(eff.orders || eff.flags?.length)
-                  }).map((c) => {
-                    const def = CARD_BY_ID[c.defId]
-                    return (
-                      <div key={c.uid} className={`card-item d-${def.kind}`}>
-                        <span className="spine" />
-                        <span className="card-body">
-                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}</span>
-                          <span className="card-desc">{def.text}</span>
-                        </span>
-                      </div>
-                    )
-                  })}
-                  {s.playedThisMonth.filter((c) => {
-                    const def = CARD_BY_ID[c.defId]
-                    if (!def?.base) return false
-                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
-                    const eff = def.base(ctx)
-                    return !(eff.orders || eff.flags?.length)
+                    return !!(eff.orders || eff.flags?.length)
                   }).length === 0 ? <p className="xs faint">无</p> : null}
                 </div>
               </>
