@@ -73,7 +73,7 @@ export function TurnScreen({
 
 function OpsPage({ g }: { g: Game }) {
   const s = g.s
-  const [view, setView] = useState<'hand' | 'discard' | 'deck' | null>(null)
+  const [view, setView] = useState<'discard' | null>(null)
 
   return (
     <>
@@ -94,9 +94,6 @@ function OpsPage({ g }: { g: Game }) {
           <div className="wrap">
             <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('discard')}>
               <span className="btn-main xs">弃牌堆 {s.discard.length}</span>
-            </button>
-            <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('deck')}>
-              <span className="btn-main xs">牌库 {s.deck.length}</span>
             </button>
           </div>
         </div>
@@ -147,14 +144,14 @@ function OpsPage({ g }: { g: Game }) {
         ) : null}
       </div>
 
-      {view ? (
+      {view === 'discard' ? (
         <Sheet
-          title={view === 'discard' ? '弃牌堆' : '牌库'}
-          sub={view === 'discard' ? `${s.discard.length} 张` : `剩余 ${s.deck.length} 张`}
+          title="弃牌堆"
+          sub={`${s.discard.length} 张`}
           onClose={() => setView(null)}
         >
           <div className="stack">
-            {(view === 'discard' ? s.discard : s.deck).map((c) => {
+            {s.discard.map((c) => {
               const def = CARD_BY_ID[c.defId]
               return (
                 <div key={c.uid} className={`card-item d-${def.kind}`}>
@@ -168,7 +165,7 @@ function OpsPage({ g }: { g: Game }) {
                 </div>
               )
             })}
-            {(view === 'discard' ? s.discard : s.deck).length === 0 ? (
+            {s.discard.length === 0 ? (
               <p className="muted sm">空空如也。</p>
             ) : null}
           </div>
