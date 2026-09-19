@@ -82,11 +82,11 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
   return weights.flatMap(({ ev, w }) => Array<GameEventDef>(w).fill(ev))
 }
 
-/** 开局：进入第 1 个月的事件阶段。 */
+/** 开局：进入第 1 个月的事件阶段（第 1 月即季度首月，召开董事会）。 */
 export function startGame(state: GameState) {
   state.phase = 'board'
   state.boardPrompted = false
-  drawBoardGoals(state, new Rng(state.seed * 31 + 7))
+  maybeDrawBoardGoals(state, new Rng(state.seed * 31 + 7))
 }
 
 /** 抽取本季度董事会目标（§4.2 / §4.4）。 */
@@ -117,6 +117,16 @@ export function drawBoardGoals(state: GameState, rng: Rng) {
       '连续两个季度未达成将被免职',
     ])
   }
+}
+
+/** 仅当处于季度首月（每月 1/4/7/10）时才应召开董事会。 */
+function isQuarterStart(state: GameState) {
+  return (state.month - 1) % 3 === 0
+}
+
+/** 每月进入 event 阶段前调用：季度首月抽取新目标，否则沿用本季度已有目标。 */
+export function maybeDrawBoardGoals(state: GameState, rng: Rng) {
+  if (isQuarterStart(state)) drawBoardGoals(state, rng)
 }
 
 /**
@@ -257,7 +267,7 @@ export function nextMonth(state: GameState) {
   state.rngState = rng.state
   state.phase = 'board'
   state.boardPrompted = false
-  drawBoardGoals(state, new Rng(state.rngState + state.month * 7919))
+  maybeDrawBoardGoals(state, new Rng(state.rngState + state.month * 7919))
   syncManagementCards(state)
 }
 

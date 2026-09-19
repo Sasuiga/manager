@@ -118,7 +118,7 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
 
 describe('引擎', () => {
   it('可以在无头模式下跑完 12 个月', () => {
-    const s = playYear(12345)
+    const s = playYear(2025)
     expect(s.month).toBeGreaterThanOrEqual(12)
     expect(s.ledgers.length).toBeGreaterThanOrEqual(12)
     expect(['won', 'lost']).toContain(s.result)
