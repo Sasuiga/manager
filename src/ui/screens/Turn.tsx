@@ -206,13 +206,13 @@ function OpsPage({ g }: { g: Game }) {
           <h3>提案</h3>
           <div className="wrap">
             <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('discard')}>
-              <span className="btn-main xs">废案库 {s.discard.length}</span>
+              <span className="btn-main xs">已实施 {s.playedThisMonth.length}</span>
             </button>
           </div>
         </div>
         <div className="title-rule" />
         {s.hand.length === 0 ? (
-          <p className="muted sm">提案是空的。已实施的提案会进入废案库。</p>
+          <p className="muted sm">提案是空的。已实施的提案会进入已实施列表。</p>
         ) : (
           <div className="stack">
             {s.hand.map((c) => {
@@ -252,35 +252,68 @@ function OpsPage({ g }: { g: Game }) {
         )}
         {s.hand.length > s.handMax ? (
           <div className="warn" style={{ marginTop: 'var(--s3)' }}>
-            提案超出上限 {s.hand.length - s.handMax} 项，需废案后才能继续。
+            提案超出上限 {s.hand.length - s.handMax} 项，需弃提案后才能继续。
           </div>
         ) : null}
       </div>
 
       {view === 'discard' ? (
         <Sheet
-          title="废案库"
-          sub={`${s.discard.length} 张`}
+          title="已实施提案"
+          sub={`${s.playedThisMonth.length} 项`}
           onClose={() => setView(null)}
         >
           <div className="stack">
-            {s.discard.map((c) => {
-              const def = CARD_BY_ID[c.defId]
-              return (
-                <div key={c.uid} className={`card-item d-${def.kind}`}>
-                  <span className="spine" />
-                  <span className="card-body">
-                    <span className="card-name">
-                      【{DEPT_SHORT[def.kind]}】{def.name}
-                    </span>
-                    <span className="card-desc">{def.text}</span>
-                  </span>
+            {s.playedThisMonth.length === 0 ? (
+              <p className="muted sm">本月暂无已实施提案。</p>
+            ) : (
+              <>
+                <div className="section-label">即时效果</div>
+                <div className="stack-sm" style={{ marginBottom: 'var(--s3)' }}>
+                  {s.playedThisMonth.filter((c) => {
+                    const def = CARD_BY_ID[c.defId]
+                    return def?.base && (def.base({} as any).orders || def.base({} as any).flags)
+                  }).map((c) => {
+                    const def = CARD_BY_ID[c.defId]
+                    return (
+                      <div key={c.uid} className={`card-item d-${def.kind}`}>
+                        <span className="spine" />
+                        <span className="card-body">
+                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}</span>
+                          <span className="card-desc">{def.text}</span>
+                        </span>
+                      </div>
+                    )
+                  })}
+                  {s.playedThisMonth.filter((c) => {
+                    const def = CARD_BY_ID[c.defId]
+                    return def?.base && !(def.base({} as any).orders || def.base({} as any).flags)
+                  }).length === 0 ? <p className="xs faint">无</p> : null}
                 </div>
-              )
-            })}
-            {s.discard.length === 0 ? (
-              <p className="muted sm">空空如也。</p>
-            ) : null}
+                <div className="section-label">持续性效果</div>
+                <div className="stack-sm">
+                  {s.playedThisMonth.filter((c) => {
+                    const def = CARD_BY_ID[c.defId]
+                    return def?.base && !(def.base({} as any).orders || def.base({} as any).flags)
+                  }).map((c) => {
+                    const def = CARD_BY_ID[c.defId]
+                    return (
+                      <div key={c.uid} className={`card-item d-${def.kind}`}>
+                        <span className="spine" />
+                        <span className="card-body">
+                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}</span>
+                          <span className="card-desc">{def.text}</span>
+                        </span>
+                      </div>
+                    )
+                  })}
+                  {s.playedThisMonth.filter((c) => {
+                    const def = CARD_BY_ID[c.defId]
+                    return def?.base && !(def.base({} as any).orders || def.base({} as any).flags)
+                  }).length === 0 ? <p className="xs faint">无</p> : null}
+                </div>
+              </>
+            )}
           </div>
         </Sheet>
       ) : null}

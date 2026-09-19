@@ -176,7 +176,7 @@ export function DrawScreen({ g }: { g: Game }) {
               <span className="btn-main xs">提案 {s.hand.length}</span>
             </button>
             <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('discard')}>
-              <span className="btn-main xs">废案库 {s.discard.length}</span>
+              <span className="btn-main xs">已实施 {s.playedThisMonth.length}</span>
             </button>
             <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('deck')}>
               <span className="btn-main xs">提案库 {s.deck.length}</span>
@@ -205,7 +205,7 @@ export function DrawScreen({ g }: { g: Game }) {
 
         {view ? (
           <Sheet
-            title={view === 'hand' ? (discardMode ? `提案 · 请废 ${overLimit} 项` : '提案') : view === 'discard' ? '废案库' : '提案库'}
+            title={view === 'hand' ? (discardMode ? `提案 · 请废 ${overLimit} 项` : '提案') : view === 'discard' ? '已实施' : '提案库'}
             sub={
               view === 'hand'
                 ? `${s.hand.length}/${s.handMax} 项${discardMode ? ` · 已选废 ${discardSelected.length}/${overLimit}` : ''}`
