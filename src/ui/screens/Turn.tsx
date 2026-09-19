@@ -144,7 +144,6 @@ function OpsPage({ g }: { g: Game }) {
                       </span>
                     </span>
                     <span className="card-desc">{def.text}</span>
-                    {def.cond ? <span className="card-cond">{def.cond}</span> : null}
                     <span className="card-cost">
                       {cost > 0 ? `打出费用 ${wan(cost)}` : '打出费用：无'} · 不耗 AP
                     </span>

@@ -161,7 +161,6 @@ export function DrawScreen({ g }: { g: Game }) {
                         <span className={`tag${on ? ' gold' : ''}`}>{on ? '已选' : '选择'}</span>
                       </span>
                       <span className="card-desc">{def.text}</span>
-                      {def.cond ? <span className="card-cond">{def.cond}</span> : null}
                     </span>
                   </button>
                 )
@@ -256,7 +255,6 @@ export function DrawScreen({ g }: { g: Game }) {
                         ) : null}
                       </span>
                       <span className="card-desc">{def.text}</span>
-                      {def.cond ? <span className="card-cond">{def.cond}</span> : null}
                       {view === 'hand' && !discardMode ? (
                         <span className="card-cost">
                           {E.cardPlayCost(s, def) > 0 ? `打出费用 ${wan(E.cardPlayCost(s, def))}` : '打出费用：无'} · 不耗 AP
