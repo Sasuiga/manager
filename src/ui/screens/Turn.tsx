@@ -73,6 +73,7 @@ export function TurnScreen({
 
 function OpsPage({ g }: { g: Game }) {
   const s = g.s
+  const d = E.derive(s)
   const [view, setView] = useState<'discard' | null>(null)
 
   return (
@@ -85,6 +86,21 @@ function OpsPage({ g }: { g: Game }) {
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
           招募管理人员可提升 AP 上限（下月生效）；每月实施提案辅助各业务部门开展运营。
         </p>
+        {d.deptExpenses.ops.length > 0 ? (
+          <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
+            <div className="section-label">本月费用</div>
+            {d.deptExpenses.ops.map((r) => (
+              <div key={r.label} className="row">
+                <span className="row-key">{r.label}</span>
+                <span className="row-val">{wan(r.value)}</span>
+              </div>
+            ))}
+            <div className="row bold">
+              <span className="row-key">合计</span>
+              <span className="row-val">{wan(d.deptExpenses.ops.reduce((a, r) => a + r.value, 0))}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* 提案 */}
@@ -193,6 +209,21 @@ function BuyPage({ g }: { g: Game }) {
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
           每月为原料选择采购档位，签长期协议锁定供货量；人员越多档位越宽、可解锁高级材料。
         </p>
+        {d.deptExpenses.buy.length > 0 ? (
+          <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
+            <div className="section-label">本月费用</div>
+            {d.deptExpenses.buy.map((r) => (
+              <div key={r.label} className="row">
+                <span className="row-key">{r.label}</span>
+                <span className="row-val">{wan(r.value)}</span>
+              </div>
+            ))}
+            <div className="row bold">
+              <span className="row-key">合计</span>
+              <span className="row-val">{wan(d.deptExpenses.buy.reduce((a, r) => a + r.value, 0))}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {mats.map((m) => (
@@ -450,6 +481,21 @@ function MakePage({ g }: { g: Game }) {
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
           安排本月生产计划，按 BOM 消耗原料；设备与加班可提升产能上限，人员越多单月产量越高。
         </p>
+        {d.deptExpenses.make.length > 0 ? (
+          <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
+            <div className="section-label">本月费用</div>
+            {d.deptExpenses.make.map((r) => (
+              <div key={r.label} className="row">
+                <span className="row-key">{r.label}</span>
+                <span className="row-val">{wan(r.value)}</span>
+              </div>
+            ))}
+            <div className="row bold">
+              <span className="row-key">合计</span>
+              <span className="row-val">{wan(d.deptExpenses.make.reduce((a, r) => a + r.value, 0))}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="card">
@@ -636,6 +682,21 @@ function SellPage({ g }: { g: Game }) {
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
           分配销售资源抢占各层现货需求，处理确定性订单；人员越多资源越丰富，可解锁品牌加成。
         </p>
+        {d.deptExpenses.sell.length > 0 ? (
+          <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
+            <div className="section-label">本月费用</div>
+            {d.deptExpenses.sell.map((r) => (
+              <div key={r.label} className="row">
+                <span className="row-key">{r.label}</span>
+                <span className="row-val">{wan(r.value)}</span>
+              </div>
+            ))}
+            <div className="row bold">
+              <span className="row-key">合计</span>
+              <span className="row-val">{wan(d.deptExpenses.sell.reduce((a, r) => a + r.value, 0))}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="card">
@@ -730,6 +791,21 @@ function RndPage({ g }: { g: Game }) {
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
           推进研发项目，解锁新产品与知识产权；人员越多每月进度越快、成功率越高。
         </p>
+        {d.deptExpenses.rnd.length > 0 ? (
+          <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
+            <div className="section-label">本月费用</div>
+            {d.deptExpenses.rnd.map((r) => (
+              <div key={r.label} className="row">
+                <span className="row-key">{r.label}</span>
+                <span className="row-val">{wan(r.value)}</span>
+              </div>
+            ))}
+            <div className="row bold">
+              <span className="row-key">合计</span>
+              <span className="row-val">{wan(d.deptExpenses.rnd.reduce((a, r) => a + r.value, 0))}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="card">

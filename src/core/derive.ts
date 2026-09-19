@@ -16,6 +16,7 @@ import {
   MAKER_CAP_WITH_SLOT,
   MATERIALS,
   MONTHLY_RATE,
+  OVERTIME_COST,
   PRODUCT_PRICE,
   RND_COST_PER_PROJECT,
   SALES_ORDER_COUNT,
@@ -90,6 +91,8 @@ export interface DerivedTotals {
   /** 原料单件节省（工艺优化） */
   matSave: number
   notes: string[]
+  /** 各部门本月费用明细（角），含工资、折旧、加班、研发等 */
+  deptExpenses: Record<Dept, { label: string; value: number }[]>
 }
 
 /** 合并多个 MonthMods，后者叠加到前者之上。 */
@@ -361,6 +364,27 @@ export function derive(state: GameState): DerivedTotals {
   const salaryTotalAdj = salaryTotal
   const noBorrow = !!mods.noBorrow
 
+  // ── 各部门费用明细 ──
+  const overtimeCost = state.plan.overtime && state.depts.make.staff >= 3 ? OVERTIME_COST : 0
+  let makeDepreciation = 0
+  for (const e of state.equipment) {
+    makeDepreciation += Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated))
+  }
+  const deptExpenses: Record<Dept, { label: string; value: number }[]> = {
+    ops: salaryPer.ops * staffCount.ops > 0 ? [{ label: '工资', value: salaryPer.ops * staffCount.ops }] : [],
+    buy: salaryPer.buy * staffCount.buy > 0 ? [{ label: '工资', value: salaryPer.buy * staffCount.buy }] : [],
+    make: [
+      ...(salaryPer.make * staffCount.make > 0 ? [{ label: '工资', value: salaryPer.make * staffCount.make }] : []),
+      ...(makeDepreciation > 0 ? [{ label: '设备折旧', value: makeDepreciation }] : []),
+      ...(overtimeCost > 0 ? [{ label: '加班费', value: overtimeCost }] : []),
+    ],
+    sell: salaryPer.sell * staffCount.sell > 0 ? [{ label: '工资', value: salaryPer.sell * staffCount.sell }] : [],
+    rnd: [
+      ...(salaryPer.rnd * staffCount.rnd > 0 ? [{ label: '工资', value: salaryPer.rnd * staffCount.rnd }] : []),
+      ...(rndCostTotal > 0 ? [{ label: '研发投入', value: rndCostTotal }] : []),
+    ],
+  }
+
   return {
     materials,
     demand,
@@ -394,6 +418,7 @@ export function derive(state: GameState): DerivedTotals {
     drawM,
     matSave: ip.matSave,
     notes: mods.notes ?? [],
+    deptExpenses,
   }
 }
 
