@@ -8,10 +8,10 @@ import { wan } from '../format'
 import type { Game } from '../useGame'
 
 /**
- * 抽卡阶段：每月开始时、事件之后独立的一次活动（设计文档 §5 / UI §九）。
+ * 立项阶段：每月开始时、事件之后独立的一次活动（设计文档 §5 / UI §九）。
  *
- * 抽 N 张、选 M 张入手，未选中的放回牌库；确认后才进入经营布局阶段，
- * 因此一个月只能抽这一次。进入抽卡阶段时 enterDraw 自动抽 N 张到「待选」区，
+ * 抽 N 项、选 M 项入手，未选中的放回提案库；确认后才进入经营布局阶段，
+ * 因此一个月只能立项这一次。进入立项阶段时 enterDraw 自动抽 N 项到「待选」区，
  * 玩家一次看到全部 N 张，从中选 M 张入手。开局（第 1 月）同样是「五选三」。
  */
 export function DrawScreen({ g }: { g: Game }) {
@@ -25,7 +25,7 @@ export function DrawScreen({ g }: { g: Game }) {
   const noDraw = s.drawn.length === 0 && s.deck.length === 0
   const overLimit = s.hand.length - s.handMax
 
-  /** 确认后若手牌超上限，弹出手牌列表让玩家选择弃掉以腾出空间。 */
+  /** 确认后若提案超上限，弹出提案列表让玩家选择废掉以腾出空间。 */
   const confirm = () => {
     // 常规情况：抽 N 张选 M 张，未选中的放回牌库后进入经营。
     const r = E.confirmDraw(s)
@@ -43,7 +43,7 @@ export function DrawScreen({ g }: { g: Game }) {
     g.mutate(() => {})
   }
 
-  /** 弃牌模式关闭时，若手牌仍超上限则自动开启。 */
+  /** 废案模式关闭时，若提案仍超上限则自动开启。 */
   const closeSheet = () => {
     setView(null)
     if (discardMode) {
@@ -53,14 +53,14 @@ export function DrawScreen({ g }: { g: Game }) {
     }
   }
 
-  /** 切换弃牌选中状态。 */
+  /** 切换废案选中状态。 */
   const toggleDiscard = (uid: string) => {
     setDiscardSelected((prev) =>
       prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
     )
   }
 
-  /** 确认弃牌：一次性弃掉所有选中的卡，然后进入经营。 */
+  /** 确认废案：一次性废掉所有选中的提案，然后进入经营。 */
   const confirmDiscard = () => {
     if (discardSelected.length === 0) return
     g.mutate((st) => {
@@ -92,7 +92,7 @@ export function DrawScreen({ g }: { g: Game }) {
 
         <div className="divider" />
 
-        {/* 本局参数：抽 N 选 M / 手牌 / 可打牌数 / AP */}
+        {/* 本局参数：抽 N 选 M / 提案 / 可实施数 / AP */}
         <div className="card">
           <div className="hstack-between">
             <span className="xs mono">
