@@ -86,25 +86,32 @@ function OpsPage({ g }: { g: Game }) {
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
           招募管理人员可提升 AP 上限（下月生效）；每月实施提案辅助各业务部门开展运营。
         </p>
-        {d.deptExpenses.ops.length > 0 ? (
+        {d.deptLedger.ops.length > 0 ? (
           <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
-            <div className="section-label">本月费用</div>
-            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)' }}>
-              <span className="row-key xs faint">项目</span>
-              <span className="row-key xs faint">科目</span>
-              <span className="row-val xs faint">金额</span>
+            <div className="section-label">本月账务</div>
+            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)', fontSize: 'var(--fs-xs)' }}>
+              <span className="xs faint">项目</span>
+              <span className="xs faint" style={{ flex: 1 }}>借方</span>
+              <span className="xs faint" style={{ flex: 1 }}>贷方</span>
+              <span className="xs faint">金额</span>
             </div>
-            {d.deptExpenses.ops.map((r) => (
-              <div key={r.item} className="row">
-                <span className="row-key">{r.item}</span>
-                <span className="row-key xs faint">{r.account}</span>
-                <span className="row-val">{wan(r.value)}</span>
+            {d.deptLedger.ops.map((r) => (
+              <div key={r.item} className="row" style={{ fontSize: 'var(--fs-xs)' }}>
+                <span className="row-key" style={{ whiteSpace: 'nowrap' }}>{r.item}</span>
+                <span style={{ flex: 1 }}>
+                  {r.debit ? <span className="row-key faint">{r.debit}</span> : null}
+                </span>
+                <span style={{ flex: 1 }}>
+                  {r.credit ? <span className="row-key faint">{r.credit}</span> : null}
+                </span>
+                <span className="row-val">{wan(r.debitAmt || r.creditAmt)}</span>
               </div>
             ))}
-            <div className="row bold">
+            <div className="row bold" style={{ borderTop: '1px solid var(--line)', paddingTop: 'var(--s1)' }}>
               <span className="row-key">合计</span>
               <span />
-              <span className="row-val">{wan(d.deptExpenses.ops.reduce((a, r) => a + r.value, 0))}</span>
+              <span />
+              <span className="row-val">{wan(d.deptLedger.ops.reduce((a, r) => a + (r.debitAmt || r.creditAmt), 0))}</span>
             </div>
           </div>
         ) : null}
@@ -216,25 +223,32 @@ function BuyPage({ g }: { g: Game }) {
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
           每月为原料选择采购档位，签长期协议锁定供货量；人员越多档位越宽、可解锁高级材料。
         </p>
-        {d.deptExpenses.buy.length > 0 ? (
+        {d.deptLedger.buy.length > 0 ? (
           <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
-            <div className="section-label">本月费用</div>
-            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)' }}>
-              <span className="row-key xs faint">项目</span>
-              <span className="row-key xs faint">科目</span>
-              <span className="row-val xs faint">金额</span>
+            <div className="section-label">本月账务</div>
+            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)', fontSize: 'var(--fs-xs)' }}>
+              <span className="xs faint">项目</span>
+              <span className="xs faint" style={{ flex: 1 }}>借方</span>
+              <span className="xs faint" style={{ flex: 1 }}>贷方</span>
+              <span className="xs faint">金额</span>
             </div>
-            {d.deptExpenses.buy.map((r) => (
-              <div key={r.item} className="row">
-                <span className="row-key">{r.item}</span>
-                <span className="row-key xs faint">{r.account}</span>
-                <span className="row-val">{wan(r.value)}</span>
+            {d.deptLedger.buy.map((r) => (
+              <div key={r.item} className="row" style={{ fontSize: 'var(--fs-xs)' }}>
+                <span className="row-key" style={{ whiteSpace: 'nowrap' }}>{r.item}</span>
+                <span style={{ flex: 1 }}>
+                  {r.debit ? <span className="row-key faint">{r.debit}</span> : null}
+                </span>
+                <span style={{ flex: 1 }}>
+                  {r.credit ? <span className="row-key faint">{r.credit}</span> : null}
+                </span>
+                <span className="row-val">{wan(r.debitAmt || r.creditAmt)}</span>
               </div>
             ))}
-            <div className="row bold">
+            <div className="row bold" style={{ borderTop: '1px solid var(--line)', paddingTop: 'var(--s1)' }}>
               <span className="row-key">合计</span>
               <span />
-              <span className="row-val">{wan(d.deptExpenses.buy.reduce((a, r) => a + r.value, 0))}</span>
+              <span />
+              <span className="row-val">{wan(d.deptLedger.buy.reduce((a, r) => a + (r.debitAmt || r.creditAmt), 0))}</span>
             </div>
           </div>
         ) : null}
@@ -495,25 +509,32 @@ function MakePage({ g }: { g: Game }) {
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
           安排本月生产计划，按 BOM 消耗原料；设备与加班可提升产能上限，人员越多单月产量越高。
         </p>
-        {d.deptExpenses.make.length > 0 ? (
+        {d.deptLedger.make.length > 0 ? (
           <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
-            <div className="section-label">本月费用</div>
-            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)' }}>
-              <span className="row-key xs faint">项目</span>
-              <span className="row-key xs faint">科目</span>
-              <span className="row-val xs faint">金额</span>
+            <div className="section-label">本月账务</div>
+            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)', fontSize: 'var(--fs-xs)' }}>
+              <span className="xs faint">项目</span>
+              <span className="xs faint" style={{ flex: 1 }}>借方</span>
+              <span className="xs faint" style={{ flex: 1 }}>贷方</span>
+              <span className="xs faint">金额</span>
             </div>
-            {d.deptExpenses.make.map((r) => (
-              <div key={r.item} className="row">
-                <span className="row-key">{r.item}</span>
-                <span className="row-key xs faint">{r.account}</span>
-                <span className="row-val">{wan(r.value)}</span>
+            {d.deptLedger.make.map((r) => (
+              <div key={r.item} className="row" style={{ fontSize: 'var(--fs-xs)' }}>
+                <span className="row-key" style={{ whiteSpace: 'nowrap' }}>{r.item}</span>
+                <span style={{ flex: 1 }}>
+                  {r.debit ? <span className="row-key faint">{r.debit}</span> : null}
+                </span>
+                <span style={{ flex: 1 }}>
+                  {r.credit ? <span className="row-key faint">{r.credit}</span> : null}
+                </span>
+                <span className="row-val">{wan(r.debitAmt || r.creditAmt)}</span>
               </div>
             ))}
-            <div className="row bold">
+            <div className="row bold" style={{ borderTop: '1px solid var(--line)', paddingTop: 'var(--s1)' }}>
               <span className="row-key">合计</span>
               <span />
-              <span className="row-val">{wan(d.deptExpenses.make.reduce((a, r) => a + r.value, 0))}</span>
+              <span />
+              <span className="row-val">{wan(d.deptLedger.make.reduce((a, r) => a + (r.debitAmt || r.creditAmt), 0))}</span>
             </div>
           </div>
         ) : null}
@@ -703,25 +724,32 @@ function SellPage({ g }: { g: Game }) {
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
           分配销售资源抢占各层现货需求，处理确定性订单；人员越多资源越丰富，可解锁品牌加成。
         </p>
-        {d.deptExpenses.sell.length > 0 ? (
+        {d.deptLedger.sell.length > 0 ? (
           <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
-            <div className="section-label">本月费用</div>
-            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)' }}>
-              <span className="row-key xs faint">项目</span>
-              <span className="row-key xs faint">科目</span>
-              <span className="row-val xs faint">金额</span>
+            <div className="section-label">本月账务</div>
+            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)', fontSize: 'var(--fs-xs)' }}>
+              <span className="xs faint">项目</span>
+              <span className="xs faint" style={{ flex: 1 }}>借方</span>
+              <span className="xs faint" style={{ flex: 1 }}>贷方</span>
+              <span className="xs faint">金额</span>
             </div>
-            {d.deptExpenses.sell.map((r) => (
-              <div key={r.item} className="row">
-                <span className="row-key">{r.item}</span>
-                <span className="row-key xs faint">{r.account}</span>
-                <span className="row-val">{wan(r.value)}</span>
+            {d.deptLedger.sell.map((r) => (
+              <div key={r.item} className="row" style={{ fontSize: 'var(--fs-xs)' }}>
+                <span className="row-key" style={{ whiteSpace: 'nowrap' }}>{r.item}</span>
+                <span style={{ flex: 1 }}>
+                  {r.debit ? <span className="row-key faint">{r.debit}</span> : null}
+                </span>
+                <span style={{ flex: 1 }}>
+                  {r.credit ? <span className="row-key faint">{r.credit}</span> : null}
+                </span>
+                <span className="row-val">{wan(r.debitAmt || r.creditAmt)}</span>
               </div>
             ))}
-            <div className="row bold">
+            <div className="row bold" style={{ borderTop: '1px solid var(--line)', paddingTop: 'var(--s1)' }}>
               <span className="row-key">合计</span>
               <span />
-              <span className="row-val">{wan(d.deptExpenses.sell.reduce((a, r) => a + r.value, 0))}</span>
+              <span />
+              <span className="row-val">{wan(d.deptLedger.sell.reduce((a, r) => a + (r.debitAmt || r.creditAmt), 0))}</span>
             </div>
           </div>
         ) : null}
@@ -819,25 +847,32 @@ function RndPage({ g }: { g: Game }) {
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
           推进研发项目，解锁新产品与知识产权；人员越多每月进度越快、成功率越高。
         </p>
-        {d.deptExpenses.rnd.length > 0 ? (
+        {d.deptLedger.rnd.length > 0 ? (
           <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
-            <div className="section-label">本月费用</div>
-            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)' }}>
-              <span className="row-key xs faint">项目</span>
-              <span className="row-key xs faint">科目</span>
-              <span className="row-val xs faint">金额</span>
+            <div className="section-label">本月账务</div>
+            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)', fontSize: 'var(--fs-xs)' }}>
+              <span className="xs faint">项目</span>
+              <span className="xs faint" style={{ flex: 1 }}>借方</span>
+              <span className="xs faint" style={{ flex: 1 }}>贷方</span>
+              <span className="xs faint">金额</span>
             </div>
-            {d.deptExpenses.rnd.map((r) => (
-              <div key={r.item} className="row">
-                <span className="row-key">{r.item}</span>
-                <span className="row-key xs faint">{r.account}</span>
-                <span className="row-val">{wan(r.value)}</span>
+            {d.deptLedger.rnd.map((r) => (
+              <div key={r.item} className="row" style={{ fontSize: 'var(--fs-xs)' }}>
+                <span className="row-key" style={{ whiteSpace: 'nowrap' }}>{r.item}</span>
+                <span style={{ flex: 1 }}>
+                  {r.debit ? <span className="row-key faint">{r.debit}</span> : null}
+                </span>
+                <span style={{ flex: 1 }}>
+                  {r.credit ? <span className="row-key faint">{r.credit}</span> : null}
+                </span>
+                <span className="row-val">{wan(r.debitAmt || r.creditAmt)}</span>
               </div>
             ))}
-            <div className="row bold">
+            <div className="row bold" style={{ borderTop: '1px solid var(--line)', paddingTop: 'var(--s1)' }}>
               <span className="row-key">合计</span>
               <span />
-              <span className="row-val">{wan(d.deptExpenses.rnd.reduce((a, r) => a + r.value, 0))}</span>
+              <span />
+              <span className="row-val">{wan(d.deptLedger.rnd.reduce((a, r) => a + (r.debitAmt || r.creditAmt), 0))}</span>
             </div>
           </div>
         ) : null}

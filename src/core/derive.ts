@@ -92,8 +92,8 @@ export interface DerivedTotals {
   /** 原料单件节省（工艺优化） */
   matSave: number
   notes: string[]
-  /** 各部门本月费用明细：{ 项目, 报表科目, 金额 } */
-  deptExpenses: Record<Dept, { item: string; account: string; value: number }[]>
+  /** 各部门本月账务记录：复式记账，借贷两列，让玩家理解账务处理 */
+  deptLedger: Record<Dept, { item: string; debit: string; debitAmt: number; credit: string; creditAmt: number }[]>
 }
 
 /** 合并多个 MonthMods，后者叠加到前者之上。 */
@@ -371,7 +371,7 @@ export function derive(state: GameState): DerivedTotals {
   for (const e of state.equipment) {
     makeDepreciation += Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated))
   }
-  /** 招聘费当月直接计入管理费用（miscExpense），按本月招聘人数 × 招聘费展示 */
+  /** 招聘费当月直接计入管理费用，按本月招聘人数 × 招聘费展示 */
   const hireThisMonth: Record<Dept, number> = {
     ops: state.flags[`hireMonth:ops:${state.month}`] ?? 0,
     buy: state.flags[`hireMonth:buy:${state.month}`] ?? 0,
@@ -379,29 +379,48 @@ export function derive(state: GameState): DerivedTotals {
     sell: state.flags[`hireMonth:sell:${state.month}`] ?? 0,
     rnd: state.flags[`hireMonth:rnd:${state.month}`] ?? 0,
   }
-  const deptHires: Record<Dept, { item: string; account: string; value: number }[]> = {
+  /** 本月提案实施费用，按部门分组 */
+  const proposalCostBy: Record<Dept, number> = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
+  for (const c of state.playedThisMonth) {
+    const def = CARD_BY_ID[c.defId]
+    if (def?.kind) proposalCostBy[def.kind] += def.cost ?? 0
+  }
+  const deptLedger: Record<Dept, { item: string; debit: string; debitAmt: number; credit: string; creditAmt: number }[]> = {
     ops: [], buy: [], make: [], sell: [], rnd: [],
   }
   for (const dp of DEPT_ORDER) {
-    const rows: { item: string; account: string; value: number }[] = []
+    const rows: typeof deptLedger.ops = []
+    // 工资（次月发放，当月计提）
     if (salaryPer[dp] * staffCount[dp] > 0) {
       const acc = dp === 'make' ? '制造费用' : dp === 'rnd' ? '研发费用' : '管理费用'
-      rows.push({ item: '工资', account: acc, value: salaryPer[dp] * staffCount[dp] })
+      const val = salaryPer[dp] * staffCount[dp]
+      rows.push({ item: '工资计提', debit: acc, debitAmt: val, credit: '应付工资', creditAmt: val })
     }
-    if (dp === 'make') {
-      if (makeDepreciation > 0) rows.push({ item: '设备折旧', account: '制造费用', value: makeDepreciation })
-      if (overtimeCost > 0) rows.push({ item: '加班费', account: '制造费用', value: overtimeCost })
+    // 设备折旧（非现金）
+    if (dp === 'make' && makeDepreciation > 0) {
+      rows.push({ item: '设备折旧', debit: '制造费用', debitAmt: makeDepreciation, credit: '累计折旧', creditAmt: makeDepreciation })
     }
+    // 加班费（当月已付现金）
+    if (dp === 'make' && overtimeCost > 0) {
+      rows.push({ item: '加班费', debit: '制造费用', debitAmt: overtimeCost, credit: '现金', creditAmt: overtimeCost })
+    }
+    // 研发项目投入（当月已付现金）
     if (dp === 'rnd' && rndCostTotal > 0) {
-      rows.push({ item: '研发投入', account: '研发费用', value: rndCostTotal })
+      rows.push({ item: '研发投入', debit: '研发费用', debitAmt: rndCostTotal, credit: '现金', creditAmt: rndCostTotal })
     }
+    // 招聘费（当月已付现金）
     if (hireThisMonth[dp] > 0) {
       const fee = hireCost(state, dp)
-      if (fee > 0) rows.push({ item: '招聘费', account: '管理费用', value: fee * hireThisMonth[dp] })
+      if (fee > 0) {
+        rows.push({ item: '招聘费', debit: '管理费用', debitAmt: fee * hireThisMonth[dp], credit: '现金', creditAmt: fee * hireThisMonth[dp] })
+      }
     }
-    deptHires[dp] = rows
+    // 提案实施费用（当月已付现金）
+    if (proposalCostBy[dp] > 0) {
+      rows.push({ item: '提案费用', debit: '管理费用', debitAmt: proposalCostBy[dp], credit: '现金', creditAmt: proposalCostBy[dp] })
+    }
+    deptLedger[dp] = rows
   }
-  const deptExpenses = deptHires
 
   return {
     materials,
@@ -436,7 +455,7 @@ export function derive(state: GameState): DerivedTotals {
     drawM,
     matSave: ip.matSave,
     notes: mods.notes ?? [],
-    deptExpenses,
+    deptLedger,
   }
 }
 
