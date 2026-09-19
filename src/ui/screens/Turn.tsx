@@ -901,7 +901,7 @@ function HireBlock({ g, dept }: { g: Game; dept: E.Dept }) {
             className={`unlock-node${staff >= u.at ? ' done' : ''}`}
           >
             <span className="unlock-diamond" />
-            <span className="unlock-label">{u.text.slice(0, 6)}</span>
+            <span className="xs faint">{u.at}人</span>
           </div>
         ))}
       </div>
