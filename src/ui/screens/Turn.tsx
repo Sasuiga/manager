@@ -145,7 +145,7 @@ function OpsPage({ g }: { g: Game }) {
                     </span>
                     <span className="card-desc">{def.text}</span>
                     <span className="card-cost">
-                      {cost > 0 ? `打出费用 ${wan(cost)}` : '打出费用：无'} · 不耗 AP
+{cost > 0 ? `打出费用 ${wan(cost)}` : '打出费用：无'}
                     </span>
                   </span>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)', justifyContent: 'center' }}>
