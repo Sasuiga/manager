@@ -20,20 +20,23 @@ export function Sheet({
 }) {
   // 关闭时先播退出动画，动画结束后再调用 onClose 真正卸载，避免突兀消失
   const [closing, setClosing] = useState(false)
+  const closingRef = useRef(false)
   const timer = useRef<number | null>(null)
   const close = () => {
-    if (closing) return
+    if (closingRef.current) return
+    closingRef.current = true
     setClosing(true)
-    timer.current = window.setTimeout(onClose, 300)
+    // 兜底：比退出动画（300ms）略长，防止掉帧时动画未播完就先卸载
+    timer.current = window.setTimeout(onClose, 360)
   }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
+      if (e.key === 'Escape' && !closingRef.current) close()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [closing])
+  }, [])
   useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current) }, [])
 
   return (
