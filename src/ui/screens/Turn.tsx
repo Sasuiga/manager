@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import * as E from '../../core/engine'
 import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT } from '../../data/game'
+import type { CardCtx } from '../../data/game'
 import { Icon, type IconName } from '../icons'
 import { Medallion } from '../ornaments'
 import { Row, Sheet } from '../Sheet'
@@ -272,7 +273,10 @@ function OpsPage({ g }: { g: Game }) {
                 <div className="stack-sm" style={{ marginBottom: 'var(--s3)' }}>
                   {s.playedThisMonth.filter((c) => {
                     const def = CARD_BY_ID[c.defId]
-                    return def?.base && (def.base({} as any).orders || def.base({} as any).flags)
+                    if (!def?.base) return false
+                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
+                    const eff = def.base(ctx)
+                    return !!(eff.orders || eff.flags?.length)
                   }).map((c) => {
                     const def = CARD_BY_ID[c.defId]
                     return (
@@ -287,14 +291,20 @@ function OpsPage({ g }: { g: Game }) {
                   })}
                   {s.playedThisMonth.filter((c) => {
                     const def = CARD_BY_ID[c.defId]
-                    return def?.base && !(def.base({} as any).orders || def.base({} as any).flags)
+                    if (!def?.base) return false
+                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
+                    const eff = def.base(ctx)
+                    return !(eff.orders || eff.flags?.length)
                   }).length === 0 ? <p className="xs faint">无</p> : null}
                 </div>
                 <div className="section-label">持续性效果</div>
                 <div className="stack-sm">
                   {s.playedThisMonth.filter((c) => {
                     const def = CARD_BY_ID[c.defId]
-                    return def?.base && !(def.base({} as any).orders || def.base({} as any).flags)
+                    if (!def?.base) return false
+                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
+                    const eff = def.base(ctx)
+                    return !(eff.orders || eff.flags?.length)
                   }).map((c) => {
                     const def = CARD_BY_ID[c.defId]
                     return (
@@ -309,7 +319,10 @@ function OpsPage({ g }: { g: Game }) {
                   })}
                   {s.playedThisMonth.filter((c) => {
                     const def = CARD_BY_ID[c.defId]
-                    return def?.base && !(def.base({} as any).orders || def.base({} as any).flags)
+                    if (!def?.base) return false
+                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
+                    const eff = def.base(ctx)
+                    return !(eff.orders || eff.flags?.length)
                   }).length === 0 ? <p className="xs faint">无</p> : null}
                 </div>
               </>
