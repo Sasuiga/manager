@@ -206,6 +206,11 @@ export function canPlay(state: GameState, card: CardInstance): ActionResult {
   if (!def) return fail('未知卡牌')
   if (state.plays <= 0) return fail('本月可打牌数已用完')
   if (cardPlayCost(state, def) > state.cash) return fail('现金不足')
+  if (def.minStaff) {
+    for (const [dept, min] of Object.entries(def.minStaff) as [Dept, number][]) {
+      if (state.depts[dept].staff < min) return fail(`需${DEPT_NAMES[dept]} ≥ ${min} 人`)
+    }
+  }
   return OK
 }
 

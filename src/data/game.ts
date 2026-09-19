@@ -645,6 +645,8 @@ export interface CardDef {
   cond?: string
   /** 打出费用（角） */
   cost?: Money
+  /** 打出所需的最低部门人员数（key 为部门，value 为人数） */
+  minStaff?: Partial<Record<Dept, number>>
   /** 强化后的效果说明 */
   empowered?: string
   /** 基础效果 */
@@ -912,8 +914,9 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'R6', name: '逆向工程', kind: 'rnd',
-    text: '立即获得 1 个已研发产品的 BOM，无需研发。',
-    empowered: '立即获得 2 个已研发产品的 BOM，无需研发。',
+    minStaff: { rnd: 3 },
+    text: '需研发 ≥ 3 人。立即获得 1 个已研发产品的 BOM，无需研发。',
+    empowered: '需研发 ≥ 3 人。立即获得 2 个已研发产品的 BOM，无需研发。',
     base: (c) => ({ flags: [c.empowered ? 'reverse2' : 'reverse'] }),
   },
   {
