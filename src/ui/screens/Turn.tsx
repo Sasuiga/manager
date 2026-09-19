@@ -19,7 +19,7 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
     <div style={{ marginTop: 'var(--s3)' }}>
       <button className="btn btn-mini" style={{ width: '100%', justifyContent: 'space-between' }} onClick={() => setOpen(!open)}>
         <span className="btn-main xs">本月账务</span>
-        <span className="btn-sub xs">{open ? '收起' : `合计 ${wan(total)}`}</span>
+        <span className="btn-sub xs">{open ? '收起' : '展开'}</span>
       </button>
       {open ? (
         <div className="stack-sm" style={{ marginTop: 'var(--s2)' }}>
