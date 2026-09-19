@@ -73,7 +73,6 @@ export function TurnScreen({
 
 function OpsPage({ g }: { g: Game }) {
   const s = g.s
-  const hud = E.hudView(s)
   const [view, setView] = useState<'hand' | 'discard' | 'deck' | null>(null)
 
   return (
@@ -81,34 +80,11 @@ function OpsPage({ g }: { g: Game }) {
       <div className="card">
         <div className="hstack-between">
           <h3>运营部</h3>
-          <span className="xs faint mono">
-            手牌 {s.hand.length}/{s.handMax}
-          </span>
         </div>
         <div className="title-rule" />
-        <div className="grid-3">
-          <div>
-            <div className="stat-label">AP</div>
-            <div className="stat-value">
-              {s.ap}
-              <span className="faint">/{hud.apMax}</span>
-            </div>
-          </div>
-          <div>
-            <div className="stat-label">可打牌数</div>
-            <div className="stat-value">
-              {s.plays}
-              <span className="faint">/{hud.playsMax}</span>
-            </div>
-          </div>
-          <div>
-            <div className="stat-label">管理人员</div>
-            <div className="stat-value">{s.depts.ops.staff}</div>
-          </div>
-        </div>
-        <div className="hint">
-          打牌不耗 AP，但占本月可打牌数。抽卡已在月初完成（抽 {s.drawN} 选 {s.drawM}）。
-        </div>
+        <p className="card-desc" style={{ color: 'var(--muted)' }}>
+          招募管理人员可提升 AP 上限（下月生效）；每月打出卡牌辅助各业务部门开展运营。
+        </p>
       </div>
 
       {/* 手牌 */}
