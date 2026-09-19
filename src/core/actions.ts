@@ -167,6 +167,7 @@ export function confirmDraw(state: GameState): ActionResult {
   if (state.hand.length > state.handMax) {
     pushLog(state, 'action', `手牌超出上限，需弃 ${state.hand.length - state.handMax} 张`)
   }
+  pushLog(state, 'action', `抽卡入手 ${chosen.length} 张`, rest.length ? [`${rest.length} 张放回牌库`] : undefined)
   return { ok: true, msg: `入手 ${chosen.length} 张` }
 }
 

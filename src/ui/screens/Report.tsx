@@ -197,6 +197,7 @@ function DrillSheet({
       lines.push(['生产人员薪酬', wan(p['生产人员薪酬'] ?? 0)])
       lines.push(['设备折旧', wan(p['设备折旧'] ?? 0)])
       lines.push(['加班费', wan(p['加班费'] ?? 0)])
+      if (p['生产降本差异']) lines.push(['生产降本差异（成本系数 × 原料出库额）', wan(p['生产降本差异'])])
       break
     case '销售费用':
       lines.push(['销售人员薪酬', wan(p['销售人员薪酬'] ?? 0)])

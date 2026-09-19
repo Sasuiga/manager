@@ -5,6 +5,7 @@ import { Hud } from './Hud'
 import { Sheet, Row } from './Sheet'
 import { TitleScreen, EndScreen } from './screens/Title'
 import { EventScreen } from './screens/Event'
+import { DrawScreen } from './screens/Draw'
 import { BoardScreen } from './screens/Board'
 import { TurnScreen } from './screens/Turn'
 import { ReportSheet } from './screens/Report'
@@ -34,32 +35,21 @@ function GameRoot({ g, onRestart }: { g: Game; onRestart: () => void }) {
     return <EndScreen g={g} onRestart={onRestart} />
   }
 
-  // 董事会：选挑战目标（每季度初）
-  if (s.challengeOffered.length > 0) return <BoardScreen g={g} />
-
   // 事件：抽到事件后需处理
   if (s.phase === 'event' && !s.eventResolved) return <EventScreen g={g} />
 
+  // 董事会：选挑战目标（每季度初）
+  if (s.challengeOffered.length > 0) return <BoardScreen g={g} />
+
+  // 抽卡阶段：每月开始、事件之后独立的一次活动
+  if (s.phase === 'draw') return <DrawScreen g={g} />
+
   // 经营阶段尚未开始（例如刚开局）
   if (s.phase !== 'operate' && s.phase !== 'report') {
-    return (
-      <div className="title-wrap">
-        <div className="hero title-card">
-          <p className="muted">{s.month}月 · 等待开始</p>
-          <div style={{ marginTop: 'var(--s5)' }}>
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                E.beginMonthEvent(s)
-                g.mutate(() => {})
-              }}
-            >
-              <span className="btn-main">进入本月</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    )
+    // 自动进入事件阶段，不再让玩家多点一次
+    E.beginMonthEvent(s)
+    g.mutate(() => {})
+    return null
   }
 
   return (

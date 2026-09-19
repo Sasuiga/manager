@@ -8,7 +8,7 @@ interface Props {
   className?: string
 }
 
-export type IconName = 'cash' | 'ap' | 'card' | 'ops' | 'buy' | 'make' | 'sell' | 'rnd' | 'log' | 'report' | 'chevron' | 'check' | 'cross' | 'clock' | 'warn' | 'seal'
+export type IconName = 'cash' | 'ap' | 'card' | 'ops' | 'buy' | 'make' | 'sell' | 'rnd' | 'log' | 'report' | 'chevron' | 'check' | 'cross' | 'clock' | 'warn' | 'seal' | 'settle'
 
 const P: Record<IconName, React.ReactNode> = {
   cash: (
@@ -91,6 +91,12 @@ const P: Record<IconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="10" r="6" />
       <path d="M9 15l-1 6 4-2 4 2-1-6" />
+    </>
+  ),
+  settle: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M8 12h8M12 8v8" />
     </>
   ),
 }

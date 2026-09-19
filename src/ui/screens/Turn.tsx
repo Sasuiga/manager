@@ -50,13 +50,6 @@ export function TurnScreen({
         {dept === 'rnd' ? <RndPage g={g} /> : null}
 
         <HireBlock g={g} dept={dept} />
-
-        <button className="btn btn-primary" onClick={onSettle} style={{ marginTop: 'var(--s2)' }}>
-          <span className="btn-main">结束本月</span>
-          <span className="btn-sub">
-            现金 {wan(s.cash)} · AP {s.ap}/{E.hudView(s).apMax}
-          </span>
-        </button>
       </div>
 
       <nav className="track">
@@ -67,6 +60,10 @@ export function TurnScreen({
             <span>{DEPT_SHORT[k]}</span>
           </button>
         ))}
+        <button className="track-btn track-settle" onClick={onSettle}>
+          <Icon name="settle" size={19} />
+          <span>结算</span>
+        </button>
       </nav>
     </>
   )
@@ -110,30 +107,9 @@ function OpsPage({ g }: { g: Game }) {
           </div>
         </div>
         <div className="hint">
-          打牌不耗 AP，但占本月可打牌数。抽牌 {s.drawN} 选 {s.drawM}。
+          打牌不耗 AP，但占本月可打牌数。抽卡已在月初完成（抽 {s.drawN} 选 {s.drawM}）。
         </div>
       </div>
-
-      {/* 抽卡 */}
-      {s.drawn.length ? (
-        <DrawBlock g={g} />
-      ) : (
-        <div className="card">
-          <h3>抽卡</h3>
-          <div className="title-rule" />
-          <p className="muted sm">本月的推广方案已备好，抽 {s.drawN} 张、选 {s.drawM} 张入手。</p>
-          <div style={{ marginTop: 'var(--s3)' }}>
-            <button
-              className="btn btn-mini"
-              disabled={s.deck.length === 0}
-              onClick={() => g.mutate((st) => E.drawCards(st))}
-            >
-              <span className="btn-main">抽卡 · {s.drawN} 选 {s.drawM}</span>
-              {s.deck.length === 0 ? <span className="btn-sub">牌库已空</span> : null}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* 手牌 */}
       <div className="card">
@@ -150,7 +126,7 @@ function OpsPage({ g }: { g: Game }) {
         </div>
         <div className="title-rule" />
         {s.hand.length === 0 ? (
-          <p className="muted sm">手牌是空的。先抽卡吧。</p>
+          <p className="muted sm">手牌是空的。打出的牌会进入弃牌堆。</p>
         ) : (
           <div className="stack">
             {s.hand.map((c) => {
@@ -182,13 +158,6 @@ function OpsPage({ g }: { g: Game }) {
                     >
                       <span className="btn-main xs">打出</span>
                       {!playable.ok ? <span className="btn-sub xs">{playable.msg}</span> : null}
-                    </button>
-                    <button
-                      className="btn btn-nav"
-                      style={{ width: 'auto', padding: 'var(--s1) var(--s3)' }}
-                      onClick={() => g.mutate((st) => E.discardCard(st, c.uid))}
-                    >
-                      <span className="xs">弃掉</span>
                     </button>
                   </span>
                 </div>
@@ -231,60 +200,6 @@ function OpsPage({ g }: { g: Game }) {
         </Sheet>
       ) : null}
     </>
-  )
-}
-
-/** 抽卡阶段：列表式，效果直出。 */
-function DrawBlock({ g }: { g: Game }) {
-  const s = g.s
-  const full = s.drawnSelected.length >= s.drawM
-
-  return (
-    <div className="card">
-      <div className="hstack-between">
-        <h3>抽卡阶段</h3>
-        <span className="xs mono gold">
-          已选 {s.drawnSelected.length}/{s.drawM}
-        </span>
-      </div>
-      <div className="title-rule" />
-      <div className="stack">
-        {s.drawn.map((c) => {
-          const def = CARD_BY_ID[c.defId]
-          const on = s.drawnSelected.includes(c.uid)
-          const dim = full && !on
-          return (
-            <button
-              key={c.uid}
-              className={`card-item d-${def.kind}${on ? ' on' : ''}${dim ? ' dim' : ''}`}
-              onClick={() => g.mutate((st) => E.toggleDrawn(st, c.uid))}
-            >
-              <span className="spine" />
-              <span className="card-body">
-                <span className="hstack-between">
-                  <span className="card-name">
-                    【{DEPT_SHORT[def.kind]}】{def.name}
-                    {c.empowered ? <span className="tag gold" style={{ marginLeft: 6 }}>强化</span> : null}
-                  </span>
-                  <span className={`tag${on ? ' gold' : ''}`}>{on ? '已选' : '选择'}</span>
-                </span>
-                <span className="card-desc">{def.text}</span>
-                {def.cond ? <span className="card-cond">{def.cond}</span> : null}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-      <div style={{ marginTop: 'var(--s4)' }}>
-        <button
-          className="btn btn-primary"
-          disabled={s.drawnSelected.length === 0}
-          onClick={() => g.act((st) => E.confirmDraw(st))}
-        >
-          <span className="btn-main">确认选择（已选 {s.drawnSelected.length}/{s.drawM}）</span>
-        </button>
-      </div>
-    </div>
   )
 }
 
@@ -1049,6 +964,14 @@ function HireBlock({ g, dept }: { g: Game; dept: E.Dept }) {
   const staff = gs.depts[dept].staff
   const check = E.canHire(gs, dept)
   const fee = E.hireCost(gs, dept)
+  const [hireSheet, setHireSheet] = useState(false)
+
+  /** 招下一个人立刻获得的效果：单人固定 + 下一档解锁。 */
+  const immediateEffects: string[] = [def.base]
+  const nextUnlock = def.unlocks.find((u) => u.at === staff + 1)
+  if (nextUnlock && nextUnlock.text !== '（无新增解锁）') {
+    immediateEffects.push(`解锁：${nextUnlock.text}`)
+  }
 
   return (
     <div className="card">
@@ -1060,37 +983,62 @@ function HireBlock({ g, dept }: { g: Game; dept: E.Dept }) {
       </div>
       <div className="title-rule" />
 
-      <button className="btn btn-mini" disabled={!check.ok} onClick={() => g.act((st) => E.hire(st, dept))}>
+      <button className="btn btn-mini" disabled={!check.ok} onClick={() => setHireSheet(true)}>
         <span className="btn-main">招聘{DEPT_NAME[dept]}</span>
-        <span className="btn-sub">
-          {!check.ok ? check.msg : fee > 0 ? `1 AP + ${wan(fee)}` : '1 AP'}
-        </span>
+        {!check.ok ? <span className="btn-sub">{check.msg}</span> : null}
       </button>
 
-      <div className="hint">
-        当前 {staff} 人 · 下次招聘费 {fee > 0 ? wan(fee) : '免费'} · 月薪 {wan(def.salary)}/人
-        <br />
-        {def.base}
-      </div>
-
-      <div className="section-label" style={{ marginTop: 'var(--s3)' }}>
-        解锁轨道
-      </div>
-      <div className="unlock-track">
+      {/* 解锁轨道：staff 人时，at <= staff 的格子已点亮 */}
+      <div className="unlock-track" style={{ marginTop: 'var(--s3)' }}>
         {def.unlocks.map((u) => (
           <div
             key={u.at}
-            className={`unlock-node${staff >= u.at ? ' done' : staff + 1 === u.at ? ' now' : ''}`}
+            className={`unlock-node${staff >= u.at ? ' done' : ''}`}
           >
             <span className="unlock-diamond" />
             <span className="unlock-label">{u.text.slice(0, 6)}</span>
           </div>
         ))}
       </div>
-      {def.unlocks.find((u) => u.at === staff + 1) ? (
-        <div className="hint">下一档：{def.unlocks.find((u) => u.at === staff + 1)!.text}</div>
-      ) : staff >= 5 ? (
-        <div className="hint">已解锁全部档位。</div>
+
+      {/* 四行解锁说明 */}
+      <div className="stack-sm" style={{ marginTop: 'var(--s2)' }}>
+        {def.unlocks.map((u) => (
+          <div key={u.at} className={`xs${staff >= u.at ? ' green' : ' faint'}`}>
+            {u.at} 人：{u.text}
+          </div>
+        ))}
+      </div>
+
+      {hireSheet ? (
+        <Sheet
+          title={`招聘${DEPT_NAME[dept]}`}
+          sub={`当前 ${staff}/5 人`}
+          onClose={() => setHireSheet(false)}
+          footer={
+            <button className="btn btn-primary" disabled={!check.ok} onClick={() => {
+              g.act((st) => E.hire(st, dept))
+              setHireSheet(false)
+            }}>
+              <span className="btn-main">确认招聘</span>
+            </button>
+          }
+        >
+          <div className="card">
+            <div className="section-label">成本明细</div>
+            <Row k="AP" v="1 点" />
+            <Row k="招聘费" v={fee > 0 ? wan(fee) : '免费'} cls={fee > 0 ? '' : 'green'} />
+            <Row k="月薪" v={`${wan(def.salary)}/人`} />
+            <Row k="合计月薪" v={`${wan(def.salary * (staff + 1))}（${staff + 1} 人）`} />
+          </div>
+
+          <div className="card" style={{ marginTop: 'var(--s3)' }}>
+            <div className="section-label">立即获得</div>
+            {immediateEffects.map((e, i) => (
+              <div key={i} className="hint" style={{ marginTop: i > 0 ? 'var(--s1)' : 0 }}>{e}</div>
+            ))}
+          </div>
+        </Sheet>
       ) : null}
     </div>
   )

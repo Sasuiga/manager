@@ -16,12 +16,12 @@ export function TitleScreen({ onStart }: { onStart: (seed: number) => void }) {
             <Icon name="seal" size={24} />
           </span>
         </div>
-        <h1 className="title-name">总经理十二个月</h1>
+        <h1 className="title-name">欢迎来到黄金时代</h1>
         <div className="divider" />
         <p className="title-sub">
-          一间小厂，一辆破车，十二个月。
+          采购原材料、安排生产、分配销售资源、推进研发
           <br />
-          从复苏到萧条，你要让账面好看，也要让董事会满意。
+          采取一切手段让董事会满意。
         </p>
 
         <div style={{ marginTop: 'var(--s6)' }} className="stack">
@@ -29,12 +29,6 @@ export function TitleScreen({ onStart }: { onStart: (seed: number) => void }) {
             <span className="btn-main">开始新的一局</span>
             <span className="btn-sub">十二个月 · 单机 · 随机气候</span>
           </button>
-        </div>
-
-        <div className="hint" style={{ marginTop: 'var(--s5)' }}>
-          采购原料、安排生产、分配销售资源、推进研发。
-          <br />
-          每月结束会自动生成利润表与资产负债表——数字骗不了人。
         </div>
       </div>
     </div>

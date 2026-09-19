@@ -113,6 +113,14 @@ export function settle(state: GameState): SettleReport {
   const consumed: SettleReport['production']['consumed'] = []
   let produced = 0
   let producedUnitCost = 0
+  /**
+   * 生产降本差异：原料按账面价全额出库、成品按 costFactor 折价入账的差额。
+   *
+   * 降本卡生效时，若不在当期生产费用中确认这笔差额，
+   * 库存未售完之前资产负债表会凭空漂出同样金额的缺口，
+   * 直到售出才通过销售成本消化——恒等式在月末即被破坏。
+   */
+  let prodVariance = 0
   if (plannedTier && planned > 0) {
     const bom = BOMS[plannedTier]
     let materialCost = 0
@@ -153,6 +161,7 @@ export function settle(state: GameState): SettleReport {
     p.qty += produced + bonus
     p.avgCost = p.qty > 0 ? Math.round(p.value / p.qty) : 0
     if (bonus > 0) warnings.push(`流水线效应：额外入库 ${bonus} 件`)
+    prodVariance = materialCost * (1 - d.costFactor)
   }
   // 加班费（现金）
   if (state.plan.overtime && state.depts.make.staff >= 3) {
@@ -303,7 +312,7 @@ export function settle(state: GameState): SettleReport {
    */
   const misc = state.miscExpense
 
-  const mfgExpense = salaryBy.make + depreciation + overtimeCost
+  const mfgExpense = salaryBy.make + depreciation + overtimeCost + prodVariance
   const sellExpense = salaryBy.sell
   const adminExpense = salaryBy.ops + salaryBy.buy + amort
   const rndExpense = salaryBy.rnd + projectCost
@@ -357,6 +366,7 @@ export function settle(state: GameState): SettleReport {
       '生产人员薪酬': salaryBy.make,
       '设备折旧': depreciation,
       '加班费': overtimeCost,
+      '生产降本差异': prodVariance,
       '销售人员薪酬': salaryBy.sell,
       '运营人员薪酬': salaryBy.ops,
       '采购人员薪酬': salaryBy.buy,

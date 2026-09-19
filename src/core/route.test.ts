@@ -28,6 +28,14 @@ function play(seed: number, cfg = { make: 3, sell: 3, buy: 2, rnd: 1, ops: 1, mi
         else E.skipEvent(s)
       }
     }
+    E.enterDraw(s)
+    // 抽卡阶段：每月一次，事件之后、经营之前
+    if (s.drawn.length) {
+      for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid)
+      E.confirmDraw(s)
+    } else if (s.deck.length && s.hand.length < s.handMax) {
+      E.drawCards(s); for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid); E.confirmDraw(s)
+    }
     E.enterOperate(s)
 
     for (const [dept, want] of [['sell', cfg.sell], ['make', cfg.make], ['buy', cfg.buy], ['rnd', cfg.rnd], ['ops', cfg.ops]] as [E.Dept, number][]) {
@@ -36,9 +44,6 @@ function play(seed: number, cfg = { make: 3, sell: 3, buy: 2, rnd: 1, ops: 1, mi
     }
     if (cfg.mid && m >= 3 && s.equipment.length < 2 && s.cash > 400 && s.ap >= 1) E.buyEquipment(s, 'eq-precision')
 
-    if (!s.drawn.length && s.hand.length < s.handMax) {
-      E.drawCards(s); for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid); E.confirmDraw(s)
-    }
     while (s.hand.length > s.handMax) E.discardCard(s, s.hand[s.hand.length - 1].uid)
     for (const c of [...s.hand]) if (E.canPlay(s, c).ok) E.playCard(s, c.uid)
 

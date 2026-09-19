@@ -22,11 +22,13 @@ describe('audit', () => {
             if (s.cash > c + 200) E.acceptChance(s); else E.skipEvent(s)
           }
         }
+        E.enterDraw(s)
+        if (s.drawn.length) { for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid); E.confirmDraw(s) }
+        else if (s.deck.length && s.hand.length < s.handMax) { E.drawCards(s); for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid); E.confirmDraw(s) }
         E.enterOperate(s)
         // 随机但确定性的经营动作：招聘、打牌、采购、生产、借款
         for (const dept of ['buy','sell','make','ops','rnd'] as E.Dept[])
           for (let k = 0; k < 2; k++) { if (s.depts[dept].staff >= 2) break; if (!E.canHire(s, dept).ok) break; if (s.cash < 400) break; E.hire(s, dept) }
-        if (!s.drawn.length && s.hand.length < s.handMax) { E.drawCards(s); for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid); E.confirmDraw(s) }
         while (s.hand.length > s.handMax) E.discardCard(s, s.hand[s.hand.length - 1].uid)
         let guard = 0
         for (const card of [...s.hand]) { if (guard++ > 8) break; if (!E.canPlay(s, card).ok) continue; E.playCard(s, card.uid) }

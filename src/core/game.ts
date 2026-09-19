@@ -144,7 +144,8 @@ export function newGame(seed: number): GameState {
   }
 
   buildDeck(state, rng)
-  drawOpeningHand(state, rng)
+  // 起始手牌由 enterDraw 统一按「五选三」抽牌，这里不再预置 3 张
+  void rng
   return state
 }
 
@@ -187,12 +188,7 @@ export function buildDeck(state: GameState, rng: Rng) {
   state.deck = deck
 }
 
-/** 开局 3 选 2 起始手牌。 */
-function drawOpeningHand(state: GameState, rng: Rng) {
-  state.drawn = rng.sample(state.deck, 3)
-  state.deck = state.deck.filter((c) => !state.drawn.some((d) => d.uid === c.uid))
-  state.drawnSelected = []
-}
+
 
 /** 部门人员基础值与解锁效果的展示文本，供 UI 直接使用。 */
 export function creditInfo(state: GameState) {

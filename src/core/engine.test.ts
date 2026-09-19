@@ -33,6 +33,16 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
       }
     }
 
+    E.enterDraw(s)
+    // ── 抽卡阶段：每月一次，事件之后、经营之前 ──
+    if (s.drawn.length) {
+      for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid)
+      E.confirmDraw(s)
+    } else if (s.deck.length && s.hand.length < s.handMax) {
+      E.drawCards(s)
+      for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid)
+      E.confirmDraw(s)
+    }
     E.enterOperate(s)
 
     // ── 招聘：优先采购与销售，前几个月各补到 2 人 ──
@@ -47,12 +57,6 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
     }
     if (s.depts.rnd.staff < 1 && s.cash > 300 && E.canHire(s, 'rnd').ok) E.hire(s, 'rnd')
 
-    // ── 抽卡 ──
-    if (!s.drawn.length && s.hand.length < s.handMax) {
-      E.drawCards(s)
-      for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid)
-      E.confirmDraw(s)
-    }
     // 弃到上限
     while (s.hand.length > s.handMax) E.discardCard(s, s.hand[s.hand.length - 1].uid)
 
@@ -149,6 +153,7 @@ describe('引擎', () => {
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
     E.beginMonthEvent(s)
+    E.enterDraw(s)
     E.enterOperate(s)
     const before = s.materials.pkg.value / Math.max(1, s.materials.pkg.qty)
     // 直接注入一批高价原料
@@ -164,6 +169,7 @@ describe('引擎', () => {
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
     E.beginMonthEvent(s)
+    E.enterDraw(s)
     E.enterOperate(s)
     const first = E.buyMaterial(s, 'pkg', 'small')
     expect(first.ok).toBe(true)
@@ -176,6 +182,7 @@ describe('引擎', () => {
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
     E.beginMonthEvent(s)
+    E.enterDraw(s)
     E.enterOperate(s)
     const d = E.derive(s)
     expect(d.capacity).toBe(10) // 开局一台产能 10 的设备，无生产人员
@@ -201,6 +208,7 @@ describe('引擎', () => {
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
     E.beginMonthEvent(s)
+    E.enterDraw(s)
     E.enterOperate(s)
     void Rng
     // 给出 4 名研发人员
@@ -243,6 +251,7 @@ describe('引擎', () => {
           else E.skipEvent(s)
         }
       }
+      E.enterDraw(s)
       E.enterOperate(s)
       if (E.derive(s).creditAvailable >= 100 && m >= 2) E.borrow(s, 100)
 
@@ -285,6 +294,7 @@ describe('引擎', () => {
       s.depts.sell.staff = sell
       s.depts.sell.hired = sell
       E.beginMonthEvent(s)
+      E.enterDraw(s)
       E.enterOperate(s)
       expect(s.orders.length, `销售 ${sell} 人的订单数`).toBe(wantCount)
       for (const o of s.orders) {

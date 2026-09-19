@@ -33,7 +33,7 @@ export type Polarity = 'good' | 'bad' | 'neutral'
 export type Scope = 'cash' | 'buy' | 'make' | 'sell' | 'rnd' | 'ops'
 
 /** 游戏阶段。 */
-export type Phase = 'title' | 'board' | 'event' | 'operate' | 'settle' | 'report' | 'gameover' | 'summary'
+export type Phase = 'title' | 'board' | 'event' | 'draw' | 'operate' | 'settle' | 'report' | 'gameover' | 'summary'
 
 // ─────────────────────────────────────────────────────────────
 // 原料

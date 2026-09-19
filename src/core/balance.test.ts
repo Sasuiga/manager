@@ -30,6 +30,16 @@ function play(seed: number) {
         else E.skipEvent(s)
       }
     }
+    E.enterDraw(s)
+    // 抽卡阶段：每月一次，事件之后、经营之前
+    if (s.drawn.length) {
+      for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid)
+      E.confirmDraw(s)
+    } else if (s.deck.length && s.hand.length < s.handMax) {
+      E.drawCards(s)
+      for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid)
+      E.confirmDraw(s)
+    }
     E.enterOperate(s)
 
     // 优先补生产（产能直接决定产量），再补采购与销售，研发 1 人
@@ -37,12 +47,6 @@ function play(seed: number) {
       while (s.depts[dept].staff < want && E.canHire(s, dept).ok && s.cash > 250) E.hire(s, dept)
     }
 
-    // 抽卡
-    if (!s.drawn.length && s.hand.length < s.handMax) {
-      E.drawCards(s)
-      for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid)
-      E.confirmDraw(s)
-    }
     while (s.hand.length > s.handMax) E.discardCard(s, s.hand[s.hand.length - 1].uid)
     for (const card of [...s.hand]) if (E.canPlay(s, card).ok) E.playCard(s, card.uid)
 

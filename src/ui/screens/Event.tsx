@@ -31,7 +31,7 @@ export function EventScreen({ g }: { g: Game }) {
           <p className="muted">本月无事件。</p>
           <div style={{ marginTop: 'var(--s5)' }}>
             <button className="btn btn-primary" onClick={() => enter()}>
-              <span className="btn-main">进入经营</span>
+              <span className="btn-main">进入抽卡</span>
             </button>
           </div>
         </div>
@@ -41,7 +41,7 @@ export function EventScreen({ g }: { g: Game }) {
 
   const enter = () => {
     s.eventResolved = true
-    E.enterOperate(s)
+    E.enterDraw(s)
     g.mutate(() => {})
   }
 
@@ -86,7 +86,7 @@ export function EventScreen({ g }: { g: Game }) {
             <div style={{ marginTop: 'var(--s5)' }}>
               <button className="btn btn-primary" onClick={enter}>
                 <span className="btn-main">继续</span>
-                <span className="btn-sub">进入本月经营</span>
+                <span className="btn-sub">进入本月抽卡</span>
               </button>
             </div>
           </div>

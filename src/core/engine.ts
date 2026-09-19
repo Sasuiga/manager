@@ -12,7 +12,7 @@ import { derive, mergeMods } from './derive'
 import { Rng } from './rng'
 import { advanceMonth as advanceMonthCore, goalCurrent, settle, syncManagementCards } from './settle'
 // 再导出（export { x } from）不会在本模块作用域引入名字，内部复用需单独 import
-import { pushLog } from './actions'
+import { pushLog, drawCards as drawCardsAction } from './actions'
 import type { SettleReport } from './settle'
 import type { Climate, GameEventDef, GameState, GoalDef, GoalTrack, Ledger, Money } from './types'
 
@@ -183,9 +183,12 @@ function drawEvent(state: GameState, rng: Rng): GameEventDef {
   return ev
 }
 
-/** 事件确认后进入经营阶段。 */
-export function enterOperate(state: GameState) {
-  state.phase = 'operate'
+/**
+ * 事件确认后进入抽卡阶段：每月开始独立的一次活动，先于经营布局。
+ * 月度同步（AP/打牌数/手牌/抽牌参数）与渠道订单都在这里完成。
+ */
+export function enterDraw(state: GameState) {
+  state.phase = 'draw'
   const d = derive(state)
   state.apMax = d.apMax
   state.playsMax = d.playsMax
@@ -196,6 +199,25 @@ export function enterOperate(state: GameState) {
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   // 本月订单（渠道带来）
   generateMonthlyOrders(state)
+  // 开局（第 1 月）起始手牌已由 newGame 预置，跳过再抽一次
+  if (state.drawn.length > 0) return
+  // 常规每月：直接抽 N 张，让玩家一次看到全部 N 张选 M 张
+  openDraw(state)
+}
+
+/**
+ * 抽 N 张到「待选」区，按本月部门人数加权；未选中的 N-M 张
+ * 确认时放回牌库。仅在开局预置的起始手牌之外使用。
+ *
+ * 与 actions.drawCards 行为完全一致：复用其实现。
+ */
+export function openDraw(state: GameState) {
+  drawCardsAction(state)
+}
+
+/** 抽卡确认后进入经营阶段。 */
+export function enterOperate(state: GameState) {
+  state.phase = 'operate'
 }
 
 /** 按月生成渠道订单（§7.2.6）。 */
