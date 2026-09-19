@@ -191,30 +191,11 @@ function BuyPage({ g }: { g: Game }) {
   return (
     <>
       <div className="card">
-        <div className="hstack-between">
-          <h3>采购部</h3>
-          <span className="xs faint mono">
-            档数 {gs.lotsUsed}/{d.buyLots}
-          </span>
-        </div>
+        <h3>采购部</h3>
         <div className="title-rule" />
-        <div className="grid-3">
-          <div>
-            <div className="stat-label">现金</div>
-            <div className={`stat-value${gs.cash < 0 ? ' red' : ''}`}>{wan(gs.cash)}</div>
-          </div>
-          <div>
-            <div className="stat-label">采购人员</div>
-            <div className="stat-value">{gs.depts.buy.staff}</div>
-          </div>
-          <div>
-            <div className="stat-label">协议名额</div>
-            <div className="stat-value">
-              {gs.agreements.length}/{E.agreementSlots(gs)}
-            </div>
-          </div>
-        </div>
-        <div className="hint">每类原料每月最多选一个档位；长期协议每月自动到货，不占档数。</div>
+        <p className="card-desc" style={{ color: 'var(--muted)' }}>
+          每月为原料选择采购档位，签长期协议锁定供货量；人员越多档位越宽、可解锁高级材料。
+        </p>
       </div>
 
       {mats.map((m) => (
@@ -467,25 +448,11 @@ function MakePage({ g }: { g: Game }) {
   return (
     <>
       <div className="card">
-        <div className="hstack-between">
-          <h3>生产部</h3>
-          <span className="xs faint mono">产能 {cap}</span>
-        </div>
+        <h3>生产部</h3>
         <div className="title-rule" />
-        <div className="grid-3">
-          <div>
-            <div className="stat-label">生产人员</div>
-            <div className="stat-value">{gs.depts.make.staff}</div>
-          </div>
-          <div>
-            <div className="stat-label">设备数</div>
-            <div className="stat-value">{gs.equipment.length}</div>
-          </div>
-          <div>
-            <div className="stat-label">月折旧</div>
-            <div className="stat-value">{wan(d.notes ? 0 : gs.equipment.reduce((a, e) => a + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0))}</div>
-          </div>
-        </div>
+        <p className="card-desc" style={{ color: 'var(--muted)' }}>
+          安排本月生产计划，按 BOM 消耗原料；设备与加班可提升产能上限，人员越多单月产量越高。
+        </p>
       </div>
 
       <div className="card">
@@ -667,28 +634,11 @@ function SellPage({ g }: { g: Game }) {
   return (
     <>
       <div className="card">
-        <div className="hstack-between">
-          <h3>销售部</h3>
-          <span className="xs faint mono">
-            资源 {used}/{d.salesResource}
-          </span>
-        </div>
+        <h3>销售部</h3>
         <div className="title-rule" />
-        <div className="grid-3">
-          <div>
-            <div className="stat-label">销售人员</div>
-            <div className="stat-value">{gs.depts.sell.staff}</div>
-          </div>
-          <div>
-            <div className="stat-label">品牌加成</div>
-            <div className="stat-value">{d.brandBonus > 0 ? `+${d.brandBonus}` : '—'}</div>
-          </div>
-          <div>
-            <div className="stat-label">待交付订单</div>
-            <div className="stat-value">{gs.orders.length}</div>
-          </div>
-        </div>
-        <div className="hint">销售资源决定各产品层次能抢到多少现货需求；订单优先于现货结算。</div>
+        <p className="card-desc" style={{ color: 'var(--muted)' }}>
+          分配销售资源抢占各层现货需求，处理确定性订单；人员越多资源越丰富，可解锁品牌加成。
+        </p>
       </div>
 
       <div className="card">
@@ -778,28 +728,11 @@ function RndPage({ g }: { g: Game }) {
   return (
     <>
       <div className="card">
-        <div className="hstack-between">
-          <h3>研发部</h3>
-          <span className="xs faint mono">人员 {gs.depts.rnd.staff}</span>
-        </div>
+        <h3>研发部</h3>
         <div className="title-rule" />
-        <div className="grid-3">
-          <div>
-            <div className="stat-label">月进度</div>
-            <div className="stat-value">{d.rndProgress}</div>
-          </div>
-          <div>
-            <div className="stat-label">成功率加成</div>
-            <div className="stat-value">
-              {d.rndRate > 0 ? `+${d.rndRate}%` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="stat-label">{d.rndCostTotal > 0 ? '本月投入' : '立项后每月'}</div>
-            <div className="stat-value">{wan(d.rndCostTotal > 0 ? d.rndCostTotal : d.rndCost)}</div>
-          </div>
-        </div>
-        <div className="hint">每月只能推进一个项目，投入按项目计入研发费用。</div>
+        <p className="card-desc" style={{ color: 'var(--muted)' }}>
+          推进研发项目，解锁新产品与知识产权；人员越多每月进度越快、成功率越高。
+        </p>
       </div>
 
       <div className="card">
