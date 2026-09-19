@@ -96,7 +96,7 @@ export function Hud({
         </div>
         <div className="stat">
           <div className="stat-label">
-            <Icon name="card" size={11} /> 牌
+            <Icon name="card" size={11} /> 提案
           </div>
           <div className="stat-value">
             {s.plays}
