@@ -18,6 +18,7 @@ import {
   MONTHLY_RATE,
   OVERTIME_COST,
   PRODUCT_PRICE,
+  RECRUIT_AMORT_PER_MONTH,
   RND_COST_PER_PROJECT,
   SALES_ORDER_COUNT,
   SALES_RESOURCE_STEPS,
@@ -91,8 +92,8 @@ export interface DerivedTotals {
   /** 原料单件节省（工艺优化） */
   matSave: number
   notes: string[]
-  /** 各部门本月费用明细（角），含工资、折旧、加班、研发等 */
-  deptExpenses: Record<Dept, { label: string; value: number }[]>
+  /** 各部门本月费用明细：{ 项目, 报表科目, 金额 } */
+  deptExpenses: Record<Dept, { item: string; account: string; value: number }[]>
 }
 
 /** 合并多个 MonthMods，后者叠加到前者之上。 */
@@ -370,20 +371,39 @@ export function derive(state: GameState): DerivedTotals {
   for (const e of state.equipment) {
     makeDepreciation += Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated))
   }
-  const deptExpenses: Record<Dept, { label: string; value: number }[]> = {
-    ops: salaryPer.ops * staffCount.ops > 0 ? [{ label: '工资', value: salaryPer.ops * staffCount.ops }] : [],
-    buy: salaryPer.buy * staffCount.buy > 0 ? [{ label: '工资', value: salaryPer.buy * staffCount.buy }] : [],
-    make: [
-      ...(salaryPer.make * staffCount.make > 0 ? [{ label: '工资', value: salaryPer.make * staffCount.make }] : []),
-      ...(makeDepreciation > 0 ? [{ label: '设备折旧', value: makeDepreciation }] : []),
-      ...(overtimeCost > 0 ? [{ label: '加班费', value: overtimeCost }] : []),
-    ],
-    sell: salaryPer.sell * staffCount.sell > 0 ? [{ label: '工资', value: salaryPer.sell * staffCount.sell }] : [],
-    rnd: [
-      ...(salaryPer.rnd * staffCount.rnd > 0 ? [{ label: '工资', value: salaryPer.rnd * staffCount.rnd }] : []),
-      ...(rndCostTotal > 0 ? [{ label: '研发投入', value: rndCostTotal }] : []),
-    ],
+  /** 招聘费待摊：每月确认 RECRUIT_AMORT_PER_MONTH，按各部门累计招聘人数占比分摊 */
+  const amortThisMonth = Math.min(state.prepaid, RECRUIT_AMORT_PER_MONTH)
+  const hireCounts: Record<Dept, number> = {
+    ops: state.flags['hire:ops'] ?? 0,
+    buy: state.flags['hire:buy'] ?? 0,
+    make: state.flags['hire:make'] ?? 0,
+    sell: state.flags['hire:sell'] ?? 0,
+    rnd: state.flags['hire:rnd'] ?? 0,
   }
+  const totalHires = Object.values(hireCounts).reduce((a, b) => a + b, 0)
+  const deptHires: Record<Dept, { item: string; account: string; value: number }[]> = {
+    ops: [], buy: [], make: [], sell: [], rnd: [],
+  }
+  for (const dp of DEPT_ORDER) {
+    const rows: { item: string; account: string; value: number }[] = []
+    if (salaryPer[dp] * staffCount[dp] > 0) {
+      const acc = dp === 'make' ? '制造费用' : dp === 'rnd' ? '研发费用' : '管理费用'
+      rows.push({ item: '工资', account: acc, value: salaryPer[dp] * staffCount[dp] })
+    }
+    if (dp === 'make') {
+      if (makeDepreciation > 0) rows.push({ item: '设备折旧', account: '制造费用', value: makeDepreciation })
+      if (overtimeCost > 0) rows.push({ item: '加班费', account: '制造费用', value: overtimeCost })
+    }
+    if (dp === 'rnd' && rndCostTotal > 0) {
+      rows.push({ item: '研发投入', account: '研发费用', value: rndCostTotal })
+    }
+    if (amortThisMonth > 0 && totalHires > 0 && hireCounts[dp] > 0) {
+      const share = Math.round(amortThisMonth * hireCounts[dp] / totalHires)
+      if (share > 0) rows.push({ item: '招聘费摊销', account: '管理费用', value: share })
+    }
+    deptHires[dp] = rows
+  }
+  const deptExpenses = deptHires
 
   return {
     materials,

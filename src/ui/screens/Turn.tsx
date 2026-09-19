@@ -89,14 +89,21 @@ function OpsPage({ g }: { g: Game }) {
         {d.deptExpenses.ops.length > 0 ? (
           <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
             <div className="section-label">本月费用</div>
+            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)' }}>
+              <span className="row-key xs faint">项目</span>
+              <span className="row-key xs faint">科目</span>
+              <span className="row-val xs faint">金额</span>
+            </div>
             {d.deptExpenses.ops.map((r) => (
-              <div key={r.label} className="row">
-                <span className="row-key">{r.label}</span>
+              <div key={r.item} className="row">
+                <span className="row-key">{r.item}</span>
+                <span className="row-key xs faint">{r.account}</span>
                 <span className="row-val">{wan(r.value)}</span>
               </div>
             ))}
             <div className="row bold">
               <span className="row-key">合计</span>
+              <span />
               <span className="row-val">{wan(d.deptExpenses.ops.reduce((a, r) => a + r.value, 0))}</span>
             </div>
           </div>
@@ -212,14 +219,21 @@ function BuyPage({ g }: { g: Game }) {
         {d.deptExpenses.buy.length > 0 ? (
           <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
             <div className="section-label">本月费用</div>
+            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)' }}>
+              <span className="row-key xs faint">项目</span>
+              <span className="row-key xs faint">科目</span>
+              <span className="row-val xs faint">金额</span>
+            </div>
             {d.deptExpenses.buy.map((r) => (
-              <div key={r.label} className="row">
-                <span className="row-key">{r.label}</span>
+              <div key={r.item} className="row">
+                <span className="row-key">{r.item}</span>
+                <span className="row-key xs faint">{r.account}</span>
                 <span className="row-val">{wan(r.value)}</span>
               </div>
             ))}
             <div className="row bold">
               <span className="row-key">合计</span>
+              <span />
               <span className="row-val">{wan(d.deptExpenses.buy.reduce((a, r) => a + r.value, 0))}</span>
             </div>
           </div>
@@ -484,14 +498,21 @@ function MakePage({ g }: { g: Game }) {
         {d.deptExpenses.make.length > 0 ? (
           <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
             <div className="section-label">本月费用</div>
+            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)' }}>
+              <span className="row-key xs faint">项目</span>
+              <span className="row-key xs faint">科目</span>
+              <span className="row-val xs faint">金额</span>
+            </div>
             {d.deptExpenses.make.map((r) => (
-              <div key={r.label} className="row">
-                <span className="row-key">{r.label}</span>
+              <div key={r.item} className="row">
+                <span className="row-key">{r.item}</span>
+                <span className="row-key xs faint">{r.account}</span>
                 <span className="row-val">{wan(r.value)}</span>
               </div>
             ))}
             <div className="row bold">
               <span className="row-key">合计</span>
+              <span />
               <span className="row-val">{wan(d.deptExpenses.make.reduce((a, r) => a + r.value, 0))}</span>
             </div>
           </div>
@@ -685,14 +706,21 @@ function SellPage({ g }: { g: Game }) {
         {d.deptExpenses.sell.length > 0 ? (
           <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
             <div className="section-label">本月费用</div>
+            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)' }}>
+              <span className="row-key xs faint">项目</span>
+              <span className="row-key xs faint">科目</span>
+              <span className="row-val xs faint">金额</span>
+            </div>
             {d.deptExpenses.sell.map((r) => (
-              <div key={r.label} className="row">
-                <span className="row-key">{r.label}</span>
+              <div key={r.item} className="row">
+                <span className="row-key">{r.item}</span>
+                <span className="row-key xs faint">{r.account}</span>
                 <span className="row-val">{wan(r.value)}</span>
               </div>
             ))}
             <div className="row bold">
               <span className="row-key">合计</span>
+              <span />
               <span className="row-val">{wan(d.deptExpenses.sell.reduce((a, r) => a + r.value, 0))}</span>
             </div>
           </div>
@@ -794,14 +822,21 @@ function RndPage({ g }: { g: Game }) {
         {d.deptExpenses.rnd.length > 0 ? (
           <div className="stack-sm" style={{ marginTop: 'var(--s3)' }}>
             <div className="section-label">本月费用</div>
+            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 'var(--s1)', marginBottom: 'var(--s1)' }}>
+              <span className="row-key xs faint">项目</span>
+              <span className="row-key xs faint">科目</span>
+              <span className="row-val xs faint">金额</span>
+            </div>
             {d.deptExpenses.rnd.map((r) => (
-              <div key={r.label} className="row">
-                <span className="row-key">{r.label}</span>
+              <div key={r.item} className="row">
+                <span className="row-key">{r.item}</span>
+                <span className="row-key xs faint">{r.account}</span>
                 <span className="row-val">{wan(r.value)}</span>
               </div>
             ))}
             <div className="row bold">
               <span className="row-key">合计</span>
+              <span />
               <span className="row-val">{wan(d.deptExpenses.rnd.reduce((a, r) => a + r.value, 0))}</span>
             </div>
           </div>
