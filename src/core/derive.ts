@@ -26,6 +26,7 @@ import {
   TIERS,
   priceOf,
 } from '../data/game'
+import { hireCost } from './actions'
 import type { CardPlayEffect, Dept, GameState, MonthMods, Tier } from './types'
 
 /**
@@ -370,16 +371,14 @@ export function derive(state: GameState): DerivedTotals {
   for (const e of state.equipment) {
     makeDepreciation += Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated))
   }
-  /** 招聘费摊销已取消：招聘费当月直接计入管理费用（miscExpense） */
-  const amortThisMonth = 0
-  const hireCounts: Record<Dept, number> = {
-    ops: state.flags['hire:ops'] ?? 0,
-    buy: state.flags['hire:buy'] ?? 0,
-    make: state.flags['hire:make'] ?? 0,
-    sell: state.flags['hire:sell'] ?? 0,
-    rnd: state.flags['hire:rnd'] ?? 0,
+  /** 招聘费当月直接计入管理费用（miscExpense），按本月招聘人数 × 招聘费展示 */
+  const hireThisMonth: Record<Dept, number> = {
+    ops: state.flags[`hireMonth:ops:${state.month}`] ?? 0,
+    buy: state.flags[`hireMonth:buy:${state.month}`] ?? 0,
+    make: state.flags[`hireMonth:make:${state.month}`] ?? 0,
+    sell: state.flags[`hireMonth:sell:${state.month}`] ?? 0,
+    rnd: state.flags[`hireMonth:rnd:${state.month}`] ?? 0,
   }
-  const totalHires = Object.values(hireCounts).reduce((a, b) => a + b, 0)
   const deptHires: Record<Dept, { item: string; account: string; value: number }[]> = {
     ops: [], buy: [], make: [], sell: [], rnd: [],
   }
@@ -396,9 +395,9 @@ export function derive(state: GameState): DerivedTotals {
     if (dp === 'rnd' && rndCostTotal > 0) {
       rows.push({ item: '研发投入', account: '研发费用', value: rndCostTotal })
     }
-    if (amortThisMonth > 0 && totalHires > 0 && hireCounts[dp] > 0) {
-      const share = Math.round(amortThisMonth * hireCounts[dp] / totalHires)
-      if (share > 0) rows.push({ item: '招聘费摊销', account: '管理费用', value: share })
+    if (hireThisMonth[dp] > 0) {
+      const fee = hireCost(state, dp)
+      if (fee > 0) rows.push({ item: '招聘费', account: '管理费用', value: fee * hireThisMonth[dp] })
     }
     deptHires[dp] = rows
   }

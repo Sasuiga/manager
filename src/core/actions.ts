@@ -70,7 +70,7 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   state.ap -= 1
   state.depts[dept].staff += 1
   state.depts[dept].hired += 1
-  state.flags[`hire:${dept}`] = (state.flags[`hire:${dept}`] ?? 0) + 1
+  state.flags[`hireMonth:${dept}:${state.month}`] = (state.flags[`hireMonth:${dept}:${state.month}`] ?? 0) + 1
   pushLog(state, 'action', `招聘 ${DEPT_NAMES[dept]}工作人员（第 ${state.depts[dept].staff} 名）`, [
     `招聘费 ${fee / 10}w`,
     `月薪 ${STAFF[dept].salary / 10}w`,

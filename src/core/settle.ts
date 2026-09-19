@@ -730,7 +730,6 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.flags['cardUrgent'] = 0
   state.flags['cardFutures'] = 0
   state.flags['cardClearance'] = 0
-  state.flags['hire:make'] = 0
 
   /**
    * 上月挂账的现金收付：只是资产/负债的形态转换，
