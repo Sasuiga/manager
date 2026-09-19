@@ -589,7 +589,6 @@ button {
   position: fixed;
   inset: 0;
   background: rgba(12, 8, 4, 0.55);
-  backdrop-filter: blur(3px);
   z-index: 100;
   display: flex;
   align-items: flex-end;
@@ -597,7 +596,10 @@ button {
   animation: fade-in var(--dur) var(--ease-settle);
 }
 
+/* 遮罩的 backdrop-filter 在下滑过程中会随面板位移重绘，产生"虚化拖尾"；
+   淡出时去掉它，让关闭全程只保留位移 + 淡出两种变化，与打开对称 */
 .sheet-overlay.out {
+  backdrop-filter: none;
   animation: fade-out var(--dur-slow) var(--ease-settle) forwards;
 }
 
