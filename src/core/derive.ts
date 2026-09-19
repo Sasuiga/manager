@@ -395,7 +395,7 @@ export function derive(state: GameState): DerivedTotals {
       const acc = dp === 'make' ? '制造费用' : dp === 'rnd' ? '研发费用' : '管理费用'
       const per = salaryPer[dp]
       const total = per * staffCount[dp]
-      rows.push({ item: `工资计提（${per / 10}w/人 × ${staffCount[dp]}人）`, debit: acc, debitAmt: total, credit: '应付工资', creditAmt: total })
+      rows.push({ item: '工资计提', debit: acc, debitAmt: total, credit: '应付工资', creditAmt: total })
     }
     // 设备折旧（非现金）
     if (dp === 'make' && makeDepreciation > 0) {
