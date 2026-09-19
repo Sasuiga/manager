@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { SheetCrown } from './ornaments'
 
 /**
@@ -18,17 +18,38 @@ export function Sheet({
   children: ReactNode
   footer?: ReactNode
 }) {
+  // 关闭时先播退出动画，动画结束后再调用 onClose 真正卸载，避免突兀消失
+  const [closing, setClosing] = useState(false)
+  const timer = useRef<number | null>(null)
+  const close = () => {
+    if (closing) return
+    setClosing(true)
+    timer.current = window.setTimeout(onClose, 300)
+  }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') close()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closing])
+  useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current) }, [])
 
   return (
-    <div className="sheet-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label={title}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+    <div
+      className={`sheet-overlay${closing ? ' out' : ''}`}
+      onAnimationEnd={() => {
+        if (closing) onClose()
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) close()
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <div className={`sheet${closing ? ' out' : ''}`} onClick={(e) => e.stopPropagation()}>
         <SheetCrown />
         <div className="sheet-head">
           <h2 className="sheet-title">{title}</h2>
@@ -36,7 +57,7 @@ export function Sheet({
         </div>
         <div className="sheet-body">{children}</div>
         <div className="sheet-foot">
-          <button className="btn btn-nav" onClick={onClose}>
+          <button className="btn btn-nav" onClick={close}>
             <span className="btn-main">关闭</span>
           </button>
           {footer}
