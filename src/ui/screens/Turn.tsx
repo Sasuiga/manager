@@ -13,47 +13,52 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
   const d = E.derive(g.s)
   const s = g.s
   const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState<{ title: string; lines: string[] } | null>(null)
+  const [detail, setDetail] = useState<string | null>(null)
   const rows = d.deptLedger[dept]
   if (rows.length === 0) return null
   const total = rows.reduce((a, r) => a + (r.debitAmt || r.creditAmt), 0)
 
-  /** 点击金额弹出计算说明 */
-  const showDetail = (r: typeof rows[number]) => {
-    const lines: string[] = []
+  /** 点击金额弹出/收起计算说明，返回行说明 */
+  const getDetailLines = (r: typeof rows[number]): string[] => {
     if (r.item.includes('工资')) {
       const per = d.salaryPer[dept]
       const base = STAFF[dept].salary
-      lines.push(`基础月薪 ${wan(base)} / 人`)
+      const lines: string[] = [`基础月薪 ${wan(base)} / 人`]
       if (per !== base) {
         const delta = per - base
         lines.push(`修正后 ${wan(per)} / 人（${delta > 0 ? '+' : ''}${wan(delta)}，受 IP / 事件影响）`)
       }
       lines.push(`人数 ${s.depts[dept].staff} 人`)
       lines.push(`计提额 ${wan(per * s.depts[dept].staff)}`)
-    } else if (r.item.includes('招聘')) {
+      return lines
+    }
+    if (r.item.includes('招聘')) {
       const fee = E.hireCost(s, dept)
-      lines.push(`招聘费 ${wan(fee)}（按当前阶梯）`)
+      const lines: string[] = [`招聘费 ${wan(fee)}（按当前阶梯）`]
       if (s.monthMods.notes?.includes('招聘费 -1w')) lines.push('事件修正：-0.1w')
       if (s.monthMods.notes?.includes('招聘费 +1w')) lines.push('事件修正：+0.1w')
       if (s.monthMods.notes?.includes('招聘费 -50%')) lines.push('事件修正：-50%')
       lines.push(`本月招聘 ${r.debitAmt > 0 ? Math.round(r.debitAmt / fee) : 1} 人`)
       lines.push(`合计 ${wan(r.debitAmt || r.creditAmt)}`)
-    } else if (r.item.includes('折旧')) {
+      return lines
+    }
+    if (r.item.includes('折旧')) {
+      const lines: string[] = []
       for (const e of s.equipment) {
         const charge = Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated))
         lines.push(`${e.name}：${wan(charge)}`)
       }
       lines.push(`合计 ${wan(r.debitAmt || r.creditAmt)}`)
-    } else if (r.item.includes('加班')) {
-      lines.push(`加班费固定 0.5w（需生产 ≥ 3 人）`)
-    } else if (r.item.includes('研发')) {
-      lines.push(`每个项目每月 ${wan(RND_COST_PER_PROJECT)}`)
-      lines.push(`本月推进 1 个项目`)
-    } else if (r.item.includes('提案')) {
-      lines.push(`提案实施费用合计（含卡牌费用等）`)
+      return lines
     }
-    setDetail({ title: r.item, lines })
+    if (r.item.includes('加班')) return ['加班费固定 0.5w（需生产 ≥ 3 人）']
+    if (r.item.includes('研发')) return [`每个项目每月 ${wan(RND_COST_PER_PROJECT)}`, '本月推进 1 个项目']
+    if (r.item.includes('提案')) return ['提案实施费用合计（含卡牌费用等）']
+    return []
+  }
+
+  const showDetail = (r: typeof rows[number]) => {
+    setDetail(detail === r.item ? null : r.item)
   }
 
   return (
@@ -102,9 +107,13 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
       ) : null}
       {detail ? (
         <div style={{ marginTop: 'var(--s3)', padding: 'var(--s3)', background: 'var(--panel-2)', borderRadius: 'var(--r-md)', fontSize: 'var(--fs-xs)' }}>
-          <div className="bold" style={{ marginBottom: 'var(--s2)' }}>{detail.title}</div>
-          {detail.lines.map((l, i) => (
-            <div key={i} style={{ color: 'var(--muted)', lineHeight: 1.6 }}>{l}</div>
+          {rows.filter((r) => r.item === detail).map((r) => (
+            <div key={r.item} style={{ marginBottom: 'var(--s2)' }}>
+              <div className="bold" style={{ marginBottom: 'var(--s1)', color: 'var(--ink)' }}>{r.item}</div>
+              {getDetailLines(r).map((l, i) => (
+                <div key={i} style={{ color: 'var(--muted)', lineHeight: 1.6 }}>{l}</div>
+              ))}
+            </div>
           ))}
         </div>
       ) : null}
