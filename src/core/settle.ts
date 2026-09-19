@@ -13,7 +13,6 @@ import {
   TIER_BONUS,
   TIERS,
 } from '../data/game'
-import { RECRUIT_AMORT_PER_MONTH } from '../data/game'
 import { derive, mergeMods } from './derive'
 import { balanceSheet, equipmentNet, equityOf, inventoryValue } from './game'
 import { Rng } from './rng'
@@ -289,9 +288,6 @@ export function settle(state: GameState): SettleReport {
   // 加班费已在生产阶段扣过现金，这里只作为费用进入损益
   const overtimeCost = state.plan.overtime && state.depts.make.staff >= 3 ? 5 : 0
   const projectCost = Math.max(0, d.rndCostTotal)
-  // 待摊招聘费按月摊销（非现金，现金在招聘时已付）
-  const amort = Math.min(state.prepaid, RECRUIT_AMORT_PER_MONTH)
-  state.prepaid -= amort
 
   /**
    * 打牌时支付的现金（技术引进 3w 等）。
@@ -314,7 +310,7 @@ export function settle(state: GameState): SettleReport {
 
   const mfgExpense = salaryBy.make + depreciation + overtimeCost + prodVariance
   const sellExpense = salaryBy.sell
-  const adminExpense = salaryBy.ops + salaryBy.buy + amort
+  const adminExpense = salaryBy.ops + salaryBy.buy
   const rndExpense = salaryBy.rnd + projectCost
   const financeExpense = d.interest + misc
   const otherIncome = state.miscIncome
@@ -372,7 +368,6 @@ export function settle(state: GameState): SettleReport {
       '采购人员薪酬': salaryBy.buy,
       '研发人员薪酬': salaryBy.rnd,
       '研发项目投入': Math.max(0, d.rndCostTotal),
-      '招聘费摊销': amort,
       '借款利息': d.interest,
       '事件与杂项支出': misc,
       '营业外收入': otherIncome,

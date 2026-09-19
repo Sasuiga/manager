@@ -18,7 +18,6 @@ import {
   MONTHLY_RATE,
   OVERTIME_COST,
   PRODUCT_PRICE,
-  RECRUIT_AMORT_PER_MONTH,
   RND_COST_PER_PROJECT,
   SALES_ORDER_COUNT,
   SALES_RESOURCE_STEPS,
@@ -371,8 +370,8 @@ export function derive(state: GameState): DerivedTotals {
   for (const e of state.equipment) {
     makeDepreciation += Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated))
   }
-  /** 招聘费待摊：每月确认 RECRUIT_AMORT_PER_MONTH，按各部门累计招聘人数占比分摊 */
-  const amortThisMonth = Math.min(state.prepaid, RECRUIT_AMORT_PER_MONTH)
+  /** 招聘费摊销已取消：招聘费当月直接计入管理费用（miscExpense） */
+  const amortThisMonth = 0
   const hireCounts: Record<Dept, number> = {
     ops: state.flags['hire:ops'] ?? 0,
     buy: state.flags['hire:buy'] ?? 0,

@@ -127,7 +127,7 @@ export function ReportSheet({ g, onAdvance }: { g: Game; onAdvance: () => void }
           <Row k="现金" v={wan(bal.cash)} cls={bal.cash < 0 ? 'red' : ''} />
           <Row k="原料存货" v={wan(bal.inventoryMaterial)} />
           <Row k="成品存货" v={wan(bal.inventoryProduct)} />
-          <Row k="待摊招聘费" v={wan(bal.prepaid)} />
+          <Row k="待摊招聘费" v={wan(bal.prepaid) || '—'} />
           <Row k="设备净值" v={wan(bal.equipmentGross - bal.equipmentAccum)} />
           <Row k="资产合计" v={wan(bal.totalAssets)} bold />
         </div>

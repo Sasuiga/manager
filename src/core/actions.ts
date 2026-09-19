@@ -66,8 +66,7 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   if (!check.ok) return check
   const fee = hireCost(state, dept)
   state.cash -= fee
-  // 招聘支出先作待摊费用资本化，按 6 个月摊销，避免一次性冲击当月利润
-  state.prepaid += fee
+  state.miscExpense += fee
   state.ap -= 1
   state.depts[dept].staff += 1
   state.depts[dept].hired += 1
@@ -89,7 +88,7 @@ export function fire(state: GameState, dept: Dept): ActionResult {
   state.depts[dept].staff -= 1
   const refund = Math.round(STAFF[dept].hireFees[0] * 0.5)
   state.cash += refund
-  state.prepaid += refund
+  state.miscExpense -= refund
   state.monthFlags = state.monthFlags.filter((f) => f !== 'canFire')
   pushLog(state, 'action', `解雇 1 名${DEPT_NAMES[dept]}人员`, [`返还招聘费 ${refund / 10}w`])
   return { ok: true, msg: `解雇 1 人，返还 ${refund / 10}w` }

@@ -153,7 +153,7 @@ function BalanceCard({ bal }: { bal: E.BalanceSheet }) {
         <Row k="现金" v={wan(bal.cash)} cls={bal.cash < 0 ? 'red' : ''} />
         <Row k="原料存货" v={wan(bal.inventoryMaterial)} />
         <Row k="成品存货" v={wan(bal.inventoryProduct)} />
-        <Row k="待摊招聘费" v={wan(bal.prepaid)} />
+        <Row k="待摊招聘费" v={wan(bal.prepaid) || '—'} />
         <Row
           k={`设备净值（原值 ${wan(bal.equipmentGross)}）`}
           v={wan(net)}

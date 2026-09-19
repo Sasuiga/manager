@@ -236,7 +236,7 @@ export function equipmentNet(state: GameState): Money {
 }
 
 export function totalAssets(state: GameState): Money {
-  return state.cash + inventoryValue(state) + equipmentNet(state) + state.prepaid + state.pendingIncome
+  return state.cash + inventoryValue(state) + equipmentNet(state) + state.pendingIncome
 }
 
 export function balanceSheet(state: GameState): BalanceSheet {
@@ -254,7 +254,7 @@ export function balanceSheet(state: GameState): BalanceSheet {
     prepaid: state.prepaid,
     equipmentGross: grossEquip,
     equipmentAccum: accum,
-    totalAssets: state.cash + matv + prodv + netEquip + state.prepaid + state.pendingIncome,
+    totalAssets: state.cash + matv + prodv + netEquip + state.pendingIncome,
     debt: state.debt + state.pendingCost,
     equity: equityOf(state),
     retained: state.retained,
