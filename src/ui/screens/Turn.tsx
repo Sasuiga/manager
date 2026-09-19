@@ -1008,8 +1008,7 @@ function HireBlock({ g, dept }: { g: Game; dept: E.Dept }) {
             <div className="section-label">成本明细</div>
             <Row k="AP" v="1 点" />
             <Row k="招聘费" v={fee > 0 ? wan(fee) : '免费'} cls={fee > 0 ? '' : 'green'} />
-            <Row k="月薪" v={`${wan(def.salary)}/人`} />
-            <Row k="合计月薪" v={`${wan(def.salary * (staff + 1))}（${staff + 1} 人）`} />
+            <Row k="月薪" v={`${wan(def.salary)}/人（本月计提下月支付）`} />
           </div>
 
           <div className="card" style={{ marginTop: 'var(--s3)' }}>
