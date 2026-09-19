@@ -26,8 +26,8 @@ export function Sheet({
     if (closingRef.current) return
     closingRef.current = true
     setClosing(true)
-    // 兜底：比退出动画（300ms）略长，防止掉帧时动画未播完就先卸载
-    timer.current = window.setTimeout(onClose, 360)
+    // 兜底：比退出动画（480ms）略长，防止掉帧时动画未播完就先卸载
+    timer.current = window.setTimeout(onClose, 560)
   }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

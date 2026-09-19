@@ -89,6 +89,7 @@
   --dur-fast: 150ms;
   --dur: 220ms;
   --dur-slow: 300ms;
+  --dur-slower: 480ms;
   --ease-settle: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 
   color-scheme: dark;
@@ -600,7 +601,7 @@ button {
    淡出时去掉它，让关闭全程只保留位移 + 淡出两种变化，与打开对称 */
 .sheet-overlay.out {
   backdrop-filter: none;
-  animation: fade-out var(--dur-slow) var(--ease-settle) forwards;
+  animation: fade-out var(--dur-slower) var(--ease-settle) forwards;
 }
 
 @keyframes fade-in {
@@ -633,7 +634,7 @@ button {
 }
 
 .sheet.out {
-  animation: sheet-down var(--dur-slow) var(--ease-settle) forwards;
+  animation: sheet-down var(--dur-slower) var(--ease-settle) forwards;
   pointer-events: none;
 }
 
