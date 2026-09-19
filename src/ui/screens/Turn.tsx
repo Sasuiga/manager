@@ -79,13 +79,15 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
                   fontVariantNumeric: 'tabular-nums',
                   background: 'none',
                   border: 'none',
-                  color: 'var(--ink)',
+                  color: 'var(--gold-deep)',
                   cursor: 'pointer',
-                  textDecoration: 'underline dotted',
-                  textUnderlineOffset: 3,
                   padding: 0,
                   fontSize: 'var(--fs-xs)',
+                  fontWeight: 500,
+                  borderRadius: 'var(--r-sm)',
+                  transition: 'background 0.15s',
                 }}
+                className="ledger-amt"
               >
                 {wan(r.debitAmt || r.creditAmt)}
               </button>

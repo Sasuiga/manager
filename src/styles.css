@@ -1066,3 +1066,8 @@ html[data-anim='off'] * {
   border-radius: var(--r-sm);
   padding: var(--s2) var(--s3);
 }
+
+/* 账务金额可点击 */
+.ledger-amt:hover {
+  background: var(--panel-2);
+}
