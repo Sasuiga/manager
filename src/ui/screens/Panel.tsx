@@ -257,8 +257,8 @@ function DrillSheet({ name, led, onClose }: { name: string; led: E.Ledger; onClo
     case '财务费用':
       lines.push(['借款利息', wan(p['借款利息'] ?? 0)])
       lines.push(['事件与杂项支出', wan(p['事件与杂项支出'] ?? 0)])
-      lines.push(['卡牌费用', wan(p['卡牌与事件费用'] ?? 0)])
-      note = '事件与打牌费用在支付当时已扣现金，结算时只确认费用，不重复扣款。'
+      lines.push(['提案费用', wan(p['提案与事件费用'] ?? 0)])
+      note = '事件与实施费用在支付当时已扣现金，结算时只确认费用，不重复扣款。'
       break
   }
 

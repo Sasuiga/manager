@@ -84,7 +84,7 @@ export function DrawScreen({ g }: { g: Game }) {
           </span>
           <div>
             <div className="hud-month" style={{ fontSize: 'var(--fs-2xl)' }}>
-              {s.month}月 · 抽卡阶段
+              {s.month}月 · 立项阶段
             </div>
             <div className="xs faint">{hud.climateName} · {hud.momentum} · 每月一次</div>
           </div>
@@ -102,14 +102,14 @@ export function DrawScreen({ g }: { g: Game }) {
           <div className="title-rule" />
           <div className="grid-3">
             <div>
-              <div className="stat-label">手牌</div>
+              <div className="stat-label">提案</div>
               <div className="stat-value">
                 {s.hand.length}
                 <span className="faint">/{s.handMax}</span>
               </div>
             </div>
             <div>
-              <div className="stat-label">可打牌数</div>
+              <div className="stat-label">可实施数</div>
               <div className="stat-value">
                 {s.plays}
                 <span className="faint">/{hud.playsMax}</span>
@@ -125,12 +125,12 @@ export function DrawScreen({ g }: { g: Game }) {
           </div>
         </div>
 
-        {/* 牌库已空：本月跳过抽卡 */}
+        {/* 提案库已空：本月跳过立项 */}
         {noDraw ? (
           <div className="card" style={{ marginTop: 'var(--s4)' }}>
-            <h3>本月抽卡</h3>
+            <h3>本月立项</h3>
             <div className="title-rule" />
-            <p className="muted sm">牌库已空，本月跳过抽卡。</p>
+            <p className="muted sm">提案库已空，本月跳过立项。</p>
           </div>
         ) : null}
 
@@ -169,24 +169,24 @@ export function DrawScreen({ g }: { g: Game }) {
           </div>
         ) : null}
 
-        {/* 查看手牌 / 弃牌堆 / 牌库 */}
+        {/* 查看提案 / 废案库 / 提案库 */}
         <div style={{ marginTop: 'var(--s4)' }}>
           <div className="wrap" style={{ justifyContent: 'center' }}>
             <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('hand')}>
-              <span className="btn-main xs">手牌 {s.hand.length}</span>
+              <span className="btn-main xs">提案 {s.hand.length}</span>
             </button>
             <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('discard')}>
-              <span className="btn-main xs">弃牌堆 {s.discard.length}</span>
+              <span className="btn-main xs">废案库 {s.discard.length}</span>
             </button>
             <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('deck')}>
-              <span className="btn-main xs">牌库 {s.deck.length}</span>
+              <span className="btn-main xs">提案库 {s.deck.length}</span>
             </button>
           </div>
           <div style={{ marginTop: 'var(--s3)' }}>
             {s.drawn.length > 0 ? (
               <button className="btn btn-primary" disabled={s.drawnSelected.length === 0} onClick={confirm}>
                 <span className="btn-main">确认选择（已选 {s.drawnSelected.length}/{s.drawM}）</span>
-                <span className="btn-sub">未选中的放回牌库，进入本月经营</span>
+                <span className="btn-sub">未选中的放回提案库，进入本月经营</span>
               </button>
             ) : noDraw ? (
               <button
@@ -197,7 +197,7 @@ export function DrawScreen({ g }: { g: Game }) {
                 }}
               >
                 <span className="btn-main">进入经营</span>
-                <span className="btn-sub">牌库已空，本月不抽卡</span>
+                <span className="btn-sub">提案库已空，本月不立项</span>
               </button>
             ) : null}
           </div>
@@ -205,13 +205,13 @@ export function DrawScreen({ g }: { g: Game }) {
 
         {view ? (
           <Sheet
-            title={view === 'hand' ? (discardMode ? `手牌 · 请弃 ${overLimit} 张` : '手牌') : view === 'discard' ? '弃牌堆' : '牌库'}
+            title={view === 'hand' ? (discardMode ? `提案 · 请废 ${overLimit} 项` : '提案') : view === 'discard' ? '废案库' : '提案库'}
             sub={
               view === 'hand'
-                ? `${s.hand.length}/${s.handMax} 张${discardMode ? ` · 已选弃 ${discardSelected.length}/${overLimit}` : ''}`
+                ? `${s.hand.length}/${s.handMax} 项${discardMode ? ` · 已选废 ${discardSelected.length}/${overLimit}` : ''}`
                 : view === 'discard'
-                  ? `${s.discard.length} 张`
-                  : `剩余 ${s.deck.length} 张`
+                  ? `${s.discard.length} 项`
+                  : `剩余 ${s.deck.length} 项`
             }
             onClose={closeSheet}
             footer={
@@ -221,8 +221,8 @@ export function DrawScreen({ g }: { g: Game }) {
                   disabled={discardSelected.length < overLimit}
                   onClick={confirmDiscard}
                 >
-                  <span className="btn-main">确认弃牌（{discardSelected.length}/{overLimit}）</span>
-                  <span className="btn-sub">弃掉选中卡，进入本月经营</span>
+                  <span className="btn-main">确认废案（{discardSelected.length}/{overLimit}）</span>
+                  <span className="btn-sub">废掉选中提案，进入本月经营</span>
                 </button>
               ) : undefined
             }
@@ -230,7 +230,7 @@ export function DrawScreen({ g }: { g: Game }) {
             <div className="stack">
               {view === 'hand' && discardMode ? (
                 <div className="info" style={{ marginBottom: 'var(--s2)' }}>
-                  点击卡片选中，选中后高亮显示。需弃 {overLimit} 张才能保留新抽的卡。
+                  点击提案选中，选中后高亮显示。需废 {overLimit} 项才能保留新立项的提案。
                 </div>
               ) : null}
               {(view === 'hand' ? s.hand : view === 'discard' ? s.discard : s.deck).map((c) => {
@@ -257,7 +257,7 @@ export function DrawScreen({ g }: { g: Game }) {
                       <span className="card-desc">{def.text}</span>
                       {view === 'hand' && !discardMode ? (
                         <span className="card-cost">
-{E.cardPlayCost(s, def) > 0 ? `打出费用 ${wan(E.cardPlayCost(s, def))}` : '打出费用：无'}
+{E.cardPlayCost(s, def) > 0 ? `实施费用 ${wan(E.cardPlayCost(s, def))}` : '实施费用：无'}
                         </span>
                       ) : null}
                     </span>

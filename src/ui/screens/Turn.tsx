@@ -83,23 +83,23 @@ function OpsPage({ g }: { g: Game }) {
         </div>
         <div className="title-rule" />
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          招募管理人员可提升 AP 上限（下月生效）；每月打出卡牌辅助各业务部门开展运营。
+          招募管理人员可提升 AP 上限（下月生效）；每月实施提案辅助各业务部门开展运营。
         </p>
       </div>
 
-      {/* 手牌 */}
+      {/* 提案 */}
       <div className="card">
         <div className="hstack-between">
-          <h3>手牌</h3>
+          <h3>提案</h3>
           <div className="wrap">
             <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('discard')}>
-              <span className="btn-main xs">弃牌堆 {s.discard.length}</span>
+              <span className="btn-main xs">废案库 {s.discard.length}</span>
             </button>
           </div>
         </div>
         <div className="title-rule" />
         {s.hand.length === 0 ? (
-          <p className="muted sm">手牌是空的。打出的牌会进入弃牌堆。</p>
+          <p className="muted sm">提案是空的。已实施的提案会进入废案库。</p>
         ) : (
           <div className="stack">
             {s.hand.map((c) => {
@@ -118,7 +118,7 @@ function OpsPage({ g }: { g: Game }) {
                     </span>
                     <span className="card-desc">{def.text}</span>
                     <span className="card-cost">
-{cost > 0 ? `打出费用 ${wan(cost)}` : '打出费用：无'}
+{cost > 0 ? `实施费用 ${wan(cost)}` : '实施费用：无'}
                     </span>
                   </span>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)', justifyContent: 'center' }}>
@@ -128,7 +128,7 @@ function OpsPage({ g }: { g: Game }) {
                       disabled={!playable.ok}
                       onClick={() => g.act((st) => E.playCard(st, c.uid))}
                     >
-                      <span className="btn-main xs">打出</span>
+                      <span className="btn-main xs">实施</span>
                       {!playable.ok ? <span className="btn-sub xs">{playable.msg}</span> : null}
                     </button>
                   </span>
@@ -139,14 +139,14 @@ function OpsPage({ g }: { g: Game }) {
         )}
         {s.hand.length > s.handMax ? (
           <div className="warn" style={{ marginTop: 'var(--s3)' }}>
-            手牌超出上限 {s.hand.length - s.handMax} 张，需弃牌后才能继续。
+            提案超出上限 {s.hand.length - s.handMax} 项，需废案后才能继续。
           </div>
         ) : null}
       </div>
 
       {view === 'discard' ? (
         <Sheet
-          title="弃牌堆"
+          title="废案库"
           sub={`${s.discard.length} 张`}
           onClose={() => setView(null)}
         >

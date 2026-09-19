@@ -41,7 +41,7 @@ function GameRoot({ g, onRestart }: { g: Game; onRestart: () => void }) {
   // 董事会：选挑战目标（每季度初）
   if (s.challengeOffered.length > 0) return <BoardScreen g={g} />
 
-  // 抽卡阶段：每月开始、事件之后独立的一次活动
+  // 立项阶段：每月开始、事件之后独立的一次活动
   if (s.phase === 'draw') return <DrawScreen g={g} />
 
   // 经营阶段尚未开始（例如刚开局）
@@ -99,7 +99,7 @@ function SettleFlow({ g, onDone }: { g: Game; onDone: () => void }) {
     const goals = E.goalDisplay(s)
     if (goals.basic && !E.checkGoal(goals.basic.track, goals.basic.current))
       out.push('基本目标尚未达标，结算后将判定为未完成')
-    if (s.hand.length > s.handMax) out.push(`手牌超出上限 ${s.hand.length - s.handMax} 张`)
+    if (s.hand.length > s.handMax) out.push(`提案超出上限 ${s.hand.length - s.handMax} 项`)
     if (s.ap > 0) out.push(`还剩 ${s.ap} 点 AP 未使用`)
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -135,7 +135,7 @@ function SettleFlow({ g, onDone }: { g: Game; onDone: () => void }) {
           <Row k="销售资源" v={`${E.allocUsed(s)}/${hud.salesResource}`} />
           <Row k="现金" v={wan(s.cash)} cls={s.cash < 0 ? 'red' : ''} />
           <Row k="AP" v={`${s.ap}/${hud.apMax}`} />
-          <Row k="可打牌数" v={`${s.plays}/${hud.playsMax}`} />
+          <Row k="可实施数" v={`${s.plays}/${hud.playsMax}`} />
         </div>
 
         {risks.length ? (
