@@ -102,7 +102,7 @@ export function DrawScreen({ g }: { g: Game }) {
           <div className="title-rule" />
           <div className="grid-3">
             <div>
-              <div className="stat-label">提案</div>
+              <div className="stat-label">储备提案</div>
               <div className="stat-value">
                 {s.hand.length}
                 <span className="faint">/{s.handMax}</span>
@@ -130,7 +130,7 @@ export function DrawScreen({ g }: { g: Game }) {
           <div className="card" style={{ marginTop: 'var(--s4)' }}>
             <h3>本月立项</h3>
             <div className="title-rule" />
-            <p className="muted sm">提案库已空，本月跳过立项。</p>
+            <p className="muted sm">储备提案已空，本月跳过立项。</p>
           </div>
         ) : null}
 
@@ -169,24 +169,21 @@ export function DrawScreen({ g }: { g: Game }) {
           </div>
         ) : null}
 
-        {/* 查看提案 / 废案库 / 提案库 */}
+        {/* 查看储备提案 / 已实施 */}
         <div style={{ marginTop: 'var(--s4)' }}>
           <div className="wrap" style={{ justifyContent: 'center' }}>
             <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('hand')}>
-              <span className="btn-main xs">提案 {s.hand.length}</span>
+              <span className="btn-main xs">储备提案 {s.hand.length}</span>
             </button>
             <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('discard')}>
               <span className="btn-main xs">已实施 {s.playedThisMonth.length}</span>
-            </button>
-            <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('deck')}>
-              <span className="btn-main xs">提案库 {s.deck.length}</span>
             </button>
           </div>
           <div style={{ marginTop: 'var(--s3)' }}>
             {s.drawn.length > 0 ? (
               <button className="btn btn-primary" disabled={s.drawnSelected.length === 0} onClick={confirm}>
                 <span className="btn-main">确认选择（已选 {s.drawnSelected.length}/{s.drawM}）</span>
-                <span className="btn-sub">未选中的放回提案库，进入本月经营</span>
+                <span className="btn-sub">进入本月经营</span>
               </button>
             ) : noDraw ? (
               <button
