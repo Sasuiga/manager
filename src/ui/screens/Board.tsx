@@ -95,7 +95,6 @@ export function BoardScreen({ g }: { g: Game }) {
                 </button>
               ))}
             </div>
-            <div className="hint">未选中的挑战目标本季度不再追踪，但仍可在目标面板中查看。</div>
           </>
         ) : (
           <div className="info" style={{ marginTop: 'var(--s4)' }}>
