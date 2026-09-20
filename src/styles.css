@@ -960,7 +960,7 @@ button {
   cursor: default;
 }
 
-/* 可点击统计格（.click）：金色标签 + 下划线，明确暗示可点击 */
+/* 可点击统计格（.click）：标签右侧的「查看 ›」提示，明确暗示可点击 */
 .stat-cell.click {
   cursor: pointer;
   border-radius: var(--r-sm);
@@ -971,23 +971,20 @@ button {
   background: var(--emerald-soft);
 }
 
-.stat-cell.click .stat-label {
-  color: var(--gold-deep);
-  text-decoration: underline dashed;
-  text-underline-offset: 3px;
+.stat-hint {
+  margin-left: 8px;
+  font-size: var(--fs-xs);
+  color: var(--gold);
+  opacity: 0.55;
+  transition: opacity var(--dur-fast) var(--ease-settle), transform var(--dur-fast) var(--ease-settle);
 }
 
-.stat-cell.click:hover .stat-label {
-  color: var(--gold);
+.stat-cell.click:hover .stat-hint {
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 button.stat-cell .stat-label {
-  color: var(--gold-deep);
-  text-decoration: underline dashed;
-  text-underline-offset: 3px;
-}
-
-button.stat-cell:hover .stat-label {
   color: var(--gold);
 }
 .wrap { display: flex; flex-wrap: wrap; gap: var(--s2); }

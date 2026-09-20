@@ -99,7 +99,7 @@ export function DrawScreen({ g }: { g: Game }) {
           <div className="grid-4">
             <button className="stat-cell click" onClick={() => setView('hand')}
               aria-label="查看储备提案">
-              <span className="stat-label">储备提案</span>
+              <span className="stat-label">储备提案<span className="stat-hint">查看 ›</span></span>
               <span className="stat-value">
                 {s.hand.length}
                 <span className="faint">/{s.handMax}</span>
@@ -121,7 +121,7 @@ export function DrawScreen({ g }: { g: Game }) {
             </div>
             <button className="stat-cell click" onClick={() => setView('discard')}
               aria-label="查看已实施提案">
-              <span className="stat-label">已实施</span>
+              <span className="stat-label">已实施<span className="stat-hint">查看 ›</span></span>
               <span className="stat-value">{s.playedThisMonth.length}</span>
             </button>
           </div>
