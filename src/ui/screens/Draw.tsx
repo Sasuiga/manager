@@ -94,44 +94,36 @@ export function DrawScreen({ g }: { g: Game }) {
 
         {/* 本局参数：抽 N 选 M / 提案 / 可实施数 / AP */}
         <div className="card">
-          <div className="hstack-between">
-            <span className="xs mono">
-              抽 {s.drawN} 选 {s.drawM}
-            </span>
-            <span className="hstack" style={{ gap: 'var(--s2)' }}>
-              <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('hand')}
-                aria-label="查看储备提案">
-                <span className="btn-main xs">提案 {s.hand.length}</span>
-              </button>
-              <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('discard')}
-                aria-label="查看已实施提案">
-                <span className="btn-main xs">已实施 {s.playedThisMonth.length}</span>
-              </button>
-            </span>
-          </div>
+          <div className="xs mono">抽 {s.drawN} 选 {s.drawM}</div>
           <div className="title-rule" />
-          <div className="grid-3">
-            <div>
-              <div className="stat-label">储备提案</div>
-              <div className="stat-value">
+          <div className="grid-4">
+            <button className="stat-cell" onClick={() => setView('hand')}
+              aria-label="查看储备提案">
+              <span className="stat-label">储备提案</span>
+              <span className="stat-value">
                 {s.hand.length}
                 <span className="faint">/{s.handMax}</span>
-              </div>
-            </div>
-            <div>
+              </span>
+            </button>
+            <div className="stat-cell">
               <div className="stat-label">可实施数</div>
               <div className="stat-value">
                 {s.plays}
                 <span className="faint">/{hud.playsMax}</span>
               </div>
             </div>
-            <div>
+            <div className="stat-cell">
               <div className="stat-label">AP</div>
               <div className="stat-value">
                 {s.ap}
                 <span className="faint">/{hud.apMax}</span>
               </div>
             </div>
+            <button className="stat-cell" onClick={() => setView('discard')}
+              aria-label="查看已实施提案">
+              <span className="stat-label">已实施</span>
+              <span className="stat-value">{s.playedThisMonth.length}</span>
+            </button>
           </div>
         </div>
 
