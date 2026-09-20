@@ -531,7 +531,7 @@ export const OPENING_CHALLENGE: GoalDef[] = [
   { id: 'C1', climate: 'opening', kind: 'challenge', name: '本季度累计净利润 ≥ 10w', desc: '在第一季度就实现盈利。', metric: 'netProfitQ', compare: 'gte', value: 100, points: 15 },
   { id: 'C2', climate: 'opening', kind: 'challenge', name: '季度末现金 ≥ 35w', desc: '留足现金储备。', metric: 'cashEnd', compare: 'gte', value: 350, points: 15 },
   { id: 'C3', climate: 'opening', kind: 'challenge', name: '季度末员工总数 ≥ 3', desc: '搭起最小团队。', metric: 'staffTotal', compare: 'gte', value: 3, points: 15 },
-  { id: 'C4', climate: 'opening', kind: 'challenge', name: '本季度至少 2 个月毛利 ≥ 4w', desc: '连续两个月毛利达到 4w。', metric: 'grossProfitMonths', compare: 'gte', value: 2, points: 20 },
+  { id: 'C4', climate: 'opening', kind: 'challenge', name: '本季度至少 2 个月毛利 ≥ 4w', desc: '本季度内任意 2 个月毛利达到 4w 即可，不要求连续。', metric: 'grossProfitMonths', compare: 'gte', value: 2, points: 20 },
   { id: 'C5', climate: 'opening', kind: 'challenge', name: '本季度累计收入 ≥ 50w', desc: '把销售规模做起来。', metric: 'revenueQ', compare: 'gte', value: 500, points: 15 },
   { id: 'C6', climate: 'opening', kind: 'challenge', name: '本季度完成 1 次研发立项', desc: '选择研发项目并投入至少 1 名研发人员。', metric: 'rndStartsQ', compare: 'gte', value: 1, points: 15 },
 ]
