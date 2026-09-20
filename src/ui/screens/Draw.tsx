@@ -97,7 +97,7 @@ export function DrawScreen({ g }: { g: Game }) {
           <div className="xs mono">抽 {s.drawN} 选 {s.drawM}</div>
           <div className="title-rule" />
           <div className="grid-4">
-            <button className="stat-cell" onClick={() => setView('hand')}
+            <button className="stat-cell click" onClick={() => setView('hand')}
               aria-label="查看储备提案">
               <span className="stat-label">储备提案</span>
               <span className="stat-value">
@@ -106,20 +106,20 @@ export function DrawScreen({ g }: { g: Game }) {
               </span>
             </button>
             <div className="stat-cell">
-              <div className="stat-label">可实施数</div>
-              <div className="stat-value">
+              <span className="stat-label">可实施数</span>
+              <span className="stat-value">
                 {s.plays}
                 <span className="faint">/{hud.playsMax}</span>
-              </div>
+              </span>
             </div>
             <div className="stat-cell">
-              <div className="stat-label">AP</div>
-              <div className="stat-value">
+              <span className="stat-label">AP</span>
+              <span className="stat-value">
                 {s.ap}
                 <span className="faint">/{hud.apMax}</span>
-              </div>
+              </span>
             </div>
-            <button className="stat-cell" onClick={() => setView('discard')}
+            <button className="stat-cell click" onClick={() => setView('discard')}
               aria-label="查看已实施提案">
               <span className="stat-label">已实施</span>
               <span className="stat-value">{s.playedThisMonth.length}</span>

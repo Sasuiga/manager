@@ -960,14 +960,35 @@ button {
   cursor: default;
 }
 
-button.stat-cell {
+/* 可点击统计格（.click）：金色标签 + 下划线，明确暗示可点击 */
+.stat-cell.click {
   cursor: pointer;
   border-radius: var(--r-sm);
   transition: background var(--dur-fast) var(--ease-settle);
 }
 
-button.stat-cell:hover {
+.stat-cell.click:hover {
   background: var(--emerald-soft);
+}
+
+.stat-cell.click .stat-label {
+  color: var(--gold-deep);
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+}
+
+.stat-cell.click:hover .stat-label {
+  color: var(--gold);
+}
+
+button.stat-cell .stat-label {
+  color: var(--gold-deep);
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+}
+
+button.stat-cell:hover .stat-label {
+  color: var(--gold);
 }
 .wrap { display: flex; flex-wrap: wrap; gap: var(--s2); }
 
