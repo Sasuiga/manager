@@ -21,13 +21,12 @@ export function TitleScreen({ onStart }: { onStart: (seed: number) => void }) {
         <p className="title-sub">
           采购原材料、安排生产、分配销售资源、推进研发
           <br />
-          采取一切手段让董事会满意。
+          十二个月，采取一切手段让董事会满意。
         </p>
 
         <div style={{ marginTop: 'var(--s6)' }} className="stack">
           <button className="btn btn-primary" onClick={start}>
             <span className="btn-main">开始新的一局</span>
-            <span className="btn-sub">十二个月 · 单机 · 随机气候</span>
           </button>
         </div>
       </div>

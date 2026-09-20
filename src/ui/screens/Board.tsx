@@ -53,8 +53,8 @@ export function BoardScreen({ g }: { g: Game }) {
         {goals.basic ? (
           <div className="card" style={{ boxShadow: 'inset 0 0 0 1px var(--line-gold), 0 0 0 1px var(--line)' }}>
             <div className="hstack-between">
-              <span className="tag">基本</span>
-              <span className="xs faint">必达 · 未达成记 1 次失误</span>
+              <span className="tag">基本目标</span>
+              <span className="xs faint">连续 2 次未达成则游戏结束</span>
             </div>
             <div className="card-name" style={{ marginTop: 'var(--s2)' }}>
               {goals.basic.track.def.name}
