@@ -92,6 +92,16 @@ export const CLIMATE_NAMES: Record<Climate, string> = {
   depression: '萧条',
 }
 
+/** 气候含义（玩家提示）：需求 / 原料价 / 资金。 */
+export const CLIMATE_HINTS: Record<Climate, string> = {
+  recovery: '需求低位回升，原料价低、资金便宜',
+  boom: '需求旺盛，原料价稳定，资金适中',
+  overheat: '需求极高，原料价大涨，资金紧张',
+  stagflation: '需求下滑，原料价高企，资金紧张',
+  recession: '需求低迷，原料价下跌，资金转松',
+  depression: '需求极弱，原料价见底，信贷收缩',
+}
+
 export const MOMENTUM_NAMES: Record<Momentum, string> = {
   expand: '扩张',
   stall: '停滞',

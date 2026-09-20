@@ -1,5 +1,5 @@
 import * as E from '../../core/engine'
-import { TIERS, TIER_LABEL } from '../../data/game'
+import { CLIMATE_HINTS, TIERS, TIER_LABEL } from '../../data/game'
 import { Icon } from '../icons'
 import { Corners } from '../ornaments'
 import { Row } from '../Sheet'
@@ -61,7 +61,7 @@ export function EventScreen({ g }: { g: Game }) {
             <div className="hud-month" style={{ fontSize: 'var(--fs-2xl)' }}>
               {s.month}月 · 事件
             </div>
-            <div className="xs faint">{E.hudView(s).climateName} · {E.hudView(s).momentum}</div>
+            <div className="xs faint">{E.hudView(s).climateName}｜{CLIMATE_HINTS[s.climate]}</div>
           </div>
         </div>
 

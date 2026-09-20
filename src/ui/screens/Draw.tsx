@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import * as E from '../../core/engine'
-import { CARD_BY_ID, DEPT_SHORT } from '../../data/game'
+import { CARD_BY_ID, CLIMATE_HINTS, DEPT_SHORT } from '../../data/game'
 import { Icon } from '../icons'
 import { Corners } from '../ornaments'
 import { Sheet } from '../Sheet'
@@ -86,7 +86,7 @@ export function DrawScreen({ g }: { g: Game }) {
             <div className="hud-month" style={{ fontSize: 'var(--fs-2xl)' }}>
               {s.month}月 · 立项阶段
             </div>
-            <div className="xs faint">{hud.climateName} · {hud.momentum} · 每月一次</div>
+            <div className="xs faint">{hud.climateName}｜{CLIMATE_HINTS[s.climate]} · 每月一次</div>
           </div>
         </div>
 
