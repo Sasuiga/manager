@@ -96,7 +96,17 @@ export function DrawScreen({ g }: { g: Game }) {
         <div className="card">
           <div className="hstack-between">
             <span className="xs mono">
-              抽 {s.drawN} 选 {s.drawM} · 已选 {s.drawnSelected.length}/{s.drawM}
+              抽 {s.drawN} 选 {s.drawM}
+            </span>
+            <span className="hstack" style={{ gap: 'var(--s2)' }}>
+              <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('hand')}
+                aria-label="查看储备提案">
+                <span className="btn-main xs">提案 {s.hand.length}</span>
+              </button>
+              <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('discard')}
+                aria-label="查看已实施提案">
+                <span className="btn-main xs">已实施 {s.playedThisMonth.length}</span>
+              </button>
             </span>
           </div>
           <div className="title-rule" />
@@ -169,17 +179,9 @@ export function DrawScreen({ g }: { g: Game }) {
           </div>
         ) : null}
 
-        {/* 查看储备提案 / 已实施 */}
+        {/* 确认选择 */}
         <div style={{ marginTop: 'var(--s4)' }}>
-          <div className="wrap" style={{ justifyContent: 'center' }}>
-            <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('hand')}>
-              <span className="btn-main xs">储备提案 {s.hand.length}</span>
-            </button>
-            <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => setView('discard')}>
-              <span className="btn-main xs">已实施 {s.playedThisMonth.length}</span>
-            </button>
-          </div>
-          <div style={{ marginTop: 'var(--s3)' }}>
+          <div>
             {s.drawn.length > 0 ? (
               <button className="btn btn-primary" disabled={s.drawnSelected.length === 0} onClick={confirm}>
                 <span className="btn-main">确认选择（已选 {s.drawnSelected.length}/{s.drawM}）</span>
