@@ -91,7 +91,6 @@ export function BoardScreen({ g }: { g: Game }) {
                       <span className="tag gold">+{t.def.points} 分</span>
                     </span>
                     <span className="card-desc">{t.def.desc}</span>
-                    <span className="card-cond">{thresholdText(t)}</span>
                   </span>
                 </button>
               ))}
@@ -123,11 +122,4 @@ function goalValue(t: GoalTrack, cur: number) {
   return `${fmt(cur)} / ${fmt(t.target)}`
 }
 
-function thresholdText(t: GoalTrack) {
-  const cmp = t.def.compare === 'lte' ? '不高于' : '达到'
-  const m = t.def.metric
-  const isMoney = ['netProfitQ', 'revenueQ', 'cashEnd', 'netAssetsEnd', 'grossProfitQ', 'debt', 'inventory', 'salaryQ'].includes(m)
-  const val = isMoney ? wan(t.target) : `${t.target}`
-  return `需${cmp} ${val}`
-}
 
