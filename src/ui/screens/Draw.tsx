@@ -176,8 +176,7 @@ export function DrawScreen({ g }: { g: Game }) {
           <div>
             {s.drawn.length > 0 ? (
               <button className="btn btn-primary" disabled={s.drawnSelected.length === 0} onClick={confirm}>
-                <span className="btn-main">确认选择（已选 {s.drawnSelected.length}/{s.drawM}）</span>
-                <span className="btn-sub">进入本月经营</span>
+                <span className="btn-main">确认选择</span>
               </button>
             ) : noDraw ? (
               <button
