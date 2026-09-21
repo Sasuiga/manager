@@ -881,7 +881,7 @@ function SellPage({ g }: { g: Game }) {
         <h3>销售部</h3>
         <div className="title-rule" />
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          销售资源加点做大各层需求（1 点 = +1 需求，每层上限 3 倍基础需求）；确定性订单先行结算，不需要资源。
+          将销售资源投向各层需求，资源越多需求盘子越大；人员越多销售资源越丰富，可解锁自然订单。
         </p>
         <LedgerSection g={g} dept="sell" />
       </div>
