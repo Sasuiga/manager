@@ -843,6 +843,7 @@ function TierOrderRow({
         <b>{TIER_LABEL[t]}</b>
         {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
       </span>
+      <span className="xs faint" style={{ textAlign: 'right' }}>{from}</span>
       <span className={`mono sm${forced ? '' : isAccepted ? ' gold' : ''}`} style={{ textAlign: 'right' }}>
         {qty} 件
       </span>
@@ -882,7 +883,6 @@ function TierOrderRow({
           接单
         </button>
       )}
-      <span className="xs faint" style={{ textAlign: 'right' }}>{from}</span>
     </>
   )
 }
@@ -954,12 +954,12 @@ function SellPage({ g }: { g: Game }) {
 
         {/* 订单需求表：五列（类型 / 需求数 / 订单价 / 状态 / 来源） */}
         <div className="title-rule" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1.2fr 0.8fr 0.6fr auto', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 0.8fr auto', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
           <span className="xs" style={{ color: 'var(--gold)' }}>订单需求</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>来源</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>需求数</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>订单价</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>状态</span>
-          <span className="xs faint" style={{ textAlign: 'right' }}>来源</span>
           {gs.orders.map((o) => {
             const orderPrice = E.priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
             const isAccepted = gs.acceptedOrders.includes(o.id)
