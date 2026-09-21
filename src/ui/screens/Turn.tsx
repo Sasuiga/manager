@@ -809,12 +809,12 @@ function TierRowCells({
         {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
       </span>
       <span />
-      <span className={`mono sm${push > 0 ? ' gold' : ''}`} style={{ textAlign: 'right' }}>
+      <span className={`mono sm${push > 0 ? ' gold' : ''}`}>
         {demand}<span className="faint">（上限 {demandBase + cap}）</span>
         {over > 0 ? <span className="faint" style={{ color: 'var(--red, #c0392b)' }}> · 超 {over}</span> : null}
       </span>
-      <span className="mono xs" style={{ textAlign: 'right' }}>{wan(price)}</span>
-      <span style={{ textAlign: 'right' }}>
+      <span className="mono xs">{wan(price)}</span>
+      <span>
         <span className="mono sm">{avail}</span>
         {orderTaken > 0 ? <span className="faint xs">（总 {p.qty}）</span> : null}
       </span>
@@ -844,13 +844,13 @@ function TierOrderRow({
         <b>{TIER_LABEL[t]}</b>
         {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
       </span>
-      <span className="xs faint" style={{ textAlign: 'right' }}>{from}</span>
-      <span className={`mono sm${forced ? '' : isAccepted ? ' gold' : ''}`} style={{ textAlign: 'right' }}>
+      <span className="xs faint">{from}</span>
+      <span className={`mono sm${forced ? '' : isAccepted ? ' gold' : ''}`}>
         {qty} 件
       </span>
-      <span className="mono xs" style={{ textAlign: 'right' }}>{wan(price)}</span>
+      <span className="mono xs">{wan(price)}</span>
       {forced ? (
-        <span className="xs faint" style={{ textAlign: 'right' }}>强制必交</span>
+        <span className="xs faint">强制必交</span>
       ) : isAccepted ? (
         <button
           className="btn btn-nav"
@@ -925,9 +925,9 @@ function SellPage({ g }: { g: Game }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 0.8fr 0.8fr', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
           <span className="xs" style={{ color: 'var(--gold)' }}>市场需求</span>
           <span />
-          <span className="xs faint" style={{ textAlign: 'right' }}>需求数</span>
-          <span className="xs faint" style={{ textAlign: 'right' }}>市价</span>
-          <span className="xs faint" style={{ textAlign: 'right' }}>可用库存</span>
+          <span className="xs faint">需求数</span>
+          <span className="xs faint">市价</span>
+          <span className="xs faint">可用库存</span>
           {TIER_ORDER.map((t) => {
             const p = gs.products[t]
             const cost = d.salesPushCost[t]
@@ -958,10 +958,10 @@ function SellPage({ g }: { g: Game }) {
         <div className="title-rule" />
         <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 0.8fr 0.8fr', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
           <span className="xs" style={{ color: 'var(--gold)' }}>订单需求</span>
-          <span className="xs faint" style={{ textAlign: 'right' }}>来源</span>
-          <span className="xs faint" style={{ textAlign: 'right' }}>需求数</span>
-          <span className="xs faint" style={{ textAlign: 'right' }}>订单价</span>
-          <span className="xs faint" style={{ textAlign: 'right' }}>状态</span>
+          <span className="xs faint">来源</span>
+          <span className="xs faint">需求数</span>
+          <span className="xs faint">订单价</span>
+          <span className="xs faint">状态</span>
           {gs.orders.map((o) => {
             const orderPrice = E.priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
             const isAccepted = gs.acceptedOrders.includes(o.id)
