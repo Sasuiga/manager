@@ -897,7 +897,7 @@ function SellPage({ g }: { g: Game }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'auto 1.2fr 0.8fr 0.6fr', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
           <span className="xs" style={{ color: 'var(--gold)' }}>市场需求</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>需求数</span>
-          <span className="xs faint" style={{ textAlign: 'right' }}>售价</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>市价</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>可用库存</span>
           {TIER_ORDER.map((t) => {
             const p = gs.products[t]
