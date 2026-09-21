@@ -247,7 +247,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '销售人员',
     hireFees: [50, 40, 30, 20, 10],
     salary: 15,
-    base: ['立即增加销售资源（见下表）'],
+    base: ['每人销售资源 +4'],
     unlocks: [
       { at: 2, text: '每月获得 1 个确定性订单' },
       { at: 3, text: '每人销售资源 +4 → +6' },
