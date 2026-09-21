@@ -10,7 +10,6 @@ import {
   NEW_MATERIALS,
   RND_PROJECTS,
   TAX_RATE,
-  TIER_BONUS,
   TIERS,
 } from '../data/game'
 import { derive, mergeMods } from './derive'
@@ -172,8 +171,10 @@ export function settle(state: GameState): SettleReport {
   const orders: SaleRecord[] = []
   const spots: SaleRecord[] = []
   const filled: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  /** lost 以含加点的总需求为起点，订单交付会占用本层需求。 */
   const lost: Record<Tier, number> = { ...d.demand }
-  const demandTotal = TIERS.reduce((a, t) => a + d.demand[t], 0)
+  /** 满足率分母用自然需求（不含加点）：玩家自己推大的盘子不应拉低自己的达标率。 */
+  const demandTotal = TIERS.reduce((a, t) => a + d.demandBase[t], 0)
 
   // 2.1 确定性订单：不占销售资源，先于现货结算
   const remainingOrders: typeof state.orders = []
@@ -203,35 +204,22 @@ export function settle(state: GameState): SettleReport {
   }
   state.orders = remainingOrders
 
-  // 2.2 现货：需求从高到低结算，每层可由同层或更高层产品满足
-  for (let i = TIERS.length - 1; i >= 0; i--) {
-    const demandTier = TIERS[i]
-    let remaining = lost[demandTier]
+  // 2.2 现货：各层独立结算，可售 = min(库存, 本层剩余需求)。
+  // 不再做跨层吸引力份额分配（§7.2.4 新模型：加点直接做大本层需求）。
+  for (const t of TIERS) {
+    let remaining = lost[t]
     if (remaining <= 0) continue
-    const candidates = TIERS.slice(i).filter((t) => state.products[t].built && state.salesAlloc[t] > 0 && state.products[t].qty > 0)
-    if (!candidates.length) continue
-    const scored = candidates
-      .map((t) => ({ t, attr: state.salesAlloc[t] + TIER_BONUS[t] + d.brandBonus }))
-      .sort((a, b) => b.attr - a.attr)
-    const totalAttr = scored.reduce((a, s) => a + s.attr, 0)
-    for (let si = 0; si < scored.length; si++) {
-      const { t, attr } = scored[si]
-      const share = si === scored.length - 1 ? remaining : Math.min(remaining, Math.floor((lost[demandTier] * attr) / totalAttr))
-      const want = Math.min(share, remaining)
-      if (want <= 0) continue
-      const p = state.products[t]
-      const sell = Math.min(want, p.qty)
-      if (sell <= 0) continue
-      const unit = priceAtProduct(t, d.priceShift[t])
-      const unitValue = p.qty > 0 ? p.value / p.qty : 0
-      p.value -= unitValue * sell
-      p.qty -= sell
-      state.cash += unit * sell
-      spots.push({ tier: t, qty: sell, unitPrice: unit, unitCost: Math.round(unitValue), cost: unitValue * sell, revenue: unit * sell, channel: 'spot' })
-      remaining -= sell
-      filled[demandTier] += sell
-    }
-    lost[demandTier] = remaining
+    const p = state.products[t]
+    if (!p.built || p.qty <= 0) continue
+    const sell = Math.min(p.qty, remaining)
+    const unit = priceAtProduct(t, d.priceShift[t])
+    const unitValue = p.qty > 0 ? p.value / p.qty : 0
+    p.value -= unitValue * sell
+    p.qty -= sell
+    state.cash += unit * sell
+    spots.push({ tier: t, qty: sell, unitPrice: unit, unitCost: Math.round(unitValue), cost: unitValue * sell, revenue: unit * sell, channel: 'spot' })
+    lost[t] = remaining - sell
+    filled[t] += sell
   }
 
   // ══════════ 3. 研发 ══════════

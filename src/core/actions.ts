@@ -191,6 +191,7 @@ export function cardCtx(state: GameState, empowered: boolean, mats?: string[]): 
     },
     empowered,
     mats: mats ?? MATERIALS.map((m) => m.id),
+    prodStock: TIERS.reduce((a, t) => a + (state.products[t]?.qty ?? 0), 0),
   }
 }
 

@@ -274,7 +274,7 @@ function OpsPage({ g }: { g: Game }) {
                   {s.playedThisMonth.filter((c) => {
                     const def = CARD_BY_ID[c.defId]
                     if (!def?.base) return false
-                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
+                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [], prodStock: 0 }
                     const eff = def.base(ctx)
                     return !(eff.orders || eff.flags?.length)
                   }).map((c) => {
@@ -292,7 +292,7 @@ function OpsPage({ g }: { g: Game }) {
                   {s.playedThisMonth.filter((c) => {
                     const def = CARD_BY_ID[c.defId]
                     if (!def?.base) return false
-                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
+                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [], prodStock: 0 }
                     const eff = def.base(ctx)
                     return !(eff.orders || eff.flags?.length)
                   }).length === 0 ? <p className="xs faint">无</p> : null}
@@ -302,7 +302,7 @@ function OpsPage({ g }: { g: Game }) {
                   {s.playedThisMonth.filter((c) => {
                     const def = CARD_BY_ID[c.defId]
                     if (!def?.base) return false
-                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
+                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [], prodStock: 0 }
                     const eff = def.base(ctx)
                     return !!(eff.orders || eff.flags?.length)
                   }).map((c) => {
@@ -320,7 +320,7 @@ function OpsPage({ g }: { g: Game }) {
                   {s.playedThisMonth.filter((c) => {
                     const def = CARD_BY_ID[c.defId]
                     if (!def?.base) return false
-                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [] }
+                    const ctx: CardCtx = { staff: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }, empowered: c.empowered, mats: [], prodStock: 0 }
                     const eff = def.base(ctx)
                     return !!(eff.orders || eff.flags?.length)
                   }).length === 0 ? <p className="xs faint">无</p> : null}
@@ -695,13 +695,13 @@ function MakePage({ g }: { g: Game }) {
         </div>
         {/*
           产能要跟两个出口一起看：现货需求 + 确定性订单。
-          订单不占现货需求，且价格高一档，所以只看现货会低估可销量。
+          订单先结算并占用本层需求，且价格高一档，所以只看现货会低估可销量。
         */}
         <div className="hint">
           按 BOM 消耗原料：低端 包材×2 + 树脂×1；中端 树脂×2 + 合金×1。产量受产能与原料双重限制。
           <br />
           销路有两条：现货（吃各层需求，见销售页）与订单（{gs.orders.reduce((a, o) => a + o.qty, 0)} 件在手，
-          不占需求，价格高 1 档）。超过这两者的产量只会变成库存压住现金。
+          先结算并占用本层需求，价格高 1 档）。超过这两者的产量只会变成库存压住现金。
         </div>
       </div>
 
@@ -788,6 +788,9 @@ function SellPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
   const used = E.allocUsed(gs)
+  /** 各层在手订单量：订单先于现货结算并占用本层需求（预计销量用）。 */
+  const orderQtyBy: Record<string, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  for (const o of gs.orders) orderQtyBy[o.tier] += o.qty
 
   return (
     <>
@@ -795,9 +798,57 @@ function SellPage({ g }: { g: Game }) {
         <h3>销售部</h3>
         <div className="title-rule" />
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          分配销售资源抢占各层现货需求，处理确定性订单；人员越多资源越丰富，可解锁品牌加成。
+          销售资源加点做大各层需求（1 点 = +1 需求，每层上限 3 倍基础需求）；确定性订单先行结算，不需要资源。
         </p>
         <LedgerSection g={g} dept="sell" />
+      </div>
+
+      {/*
+        需求与售价面板放在加点面板之前：玩家下方加点时，
+        本页「需求 A + B = C」的数字随 derive 实时变化。
+      */}
+      <div className="card">
+        <h3>本月需求与售价</h3>
+        <div className="title-rule" />
+        <div className="stack">
+          {TIER_ORDER.map((t) => {
+            const p = gs.products[t]
+            const alloc = gs.salesAlloc[t]
+            const cost = d.salesPushCost[t]
+            const cap = d.salesPushCap[t]
+            const push = d.salesPush[t]
+            const over = Math.max(0, alloc - cap * cost)
+            const spotLeft = Math.max(0, d.demand[t] - orderQtyBy[t])
+            const est = p.built ? Math.min(p.qty, spotLeft) : 0
+            return (
+              <div key={t} className="stack-sm">
+                <div className="hstack-between">
+                  <span className="sm">
+                    <b>{TIER_LABEL[t]}</b>
+                    {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
+                    <span className="faint xs"> · {cost} 点/需求</span>
+                  </span>
+                  <span className={`sm mono${push > 0 ? ' gold' : ''}`}>
+                    需求 {d.demandBase[t]}
+                    {push > 0 ? ` + ${push}` : ''} = {d.demand[t]}
+                  </span>
+                </div>
+                <div className="hstack-between">
+                  <span className="xs faint">
+                    售价 {wan(d.price[t])} · 库存 {p.qty} · 订单 {orderQtyBy[t]} 件
+                  </span>
+                  <span className="xs">
+                    现货预计 {est} 件{over > 0 ? <span className="faint"> · 超出上限 {over} 点</span> : null}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div className="hint">
+          需求 = 基础 + 事件 + 加点；加点成本：低端 1 点/需求 · 中端 2 点 · 高端 3 点 · 特殊 4 点（每层上限 3 倍基础需求，当月有效）。
+          确定性订单先结算并占用本层需求；未满足的需求不会累积到下月。
+        </div>
       </div>
 
       <div className="card">
@@ -805,20 +856,25 @@ function SellPage({ g }: { g: Game }) {
         <div className="title-rule" />
         <div className="stack-sm">
           {TIER_ORDER.map((t) => {
-            const p = gs.products[t]
-            const alloc = gs.salesAlloc[t]
+            const cost = d.salesPushCost[t]
+            const cap = d.salesPushCap[t]
             const remaining = d.salesResource - used
+            const alloc = gs.salesAlloc[t]
+            const units = Math.floor(alloc / cost)
+            const plusDisabled = remaining < cost || units >= cap
+            const minusDisabled = alloc <= 0
             return (
               <div key={t} className="hstack-between">
                 <span className="sm">
                   {TIER_LABEL[t]}
-                  {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
+                  <span className="faint xs"> · {cost} 点/需求 · 上限 {cap}</span>
                 </span>
                 <span className="hstack" style={{ gap: 'var(--s2)' }}>
                   <button
                     className="btn btn-nav"
-                    style={{ width: 'auto', padding: '2px var(--s3)' }}
-                    onClick={() => g.mutate((st) => E.setAlloc(st, t, st.salesAlloc[t] - 1))}
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: minusDisabled ? 0.4 : 1 }}
+                    disabled={minusDisabled}
+                    onClick={() => g.mutate((st) => E.setAlloc(st, t, st.salesAlloc[t] - cost))}
                   >
                     <span>−</span>
                   </button>
@@ -827,9 +883,9 @@ function SellPage({ g }: { g: Game }) {
                   </span>
                   <button
                     className="btn btn-nav"
-                    style={{ width: 'auto', padding: '2px var(--s3)' }}
-                    disabled={remaining <= 0}
-                    onClick={() => g.mutate((st) => E.setAlloc(st, t, st.salesAlloc[t] + 1))}
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: plusDisabled ? 0.4 : 1 }}
+                    disabled={plusDisabled}
+                    onClick={() => g.mutate((st) => E.setAlloc(st, t, st.salesAlloc[t] + cost))}
                   >
                     <span>+</span>
                   </button>
@@ -839,22 +895,8 @@ function SellPage({ g }: { g: Game }) {
           })}
         </div>
         <div className="hint">
-          剩余可分配 {Math.max(0, d.salesResource - used)} 点。未分配的资源不会生效。
+          剩余可分配 {Math.max(0, d.salesResource - used)} 点。点 + 按整档扣减（低 1 / 中 2 / 高 3 / 特殊 4 点），点 − 对称回退；点数为需求数 × 每档成本，到头点不动。
         </div>
-      </div>
-
-      <div className="card">
-        <h3>本月需求与售价</h3>
-        <div className="title-rule" />
-        {TIER_ORDER.map((t) => (
-          <Row
-            key={t}
-            k={TIER_LABEL[t]}
-            v={`需求 ${d.demand[t]} · 售价 ${wan(d.price[t])}`}
-            cls={tierClass(d.priceShift[t])}
-          />
-        ))}
-        <div className="hint">需求由气候与经济动能决定；售价随气候修正浮动。</div>
       </div>
 
       {gs.orders.length ? (

@@ -20,9 +20,10 @@ import {
   PRODUCT_PRICE,
   RND_COST_PER_PROJECT,
   SALES_ORDER_COUNT,
+  SALES_PUSH_CAP,
+  SALES_PUSH_COST,
   SALES_RESOURCE_STEPS,
   STAFF,
-  TIER_BONUS,
   TIERS,
   priceOf,
 } from '../data/game'
@@ -40,8 +41,16 @@ import type { CardPlayEffect, Dept, GameState, MonthMods, Tier } from './types'
 export interface DerivedTotals {
   /** 每类原料的供给 / 价格档位 / 库存上限 */
   materials: Record<string, { supply: number; tierShift: number; price: number; cap: number }>
-  /** 分层需求 */
+  /** 分层需求（含销售资源加点后的总需求）。 */
   demand: Record<Tier, number>
+  /** 自然需求：基础 + 气候 + 事件，不含销售资源加点。满足率类目标以此为分母。 */
+  demandBase: Record<Tier, number>
+  /** 本月各层实际生效的加点（受 3 倍基础需求上限截断）。 */
+  salesPush: Record<Tier, number>
+  /** 各层加点上限（§7.2.4）。 */
+  salesPushCap: Record<Tier, number>
+  /** 各层「1 点需求」的资源成本（低端 1 / 中端 2 / 高端 3 / 特殊 4）。 */
+  salesPushCost: Record<Tier, number>
   /** 分层售价档位偏移 */
   priceShift: Record<Tier, number>
   /** 分层单价 */
@@ -63,7 +72,7 @@ export interface DerivedTotals {
   noBorrow: boolean
   /** 销售资源 */
   salesResource: number
-  /** 品牌加成 */
+  /** 品牌加成（销售 5 人 +3 / J3）：计入销售资源池。 */
   brandBonus: number
   /** 本月将到账的确定性订单数 */
   orderCount: number
@@ -282,16 +291,25 @@ export function derive(state: GameState): DerivedTotals {
     materials[m.id] = { supply, tierShift: shift, price: priceOf(m, shift), cap }
   }
 
-  // ── 需求 ──
+  // ── 需求（§7.2.4 新模型：销售资源加点直接增加该层需求）──
+  // 需求 = 基础 + 气候 + 事件（自然需求） + 分配的销售资源（受每层 3 倍基础上限截断）。
+  // 各层独立结算，不再做跨层吸引力份额分配。
   const totalShift = CLIMATE_DEMAND[state.climate]
   const lowShare = Math.ceil(Math.abs(totalShift) * 0.6) * Math.sign(totalShift)
   const midShare = Math.floor(Math.abs(totalShift) * 0.4) * Math.sign(totalShift)
-  const demand: Record<Tier, number> = {
+  const demandBase: Record<Tier, number> = {
     low: Math.max(0, BASE_DEMAND.low + lowShare + (mods.demand?.low ?? 0)),
     mid: Math.max(0, BASE_DEMAND.mid + midShare + (mods.demand?.mid ?? 0)),
     high: Math.max(0, BASE_DEMAND.high + (mods.demand?.high ?? 0)),
     special: Math.max(0, BASE_DEMAND.special + (mods.demand?.special ?? 0)),
   }
+  const salesPush: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  for (const t of TIERS) {
+    // 每层 1 点需求需 SALES_PUSH_COST[t] 个资源，不足整档的零头不计入（可投低端吸收）
+    salesPush[t] = Math.min(Math.floor(state.salesAlloc[t] / SALES_PUSH_COST[t]), SALES_PUSH_CAP[t])
+  }
+  const demand: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  for (const t of TIERS) demand[t] = demandBase[t] + salesPush[t]
 
   // ── 售价档位 ──
   const priceShift: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
@@ -334,8 +352,9 @@ export function derive(state: GameState): DerivedTotals {
   const creditLine = Math.round((BASE_CREDIT_LINE + equipCredit + ip.creditLine) * (mods.creditFactor ?? 1))
 
   // ── 销售 ──
-  const salesResource = BASE_SALES_RESOURCE + salesResourceFromStaff(Math.min(5, staffCount.sell)) + ip.salesResource + (mods.salesResource ?? 0)
+  // 品牌加成计入资源池（新模型下品牌 = 更多推力）
   const brandBonus = (staffCount.sell >= 5 ? 3 : 0) + ip.brandBonus
+  const salesResource = BASE_SALES_RESOURCE + salesResourceFromStaff(Math.min(5, staffCount.sell)) + ip.salesResource + brandBonus + (mods.salesResource ?? 0)
   const orderCount = SALES_ORDER_COUNT[Math.min(5, staffCount.sell)] + ip.orderBonus + (mods.orders ?? 0)
   const orderQty = mods.orderQty ?? 10
   const orderPriceShift = 1 + ip.orderPriceShift + (mods.orderPriceShift ?? 0)
@@ -426,6 +445,10 @@ export function derive(state: GameState): DerivedTotals {
   return {
     materials,
     demand,
+    demandBase,
+    salesPush,
+    salesPushCap: { ...SALES_PUSH_CAP },
+    salesPushCost: { ...SALES_PUSH_COST },
     priceShift,
     price,
     capacity,
@@ -495,6 +518,7 @@ export function collectFlags(state: GameState, mods: MonthMods): string[] {
       },
       empowered: c.empowered,
       mats: MATERIALS.map((m) => m.id),
+      prodStock: 0,
     })
     if (e.flags) flags.push(...e.flags.filter(Boolean))
   }
@@ -512,5 +536,3 @@ export function unitCost(_state: GameState, tier: Tier, d: DerivedTotals): numbe
   }
   return Math.round(cost * d.costFactor)
 }
-
-export { TIER_BONUS }

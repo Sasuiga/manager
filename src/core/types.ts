@@ -286,6 +286,8 @@ export interface CardCtx {
   staff: Record<Dept, number>
   empowered: boolean
   mats: string[]
+  /** 全部产品库存合计（S9 清仓甩卖等库存门槛用）。 */
+  prodStock: number
 }
 
 // ─────────────────────────────────────────────────────────────

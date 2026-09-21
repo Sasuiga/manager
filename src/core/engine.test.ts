@@ -325,4 +325,75 @@ describe('引擎', () => {
       }
     }
   })
+
+  it('销售资源加点直接增加该层需求：1 点 1 需求，每层上限 3 倍基础需求', () => {
+    const s = E.newGame(7)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    E.enterDraw(s)
+    E.enterOperate(s)
+    const d0 = E.derive(s)
+    expect(d0.demand).toEqual(d0.demandBase) // 未加点时两者相等
+    // 成本梯度：低 1 / 中 2 / 高 3 / 特 4 点每需求；push = min(floor(分配/成本), 上限)
+    const cases: [E.Tier, number, number][] = [
+      ['low', 5, 5], // 5 点 ÷ 1 = 5（未超上限 15）
+      ['mid', 10, 5], // 10 点 ÷ 2 = 5（未超上限 12）
+      ['mid', 3, 1], // 零头：3 点 ÷ 2 = 1 需求，余 1 点不计
+      ['high', 99, 3], // 资源池 10 点封顶 → 10 ÷ 3 = 3（未超上限 6）
+    ]
+    for (const [tier, want, expectPush] of cases) {
+      s.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
+      E.setAlloc(s, tier, want)
+      const d = E.derive(s)
+      expect(d.salesPush[tier], `${tier} 加点 ${want}`).toBe(expectPush)
+      expect(d.demand[tier]).toBe(d.demandBase[tier] + expectPush)
+    }
+  })
+
+  it('现货各层独立结算：无分配也能卖基础需求，库存不再跨层互吃', () => {
+    const s = E.newGame(7)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    E.enterDraw(s)
+    E.enterOperate(s)
+    // 注入库存：低端 10、高端 10（解锁配方），全部资源 0 分配
+    s.products.low.qty = 10
+    s.products.low.value = 10 * 40
+    s.products.high.qty = 10
+    s.products.high.value = 10 * 120
+    s.products.high.built = true
+    const d = E.derive(s)
+    const lowDemand = d.demand.low // 基础 + 气候，无加点
+    const highDemand = d.demand.high
+    const rep = E.settleMonth(s)
+    const lowSold = rep.sales.spots.filter((x) => x.tier === 'low').reduce((a, x) => a + x.qty, 0)
+    const highSold = rep.sales.spots.filter((x) => x.tier === 'high').reduce((a, x) => a + x.qty, 0)
+    // 低高端各自卖满自己的需求，互不侵占（旧模型高端会抢低端需求）
+    expect(lowSold).toBe(Math.min(10, lowDemand))
+    expect(highSold).toBe(Math.min(10, highDemand))
+    expect(lowSold + highSold).toBe(rep.sales.filled.low + rep.sales.filled.high)
+  })
+
+  it('订单先于现货结算并占用本层需求', () => {
+    const s = E.newGame(7)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    E.enterDraw(s)
+    E.enterOperate(s)
+    s.products.low.qty = 10
+    s.products.low.value = 10 * 40
+    s.orders.push({ id: 't1', tier: 'low', qty: 3, priceShift: 1, dueMonth: s.month, from: 'test' })
+    const d = E.derive(s)
+    const rep = E.settleMonth(s)
+    expect(rep.sales.orders.find((x) => x.qty === 3)).toBeTruthy() // 订单交付 3 件
+    const lowSpot = rep.sales.spots.filter((x) => x.tier === 'low').reduce((a, x) => a + x.qty, 0)
+    // 现货只剩需求 - 订单量的部分
+    expect(lowSpot).toBe(Math.max(0, Math.min(7, d.demand.low - 3)))
+  })
 })

@@ -136,8 +136,25 @@ export const BASE_DEMAND: Record<Tier, number> = { low: 5, mid: 4, high: 2, spec
 
 export const TIERS: Tier[] = ['low', 'mid', 'high', 'special']
 export const TIER_LABEL: Record<Tier, string> = { low: '低端', mid: '中端', high: '高端', special: '特殊' }
-/** 层次加成（§7.2.5 吸引力公式）。 */
-export const TIER_BONUS: Record<Tier, number> = { low: 0, mid: 2, high: 4, special: 6 }
+/**
+ * 销售资源加点上限（§7.2.4）：每层最多可推 3 倍基础需求。
+ * 低端 +15 / 中端 +12 / 高端 +6 / 特殊 +3，合计 36，
+ * 与销售 5 人的资源池（38）大致会师，全游戏没有大段死点。
+ */
+export const SALES_PUSH_CAP: Record<Tier, number> = {
+  low: 3 * BASE_DEMAND.low,
+  mid: 3 * BASE_DEMAND.mid,
+  high: 3 * BASE_DEMAND.high,
+  special: 3 * BASE_DEMAND.special,
+}
+
+/**
+ * 每层「1 点需求」的销售资源成本（v1.2）：层级越高，多一个客户越难。
+ * 低端 1 点/需求 是中端的 1/2、高端的 1/3、特殊的 1/4，
+ * 把「全灌高端」的每点性价比从 6 倍差距压到约 2 倍；
+ * 且 1 点成本的低端天然是零头吸收器：任何剩点总能换成低端需求（除非低端已顶满 15）。
+ */
+export const SALES_PUSH_COST: Record<Tier, number> = { low: 1, mid: 2, high: 3, special: 4 }
 
 export const BOMS: Record<Tier, BomDef> = {
   low: { tier: 'low', name: '标准品', recipe: { pkg: 2, resin: 1 }, basePrice: 60, stdCost: 40 },
@@ -664,11 +681,13 @@ export interface CardDef {
   strong?: (ctx: CardCtx) => CardPlayEffect
 }
 
-/** 打出卡牌时可读取的上下文：部门人数与手牌，用于处理「若 X ≥ N 人」的门槛。 */
+/** 打出卡牌时可读取的上下文：部门人数、库存与卡牌状态，用于处理「若 X ≥ N 人/库存 ≥ N」的门槛。 */
 export interface CardCtx {
   staff: Record<Dept, number>
   empowered: boolean
   mats: string[]
+  /** 全部产品库存合计（S9 清仓甩卖等库存门槛用）。 */
+  prodStock: number
 }
 
 const S = (ctx: CardCtx, d: Dept) => ctx.staff[d]
@@ -814,7 +833,7 @@ export const CARDS: CardDef[] = [
     text: '本月低端需求 +2。若销售 ≥ 3 人，额外 +1。',
     cond: '销售 ≥ 3 人：额外 +1',
     empowered: '本月低端需求 +4。若销售 ≥ 3 人，额外 +2。',
-    base: (c) => ({ demand: T(c.empowered ? 4 : 2, 0, 0, 0), capacity: 0 }),
+    base: (c) => ({ demand: T(2 + (S(c, 'sell') >= 3 ? 1 : 0), 0, 0, 0), capacity: 0 }),
     strong: (c) => ({ demand: T(4 + (S(c, 'sell') >= 3 ? 2 : 0), 0, 0, 0) }),
   },
   {
@@ -822,7 +841,7 @@ export const CARDS: CardDef[] = [
     text: '本月销售资源 +5。若销售 ≥ 2 人，额外 +3。',
     cond: '销售 ≥ 2 人：额外 +3',
     empowered: '本月销售资源 +8。若销售 ≥ 2 人，额外 +5。',
-    base: (c) => ({ salesResource: c.empowered ? 8 : 5, flags: [S(c, 'sell') >= 2 ? 'channelPlus' : ''] }),
+    base: (c) => ({ salesResource: (c.empowered ? 8 : 5) + (S(c, 'sell') >= 2 ? (c.empowered ? 5 : 3) : 0) }),
   },
   {
     id: 'S3', name: '大订单', kind: 'sell', core: true,
@@ -843,7 +862,7 @@ export const CARDS: CardDef[] = [
     text: '本月高端需求 +1。若研发 ≥ 3 人，额外 +1。',
     cond: '研发 ≥ 3 人：额外 +1',
     empowered: '本月高端需求 +2，特殊需求 +1。若研发 ≥ 3 人，高端额外 +1。',
-    base: (c) => ({ demand: T(0, 0, c.empowered ? 2 : 1, c.empowered ? 1 : 0), flags: [S(c, 'rnd') >= 3 || c.empowered ? 'brandPlus' : ''] }),
+    base: (c) => ({ demand: T(0, 0, (c.empowered ? 2 : 1) + (S(c, 'rnd') >= 3 ? 1 : 0), c.empowered ? 1 : 0) }),
   },
   {
     id: 'S6', name: '销售激励', kind: 'sell',
@@ -875,7 +894,10 @@ export const CARDS: CardDef[] = [
     text: '本月售价降 1 档，需求 +2。若库存 ≥ 15，需求改为 +3。',
     cond: '库存 ≥ 15：需求 +3',
     empowered: '本月售价降 1 档，需求 +3。若库存 ≥ 15，需求改为 +5。',
-    base: (c) => ({ price: T(-1, -1, -1, -1), demand: T(c.empowered ? 3 : 2, c.empowered ? 3 : 2, c.empowered ? 3 : 2, c.empowered ? 3 : 2), flags: ['clearanceSale'] }),
+    base: (c) => {
+      const extra = c.prodStock >= 15 ? (c.empowered ? 5 : 3) : c.empowered ? 3 : 2
+      return { price: T(-1, -1, -1, -1), demand: T(extra, extra, extra, extra) }
+    },
   },
   {
     id: 'S10', name: '高端市场', kind: 'sell',
