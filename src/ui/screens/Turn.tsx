@@ -812,6 +812,11 @@ function TierRowCells({
   push = 0, over = 0, demand, demandBase, cap, price, avail, est,
   orderTaken = 0,
 }: TierRowCellsBase) {
+  /** 订单需求描述："强制 8 · 自然 4" 或 "强制 8" 或 "自然 4" */
+  const orderDesc =
+    forcedQty > 0 && optionalQty > 0 ? `强制 ${forcedQty} · 自然 ${optionalQty}` :
+    forcedQty > 0 ? `强制 ${forcedQty}` :
+    optionalQty > 0 ? `自然 ${optionalQty}` : ''
   return (
     <>
       <span className="sm">
@@ -820,36 +825,35 @@ function TierRowCells({
       </span>
       {orderMode ? (
         <>
-          <span className={`mono${totalQty > 0 ? ' gold' : ''}`} style={{ textAlign: 'right' }}>
-            {totalQty === 0 ? <span className="faint">无</span> : (
-              <>
-                {totalQty} 件
-                {forcedQty > 0 && optionalQty > 0 ? <span className="faint">（强 {forcedQty} + 自 {optionalQty}）</span> : null}
-                {forcedQty > 0 && optionalQty === 0 ? <span className="faint">（强制）</span> : null}
-                {forcedQty === 0 && optionalQty > 0 ? <span className="faint">（自然）</span> : null}
-              </>
-            )}
+          <span style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
+            <span className={`mono sm${totalQty > 0 ? ' gold' : ' faint'}`}>
+              {totalQty > 0 ? `${totalQty} 件` : '无'}
+            </span>
+            {totalQty > 0 ? <span className="xs faint">{orderDesc}</span> : null}
           </span>
           <span className="mono" style={{ textAlign: 'right' }}>
-            {totalQty > 0 ? `${wan(orderPrice!)}` : <span className="faint">—</span>}
+            {totalQty > 0 ? wan(orderPrice!) : <span className="faint">—</span>}
           </span>
           <span className="mono" style={{ textAlign: 'right' }}>
-            {totalQty > 0 ? taken : <span className="faint">—</span>}
+            {totalQty > 0 ? `${taken} 件` : <span className="faint">—</span>}
           </span>
         </>
       ) : (
         <>
-          <span className={`mono${push > 0 ? ' gold' : ''}`} style={{ textAlign: 'right' }}>
-            {demandBase}
-            {push > 0 ? <span className="faint"> +{push}</span> : null} = {demand}
-            <span className="faint">（上限 {demandBase! + cap!}）</span>
-            {over > 0 ? <span style={{ color: 'var(--red, #c0392b)' }}> · 超 {over} 点</span> : null}
+          <span style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
+            <span className={`mono sm${push > 0 ? ' gold' : ''}`}>
+              {demand}
+              {push > 0 ? <span className="faint">（+{push}）</span> : null}
+            </span>
+            <span className="xs faint">上限 {demandBase! + cap!}{over > 0 ? ` · 超 ${over}` : ''}</span>
           </span>
           <span className="mono" style={{ textAlign: 'right' }}>{wan(price!)}</span>
-          <span className="mono" style={{ textAlign: 'right' }}>
-            {orderTaken > 0 ? <span className="faint">{avail}</span> : avail}
-            <span className="faint xs"> /{p.qty}</span>
-            {p.built ? <span className="faint xs"> · 可销 {est}</span> : null}
+          <span style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
+            <span className="mono sm">
+              {avail}
+              {orderTaken > 0 ? <span className="faint xs">（总 {p.qty}）</span> : null}
+            </span>
+            <span className="xs faint">预计销售 {est} 件</span>
           </span>
         </>
       )}
