@@ -91,7 +91,8 @@ export interface StaffDef {
   /** 阶梯招聘费（角），依次取值；不足则取末位 */
   hireFees: Money[]
   salary: Money
-  base: string
+  /** 固有效果：每多招 1 人立即生效（无里程碑门槛） */
+  base: string[]
   unlocks: { at: number; text: string; achievement?: string }[]
 }
 

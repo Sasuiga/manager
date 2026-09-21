@@ -191,7 +191,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '管理人员',
     hireFees: [50, 40, 30, 20, 10],
     salary: 10,
-    base: 'AP 上限 +1（下月生效）',
+    base: ['AP 上限 +1（下月生效）'],
     unlocks: [
       { at: 2, text: '抽卡可选上限 3 → 4' },
       { at: 3, text: '手牌上限 5 → 6' },
@@ -204,9 +204,8 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '采购人员',
     hireFees: [50, 40, 30, 20, 10],
     salary: 10,
-    base: '每类原料供给 +2',
+    base: ['每类原料供给 +2', '每月可选采购档数 +1'],
     unlocks: [
-      { at: 1, text: '每月可选采购档数 +1' },
       { at: 2, text: '贸易商每月随机供应品种 +1' },
       { at: 3, text: '解锁长期供货协议' },
       { at: 4, text: '所有原料价格降 1 档，并强化卡牌效果' },
@@ -218,7 +217,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '生产人员',
     hireFees: [0], // 生产人员无阶梯招聘费，仅消耗 AP
     salary: 5,
-    base: '有设备坑位产能 +4，无坑位 +2',
+    base: ['有设备坑位产能 +4，无坑位 +2'],
     unlocks: [
       { at: 2, text: '每名工人产能 +2' },
       { at: 3, text: '解锁加班：0.5w 临时 +10 产能，每月 1 次' },
@@ -231,7 +230,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '销售人员',
     hireFees: [50, 40, 30, 20, 10],
     salary: 15,
-    base: '立即增加销售资源（见下表）',
+    base: ['立即增加销售资源（见下表）'],
     unlocks: [
       { at: 2, text: '每月获得 1 个确定性订单' },
       { at: 3, text: '每人销售资源 +4 → +6' },
@@ -244,7 +243,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '研发人员',
     hireFees: [50, 40, 30, 20, 10],
     salary: 20,
-    base: '研发进度 +2/月，成功率 +5%',
+    base: ['研发进度 +2/月，成功率 +5%'],
     unlocks: [
       { at: 2, text: '（无新增解锁）' },
       { at: 3, text: '可同时激活 2 个知识产权' },

@@ -1035,7 +1035,7 @@ function HireBlock({ g, dept }: { g: Game; dept: E.Dept }) {
   const [hireSheet, setHireSheet] = useState(false)
 
   /** 招下一个人立刻获得的效果：单人固定 + 下一档解锁。 */
-  const immediateEffects: string[] = [def.base]
+  const immediateEffects: string[] = [...def.base]
   const nextUnlock = def.unlocks.find((u) => u.at === staff + 1)
   if (nextUnlock && nextUnlock.text !== '（无新增解锁）') {
     immediateEffects.push(`解锁：${nextUnlock.text}`)
@@ -1068,8 +1068,13 @@ function HireBlock({ g, dept }: { g: Game; dept: E.Dept }) {
         ))}
       </div>
 
-      {/* 四行解锁说明 */}
+      {/* 固有效果 + 解锁说明 */}
       <div className="stack-sm" style={{ marginTop: 'var(--s2)' }}>
+        {def.base.map((b) => (
+          <div key={b} className="xs faint">
+            固定：{b}
+          </div>
+        ))}
         {def.unlocks.map((u) => (
           <div key={u.at} className={`xs${staff >= u.at ? ' green' : ' faint'}`}>
             {u.at} 人：{u.text}
