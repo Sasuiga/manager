@@ -10,6 +10,7 @@ import {
   OVERTIME_CAPACITY,
   OVERTIME_COST,
   RND_PROJECTS,
+  SALES_ORDER_COUNT,
   STAFF,
   TIERS,
 } from '../data/game'
@@ -78,6 +79,31 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   checkAchievements(state)
   // 管理人员增加 AP 上限（下月生效，本月记 pending）
   if (dept === 'ops') state.flags['opsHired'] = (state.flags['opsHired'] ?? 0) + 1
+  // 销售招聘：解锁订单阈值时当月立即生效
+  if (dept === 'sell') {
+    const prevCount = SALES_ORDER_COUNT[Math.min(5, state.depts.sell.staff - 1)]
+    const newCount = SALES_ORDER_COUNT[Math.min(5, state.depts.sell.staff)]
+    const extra = newCount - prevCount
+    if (extra > 0) {
+      const d = derive(state)
+      const rng = Rng.fromState(state.rngState + state.month * 104729)
+      const built = TIERS.filter((t) => state.products[t].built)
+      for (let i = 0; i < extra; i++) {
+        const tier = built.length ? built[rng.int(built.length)] : 'low'
+        state.orders.push({
+          id: `hire${state.month}-${state.orders.length}`,
+          tier,
+          qty: Math.max(1, d.orderQty),
+          priceShift: d.orderPriceShift,
+          dueMonth: state.month + 1,
+          from: '销售渠道',
+          forced: false,
+        })
+      }
+      state.rngState = rng.state
+      pushLog(state, 'action', `销售渠道解锁：当月新增 ${extra} 个订单`, [])
+    }
+  }
   return { ok: true, msg: `${DEPT_NAMES[dept]}人数 → ${state.depts[dept].staff}` }
 }
 
