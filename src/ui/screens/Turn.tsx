@@ -802,14 +802,13 @@ interface TierRowCellsBase {
   cap?: number
   price?: number
   avail?: number
-  est?: number
   orderTaken?: number
 }
 
 function TierRowCells({
   t, p, orderMode,
   forcedQty = 0, optionalQty = 0, totalQty = 0, orderPrice, taken = 0,
-  push = 0, over = 0, demand, demandBase, cap, price, avail, est,
+  push = 0, over = 0, demand, demandBase, cap, price, avail,
   orderTaken = 0,
 }: TierRowCellsBase) {
   /** 订单需求描述："强制 8 · 自然 4" 或 "强制 8" 或 "自然 4" */
@@ -850,7 +849,6 @@ function TierRowCells({
               {avail}
               {orderTaken > 0 ? <span className="faint xs">（总 {p.qty}）</span> : null}
             </span>
-            <span className="xs faint">预计销售 {est} 件</span>
           </span>
         </>
       )}
@@ -909,7 +907,6 @@ function SellPage({ g }: { g: Game }) {
             const over = Math.max(0, gs.salesAlloc[t] - cap * cost)
             const orderTaken = forcedQtyBy[t] + acceptEstBy[t]
             const avail = Math.max(0, p.qty - orderTaken)
-            const est = p.built ? Math.min(avail, d.demand[t]) : 0
             return (
               <TierRowCells
                 key={t}
@@ -922,7 +919,6 @@ function SellPage({ g }: { g: Game }) {
                 cap={cap}
                 price={d.price[t]}
                 avail={avail}
-                est={est}
                 orderTaken={orderTaken}
               />
             )
