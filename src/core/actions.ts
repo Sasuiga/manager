@@ -698,6 +698,20 @@ export function allocUsed(state: GameState): number {
   return TIERS.reduce((a, t) => a + state.salesAlloc[t], 0)
 }
 
+/** 接取 / 取消自然订单（当月决策，不接的当月失效）。 */
+export function toggleOrder(state: GameState, orderId: string): ActionResult {
+  const idx = state.declinedOrders.indexOf(orderId)
+  if (idx >= 0) {
+    state.declinedOrders.splice(idx, 1)
+    return { ok: true, msg: '已接取订单' }
+  }
+  const o = state.orders.find((x) => x.id === orderId)
+  if (!o) return fail('订单不存在')
+  if (o.forced) return fail('强制订单不可放弃')
+  state.declinedOrders.push(orderId)
+  return { ok: true, msg: '已放弃订单，当月失效' }
+}
+
 // ════════════════════════════════════════════════════════════
 // 研发与知识产权
 // ════════════════════════════════════════════════════════════

@@ -22,7 +22,6 @@ import type {
   GoalTrack,
   Ledger,
   Money,
-  Order,
   SaleRecord,
   ScoreBreakdown,
   Tier,
@@ -177,40 +176,41 @@ export function settle(state: GameState): SettleReport {
   /** 满足率分母用自然需求（不含加点）：玩家自己推大的盘子不应拉低自己的达标率。 */
   const demandTotal = TIERS.reduce((a, t) => a + d.demandBase[t], 0)
 
-  // 2.1 订单：独立价格，先于现货结算并占用本层需求。
+  // 2.1 订单：独立定价，先于现货结算并占用本层需求。
   //   · 强制订单（事件/卡牌产生）：到月必交，库存不足部分失效。
-  //   · 自然订单（销售渠道）：库存足够时自动接受；不足则留到下月再判断，
-  //     到期仍未接则自动失效（价格高一档，玩家通常愿意接）。
+  //   · 自然订单（销售渠道）：玩家当月主动接取才结算；未接取/已放弃的当月失效。
   const remainingOrders: typeof state.orders = []
-  const accepted = new Set<Order>()
+  const declined = new Set(state.declinedOrders)
   for (const o of state.orders) {
     const p = state.products[o.tier]
     if (!p.built) {
       warnings.push(`订单（${TIER_LABEL[o.tier]} × ${o.qty}）因未解锁该产品配方而失效`)
       continue
     }
-    if (!o.forced && p.qty < o.qty) {
-      // 自然订单库存不够：留到下月再看；到期仍不够则失效
-      if (o.dueMonth <= state.month) {
-        warnings.push(`自然订单（${TIER_LABEL[o.tier]} × ${o.qty}）库存 ${p.qty} 件不足，已失效`)
-      } else {
-        remainingOrders.push(o)
+    // 自然订单：玩家未主动接取（或明确放弃）的当月失效
+    if (!o.forced) {
+      const willAccept = !declined.has(o.id) && p.qty >= o.qty
+      if (!willAccept) {
+        warnings.push(declined.has(o.id)
+          ? `自然订单（${TIER_LABEL[o.tier]} × ${o.qty}）已放弃，当月失效`
+          : `自然订单（${TIER_LABEL[o.tier]} × ${o.qty}）未接取，当月失效`)
+        continue
       }
-      continue
     }
-    accepted.add(o)
+    const deliver = o.forced ? Math.min(o.qty, p.qty) : o.qty
     const unit = priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
     const unitValue = p.value / Math.max(1, p.qty)
-    p.value -= unitValue * o.qty
-    p.qty -= o.qty
-    state.cash += unit * o.qty
-    orders.push({ tier: o.tier, qty: o.qty, unitPrice: unit, unitCost: Math.round(unitValue), cost: unitValue * o.qty, revenue: unit * o.qty, channel: 'order' })
-    // 订单交付同样吃掉了这部分需求
-    const used = Math.min(o.qty, lost[o.tier])
+    p.value -= unitValue * deliver
+    p.qty -= deliver
+    state.cash += unit * deliver
+    orders.push({ tier: o.tier, qty: deliver, unitPrice: unit, unitCost: Math.round(unitValue), cost: unitValue * deliver, revenue: unit * deliver, channel: 'order' })
+    const used = Math.min(deliver, lost[o.tier])
     lost[o.tier] -= used
     filled[o.tier] += used
+    if (deliver < o.qty) warnings.push(`订单（${TIER_LABEL[o.tier]}）按实际库存交付 ${deliver} 件，剩余 ${o.qty - deliver} 件失效`)
   }
   state.orders = remainingOrders
+  state.declinedOrders = []
 
   // 2.2 现货：各层独立结算，可售 = min(库存, 本层剩余需求)。
   // 不再做跨层吸引力份额分配（§7.2.4 新模型：加点直接做大本层需求）。
@@ -714,6 +714,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.lotsUsed = 0
   state.plan = { tier: state.plan.tier, qty: 0, overtime: false }
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
+  state.declinedOrders = []
   state.futures = {}
   state.ipChangedThisMonth = false
   state.rndStartsThisMonth = []

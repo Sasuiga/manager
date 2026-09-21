@@ -574,6 +574,8 @@ export interface GameState {
   salesResource: number
   salesAlloc: Record<Tier, number>
   orders: Order[]
+  /** 本月已放弃的自然订单 id 列表（当月失效，下月重置）。 */
+  declinedOrders: string[]
 
   rnd: Record<string, ResearchSlot>
   ipOwned: string[]
