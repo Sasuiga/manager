@@ -388,7 +388,7 @@ describe('引擎', () => {
     E.enterOperate(s)
     s.products.low.qty = 10
     s.products.low.value = 10 * 40
-    s.orders.push({ id: 't1', tier: 'low', qty: 3, priceShift: 1, dueMonth: s.month, from: 'test' })
+    s.orders.push({ id: 't1', tier: 'low', qty: 3, priceShift: 1, dueMonth: s.month, from: 'test', forced: true })
     const d = E.derive(s)
     const rep = E.settleMonth(s)
     expect(rep.sales.orders.find((x) => x.qty === 3)).toBeTruthy() // 订单交付 3 件

@@ -209,6 +209,7 @@ export function enterDraw(state: GameState) {
   // 每月销售资源重置
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   state.declinedOrders = []
+  state.acceptedOrders = []
   // 本月订单（渠道带来）
   generateMonthlyOrders(state)
   // 开局（第 1 月）起始手牌已由 newGame 预置，跳过再抽一次

@@ -698,18 +698,28 @@ export function allocUsed(state: GameState): number {
   return TIERS.reduce((a, t) => a + state.salesAlloc[t], 0)
 }
 
-/** 接取 / 取消自然订单（当月决策，不接的当月失效）。 */
+/** 接取 / 放弃自然订单（当月决策，不接的当月失效，不跨月）。 */
 export function toggleOrder(state: GameState, orderId: string): ActionResult {
-  const idx = state.declinedOrders.indexOf(orderId)
-  if (idx >= 0) {
-    state.declinedOrders.splice(idx, 1)
-    return { ok: true, msg: '已接取订单' }
-  }
   const o = state.orders.find((x) => x.id === orderId)
   if (!o) return fail('订单不存在')
-  if (o.forced) return fail('强制订单不可放弃')
-  state.declinedOrders.push(orderId)
-  return { ok: true, msg: '已放弃订单，当月失效' }
+  if (o.forced) return fail('强制订单不可取消')
+  const acceptIdx = state.acceptedOrders.indexOf(orderId)
+  const declineIdx = state.declinedOrders.indexOf(orderId)
+  if (acceptIdx >= 0) {
+    // 已接 → 取消，变为已放弃
+    state.acceptedOrders.splice(acceptIdx, 1)
+    state.declinedOrders.push(orderId)
+    return { ok: true, msg: '已取消订单' }
+  }
+  if (declineIdx >= 0) {
+    // 已放弃 → 接取
+    state.declinedOrders.splice(declineIdx, 1)
+    state.acceptedOrders.push(orderId)
+    return { ok: true, msg: '已接取订单' }
+  }
+  // 默认状态 → 接取
+  state.acceptedOrders.push(orderId)
+  return { ok: true, msg: '已接取订单' }
 }
 
 // ════════════════════════════════════════════════════════════

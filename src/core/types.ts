@@ -576,6 +576,8 @@ export interface GameState {
   orders: Order[]
   /** 本月已放弃的自然订单 id 列表（当月失效，下月重置）。 */
   declinedOrders: string[]
+  /** 本月已接取的自然订单 id 列表（库存锁定，下月重置）。 */
+  acceptedOrders: string[]
 
   rnd: Record<string, ResearchSlot>
   ipOwned: string[]

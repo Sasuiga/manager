@@ -178,26 +178,25 @@ export function settle(state: GameState): SettleReport {
 
   // 2.1 订单：独立定价，先于现货结算并占用本层需求。
   //   · 强制订单（事件/卡牌产生）：到月必交，库存不足部分失效。
-  //   · 自然订单（销售渠道）：玩家当月主动接取才结算；未接取/已放弃的当月失效。
+  //   · 自然订单（销售渠道）：玩家当月点「接单」才结算；未接/已取消的当月失效。
   const remainingOrders: typeof state.orders = []
-  const declined = new Set(state.declinedOrders)
+  const accepted = new Set(state.acceptedOrders)
   for (const o of state.orders) {
     const p = state.products[o.tier]
     if (!p.built) {
       warnings.push(`订单（${TIER_LABEL[o.tier]} × ${o.qty}）因未解锁该产品配方而失效`)
       continue
     }
-    // 自然订单：玩家未主动接取（或明确放弃）的当月失效
     if (!o.forced) {
-      const willAccept = !declined.has(o.id) && p.qty >= o.qty
-      if (!willAccept) {
-        warnings.push(declined.has(o.id)
-          ? `自然订单（${TIER_LABEL[o.tier]} × ${o.qty}）已放弃，当月失效`
-          : `自然订单（${TIER_LABEL[o.tier]} × ${o.qty}）未接取，当月失效`)
+      if (!accepted.has(o.id)) {
+        warnings.push(`自然订单（${TIER_LABEL[o.tier]} × ${o.qty}）未接取，当月失效`)
         continue
       }
+      if (p.qty < o.qty) {
+        warnings.push(`已接订单（${TIER_LABEL[o.tier]} × ${o.qty}）库存 ${p.qty} 件不足，部分失效`)
+      }
     }
-    const deliver = o.forced ? Math.min(o.qty, p.qty) : o.qty
+    const deliver = o.forced ? Math.min(o.qty, p.qty) : Math.min(o.qty, p.qty)
     const unit = priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
     const unitValue = p.value / Math.max(1, p.qty)
     p.value -= unitValue * deliver
@@ -211,6 +210,7 @@ export function settle(state: GameState): SettleReport {
   }
   state.orders = remainingOrders
   state.declinedOrders = []
+  state.acceptedOrders = []
 
   // 2.2 现货：各层独立结算，可售 = min(库存, 本层剩余需求)。
   // 不再做跨层吸引力份额分配（§7.2.4 新模型：加点直接做大本层需求）。
@@ -715,6 +715,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.plan = { tier: state.plan.tier, qty: 0, overtime: false }
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   state.declinedOrders = []
+  state.acceptedOrders = []
   state.futures = {}
   state.ipChangedThisMonth = false
   state.rndStartsThisMonth = []

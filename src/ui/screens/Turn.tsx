@@ -821,6 +821,75 @@ function TierRowCells({
   )
 }
 
+/* 订单需求表的一行（类型 / 需求数 / 订单价 / 状态） */
+function TierOrderRow({
+  t, p, qty, price, forced, isAccepted, isDeclined, canAccept, onToggle, onShortClick, empty,
+}: {
+  t: Tier
+  p: { built: boolean; qty: number }
+  qty?: number
+  price?: number
+  forced?: boolean
+  isAccepted?: boolean
+  isDeclined?: boolean
+  canAccept?: boolean
+  onToggle?: () => void
+  onShortClick?: () => void
+  empty?: boolean
+}) {
+  return (
+    <>
+      <span className="sm">
+        <b>{TIER_LABEL[t]}</b>
+        {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
+      </span>
+      <span className={`mono sm${empty ? ' faint' : forced ? '' : isAccepted ? ' gold' : ''}`} style={{ textAlign: 'right' }}>
+        {empty ? '无' : `${qty} 件`}
+      </span>
+      <span className="mono xs" style={{ textAlign: 'right' }}>
+        {empty ? '—' : wan(price!)}
+      </span>
+      {empty ? (
+        <span className="faint xs" style={{ textAlign: 'right' }}>—</span>
+      ) : forced ? (
+        <span className="xs faint" style={{ textAlign: 'right' }}>强制必交</span>
+      ) : isAccepted ? (
+        <button
+          className="btn btn-nav"
+          style={{ width: 'auto', padding: '2px var(--s3)', fontSize: 'var(--fs-xs)', opacity: 0.6 }}
+          onClick={onToggle}
+        >
+          已接（点取消）
+        </button>
+      ) : isDeclined ? (
+        <button
+          className="btn btn-nav"
+          style={{ width: 'auto', padding: '2px var(--s3)', fontSize: 'var(--fs-xs)', opacity: 0.6 }}
+          onClick={onToggle}
+        >
+          已放弃（点接）
+        </button>
+      ) : canAccept ? (
+        <button
+          className="btn btn-nav"
+          style={{ width: 'auto', padding: '2px var(--s3)', fontSize: 'var(--fs-xs)' }}
+          onClick={onToggle}
+        >
+          接单
+        </button>
+      ) : (
+        <button
+          className="btn btn-nav"
+          style={{ width: 'auto', padding: '2px var(--s3)', fontSize: 'var(--fs-xs)', opacity: 0.4 }}
+          onClick={onShortClick}
+        >
+          接单
+        </button>
+      )}
+    </>
+  )
+}
+
 function SellPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
@@ -830,13 +899,10 @@ function SellPage({ g }: { g: Game }) {
   for (const o of gs.orders) {
     if (o.forced) forcedQtyBy[o.tier] += o.qty
   }
-  /** 自然订单：玩家主动接取且库存足够才计入占用。 */
-  const acceptedOrderIds = gs.orders
-    .filter((o) => !o.forced && !gs.declinedOrders.includes(o.id) && gs.products[o.tier].qty >= o.qty)
-    .map((o) => o.id)
+  /** 已接自然订单量（玩家点接单后锁定）。 */
   const acceptedQtyBy: Record<string, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const o of gs.orders) {
-    if (acceptedOrderIds.includes(o.id)) acceptedQtyBy[o.tier] += o.qty
+    if (!o.forced && gs.acceptedOrders.includes(o.id)) acceptedQtyBy[o.tier] += o.qty
   }
 
   return (
@@ -889,64 +955,39 @@ function SellPage({ g }: { g: Game }) {
           })}
         </div>
 
-        {/* 订单列表：逐单展示，自然订单有接/放弃决策按钮 */}
+        {/* 订单需求表：四列与上方对齐（类型 / 需求数 / 订单价 / 状态） */}
         <div className="title-rule" />
-        {gs.orders.length === 0 ? (
-          <div className="stack-sm">
-            {TIER_ORDER.map((t) => (
-                <div key={t} className="hstack-between">
-                  <span className="sm">{TIER_LABEL[t]}</span>
-                  <span className="faint xs">无订单</span>
-                </div>
-              ))}
-          </div>
-        ) : (
-          <div className="stack-sm">
-            {gs.orders.map((o) => {
-              const declined = gs.declinedOrders.includes(o.id)
-              const orderPrice = E.priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
-              const canAccept = gs.products[o.tier].qty >= o.qty
-              return (
-                <div key={o.id} className="hstack-between">
-                  <span className="sm">
-                    {TIER_LABEL[o.tier]} × {o.qty}
-                    <span className="faint xs"> · 价 {wan(orderPrice)} · {o.from}</span>
-                  </span>
-                  {o.forced ? (
-                    <span className="xs faint">强制 · 必交</span>
-                  ) : declined ? (
-                    <button
-                      className="btn btn-nav"
-                      style={{ width: 'auto', padding: '2px var(--s3)', fontSize: 'var(--fs-xs)' }}
-                      onClick={() => g.mutate((st) => E.toggleOrder(st, o.id))}
-                    >
-                      已放弃（点接取）
-                    </button>
-                  ) : canAccept ? (
-                    <button
-                      className="btn btn-nav"
-                      style={{ width: 'auto', padding: '2px var(--s3)', fontSize: 'var(--fs-xs)', opacity: 0.6 }}
-                      onClick={() => g.mutate((st) => E.toggleOrder(st, o.id))}
-                    >
-                      接取中（点放弃）
-                    </button>
-                  ) : (
-                    <button
-                      className="btn btn-nav"
-                      style={{ width: 'auto', padding: '2px var(--s3)', fontSize: 'var(--fs-xs)', opacity: 0.4 }}
-                      title="库存不足"
-                      onClick={() => g.mutate((st) => E.toggleOrder(st, o.id))}
-                    >
-                      库存不足
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1.2fr 0.8fr 0.6fr', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+          <span className="xs" style={{ color: 'var(--gold)' }}>订单需求</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>需求数</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>订单价</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>状态</span>
+          {gs.orders.length === 0 ? TIER_ORDER.map((t) => (
+            <TierOrderRow key={t} t={t} p={gs.products[t]} empty />
+          )) : gs.orders.map((o) => {
+            const orderPrice = E.priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
+            const isAccepted = gs.acceptedOrders.includes(o.id)
+            const isDeclined = gs.declinedOrders.includes(o.id)
+            const canAccept = gs.products[o.tier].qty >= o.qty
+            return (
+              <TierOrderRow
+                key={o.id}
+                t={o.tier}
+                p={gs.products[o.tier]}
+                qty={o.qty}
+                price={orderPrice}
+                forced={o.forced}
+                isAccepted={isAccepted}
+                isDeclined={isDeclined}
+                canAccept={canAccept}
+                onToggle={() => g.mutate((st) => E.toggleOrder(st, o.id))}
+                onShortClick={() => g.setToast('库存不足，先生产再接单')}
+              />
+            )
+          })}
+        </div>
         <div className="hint">
-          强制订单（事件/卡牌）到月必交；自然订单（销售渠道）默认未接，点击接取后当月结算。可用库存 = 总库存 − 订单占用库存。
+          可用库存 = 总库存 − 强制订单占用 − 已接自然订单占用。强制订单到月必交；自然订单点接后锁定库存，再点取消。
         </div>
       </div>
 

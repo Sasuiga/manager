@@ -92,6 +92,7 @@ export function newGame(seed: number): GameState {
     salesAlloc: { low: 0, mid: 0, high: 0, special: 0 },
     orders: [],
     declinedOrders: [],
+    acceptedOrders: [],
 
     rnd: Object.fromEntries(RND_PROJECTS.map((p) => [p.id, { projectId: null, progress: 0, done: false }])),
     ipOwned: [],
