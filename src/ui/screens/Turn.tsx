@@ -825,7 +825,6 @@ function SellPage({ g }: { g: Game }) {
                 <span className="sm">
                   <b>{TIER_LABEL[t]}</b>
                   {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
-                  <span className="faint xs"> · {cost} 点/需求</span>
                 </span>
                 <span className="hstack" style={{ gap: 'var(--s3)' }}>
                   <span className={`mono${push > 0 ? ' gold' : ''}`}>
