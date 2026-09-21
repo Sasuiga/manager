@@ -810,7 +810,7 @@ function SellPage({ g }: { g: Game }) {
       <div className="card">
         <h3>本月需求与售价</h3>
         <div className="title-rule" />
-        <div className="stack">
+        <div className="stack-sm">
           {TIER_ORDER.map((t) => {
             const p = gs.products[t]
             const alloc = gs.salesAlloc[t]
@@ -821,26 +821,21 @@ function SellPage({ g }: { g: Game }) {
             const spotLeft = Math.max(0, d.demand[t] - orderQtyBy[t])
             const est = p.built ? Math.min(p.qty, spotLeft) : 0
             return (
-              <div key={t} className="stack-sm">
-                <div className="hstack-between">
-                  <span className="sm">
-                    <b>{TIER_LABEL[t]}</b>
-                    {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
-                    <span className="faint xs"> · {cost} 点/需求</span>
+              <div key={t} className="hstack-between" style={{ gap: 'var(--s2)' }}>
+                <span className="sm">
+                  <b>{TIER_LABEL[t]}</b>
+                  {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
+                  <span className="faint xs"> · {cost} 点/需求</span>
+                </span>
+                <span className="hstack" style={{ gap: 'var(--s3)' }}>
+                  <span className={`mono${push > 0 ? ' gold' : ''}`}>
+                    需求 {d.demandBase[t]}{push > 0 ? ` + ${push}` : ''} = {d.demand[t]}
                   </span>
-                  <span className={`sm mono${push > 0 ? ' gold' : ''}`}>
-                    需求 {d.demandBase[t]}
-                    {push > 0 ? ` + ${push}` : ''} = {d.demand[t]}
+                  <span className="faint xs">
+                    售价 {wan(d.price[t])} · 库存 {p.qty} · 订单 {orderQtyBy[t]} · 现货预计 {est} 件
                   </span>
-                </div>
-                <div className="hstack-between">
-                  <span className="xs faint">
-                    售价 {wan(d.price[t])} · 库存 {p.qty} · 订单 {orderQtyBy[t]} 件
-                  </span>
-                  <span className="xs">
-                    现货预计 {est} 件{over > 0 ? <span className="faint"> · 超出上限 {over} 点</span> : null}
-                  </span>
-                </div>
+                  {over > 0 ? <span className="faint xs"> · 超出上限 {over} 点</span> : null}
+                </span>
               </div>
             )
           })}
