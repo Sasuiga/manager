@@ -157,6 +157,11 @@ export interface Order {
   dueMonth: number
   /** 来源描述 */
   from: string
+  /**
+   * 强制订单（事件/卡牌产生）：到月必交，库存不足则部分失效。
+   * 非强制（销售渠道自然订单）：库存足够时自动接，不足则留到下月再判断。
+   */
+  forced?: boolean
 }
 
 export interface SaleRecord {

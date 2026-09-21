@@ -399,6 +399,7 @@ export function grantOrder(state: GameState, qty: number, priceShift: number, fr
     priceShift,
     dueMonth: state.month + 1,
     from,
+    forced: true,
   })
 }
 

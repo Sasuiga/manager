@@ -790,7 +790,18 @@ function SellPage({ g }: { g: Game }) {
   const used = E.allocUsed(gs)
   /** 各层在手订单量：订单先于现货结算并占用本层需求（预计销量用）。 */
   const orderQtyBy: Record<string, number> = { low: 0, mid: 0, high: 0, special: 0 }
-  for (const o of gs.orders) orderQtyBy[o.tier] += o.qty
+  const forcedQtyBy: Record<string, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  for (const o of gs.orders) {
+    orderQtyBy[o.tier] += o.qty
+    if (o.forced) forcedQtyBy[o.tier] += o.qty
+  }
+  /** 自然订单只在库存足够时才会被接受，预计量按 min(库存, 自然订单) 计。 */
+  const acceptEstBy: Record<string, number> = {
+    low: Math.min(gs.products.low.qty, orderQtyBy.low - forcedQtyBy.low),
+    mid: Math.min(gs.products.mid.qty, orderQtyBy.mid - forcedQtyBy.mid),
+    high: Math.min(gs.products.high.qty, orderQtyBy.high - forcedQtyBy.high),
+    special: Math.min(gs.products.special.qty, orderQtyBy.special - forcedQtyBy.special),
+  }
 
   return (
     <>
@@ -818,8 +829,9 @@ function SellPage({ g }: { g: Game }) {
             const cap = d.salesPushCap[t]
             const push = d.salesPush[t]
             const over = Math.max(0, alloc - cap * cost)
-            const spotLeft = Math.max(0, d.demand[t] - orderQtyBy[t])
-            const est = p.built ? Math.min(p.qty, spotLeft) : 0
+            const est = p.built
+              ? Math.min(p.qty, d.demand[t] - forcedQtyBy[t] - acceptEstBy[t])
+              : 0
             return (
               <div key={t} className="hstack-between" style={{ gap: 'var(--s2)' }}>
                 <span className="sm">
@@ -833,7 +845,10 @@ function SellPage({ g }: { g: Game }) {
                     <span className="faint">（上限 {d.demandBase[t] + cap}）</span>
                   </span>
                   <span className="faint xs">
-                    售价 {wan(d.price[t])} · 库存 {p.qty} · 订单 {orderQtyBy[t]} · 现货预计 {est} 件
+                    售价 {wan(d.price[t])} · 库存 {p.qty}
+                    {forcedQtyBy[t] > 0 ? ` · 强制订单 ${forcedQtyBy[t]}` : ''}
+                    {acceptEstBy[t] > 0 ? ` · 将接单 ${acceptEstBy[t]}` : ''}
+                    {' · 现货预计 '}{est} 件
                   </span>
                   {over > 0 ? <span className="faint xs"> · 超出上限 {over} 点</span> : null}
                 </span>
@@ -843,7 +858,7 @@ function SellPage({ g }: { g: Game }) {
         </div>
         <div className="hint">
           需求 = 基础 + 事件 + 加点；加点成本：低端 1 点/需求 · 中端 2 点 · 高端 3 点 · 特殊 4 点（每层上限 3 倍基础需求，当月有效）。
-          确定性订单先结算并占用本层需求；未满足的需求不会累积到下月。
+          订单独立定价并占用本层需求：强制订单（事件/卡牌）到月必交；自然订单库存足够才自动接，不足留到下月。未满足的需求不会累积。
         </div>
       </div>
 
@@ -902,11 +917,11 @@ function SellPage({ g }: { g: Game }) {
           {gs.orders.map((o) => (
             <Row
               key={o.id}
-              k={`${TIER_LABEL[o.tier]} × ${o.qty}`}
-              v={`${o.from} · ${o.dueMonth}月前交付`}
+              k={`${TIER_LABEL[o.tier]} × ${o.qty}${o.forced ? '（强制）' : ''}`}
+              v={`${o.from} · ${o.dueMonth}月前${o.forced ? '必交' : '接（库存够才接）'}`}
             />
           ))}
-          <div className="hint">库存充足时结算会自动交付；不足的部分失效，无惩罚。</div>
+          <div className="hint">强制订单到月必交，库存不足部分失效；自然订单库存足够时自动接，不足留到下月再判断。</div>
         </div>
       ) : null}
     </>

@@ -250,6 +250,7 @@ export function generateMonthlyOrders(state: GameState) {
       priceShift: d.orderPriceShift,
       dueMonth: state.month + 1,
       from: '销售渠道',
+      forced: false,
     })
   }
   state.rngState = rng.state
