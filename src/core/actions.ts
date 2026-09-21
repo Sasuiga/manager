@@ -427,10 +427,18 @@ export function revealMaterials(state: GameState, tier: Tier) {
 export function lotQty(state: GameState, materialId: string, lot: LotSize): number {
   const d = derive(state)
   const supply = d.materials[materialId]?.supply ?? 0
+  if (supply <= 0) return 0
   const round5 = (v: number) => Math.ceil(v / 5) * 5
-  if (lot === 'small') return round5(supply * 0.25)
-  if (lot === 'mid') return round5(supply * 0.5)
-  return supply
+  const small5 = round5(supply * 0.25)
+  const mid5 = round5(supply * 0.5)
+  // 批量原料：取整后三档数量严格递增，按 5 件取整
+  if (small5 < mid5 && mid5 < supply) {
+    return lot === 'small' ? small5 : lot === 'mid' ? mid5 : supply
+  }
+  // 稀缺原料（供给太小，取整后档位量不再递增）：改 1 件粒度，保证小批 < 中批 ≤ 大批
+  const small = Math.max(1, Math.round(supply * 0.25))
+  const mid = Math.min(supply, Math.max(small + 1, Math.round(supply * 0.5)))
+  return lot === 'small' ? small : lot === 'mid' ? mid : supply
 }
 
 export function lotPrice(state: GameState, materialId: string, lot: LotSize): Money {

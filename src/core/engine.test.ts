@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as E from './engine'
-import { BOMS, MATERIALS, TIERS } from '../data/game'
+import { BOMS, CLIMATE_ORDER, MATERIALS, TIERS } from '../data/game'
 import { Rng } from './rng'
 
 /**
@@ -175,6 +175,28 @@ describe('引擎', () => {
     expect(first.ok).toBe(true)
     const second = E.buyMaterial(s, 'pkg', 'mid')
     expect(second.ok).toBe(false)
+  })
+
+  it('档位数量随档位递增（稀缺原料 1 件粒度，不出现小批 ≥ 大批）', () => {
+    const s = E.newGame(13)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    for (const climate of CLIMATE_ORDER) {
+      s.climate = climate
+      s.monthMods = { materials: {} }
+      s.cardMods = {}
+      for (const m of MATERIALS) {
+        const supply = E.derive(s).materials[m.id]?.supply ?? 0
+        if (supply <= 0) continue
+        const small = E.lotQty(s, m.id, 'small')
+        const mid = E.lotQty(s, m.id, 'mid')
+        const large = E.lotQty(s, m.id, 'large')
+        expect(large).toBe(supply)
+        expect(small).toBeLessThanOrEqual(mid)
+        expect(mid).toBeLessThanOrEqual(large)
+        if (supply > 1) expect(small).toBeLessThan(large)
+      }
+    }
   })
 
   it('产能不会超过设备与人员的合计', () => {
