@@ -828,7 +828,9 @@ function SellPage({ g }: { g: Game }) {
                 </span>
                 <span className="hstack" style={{ gap: 'var(--s3)' }}>
                   <span className={`mono${push > 0 ? ' gold' : ''}`}>
-                    需求 {d.demandBase[t]}{push > 0 ? ` + ${push}` : ''} = {d.demand[t]}
+                    需求 {d.demandBase[t]}
+                    {push > 0 ? ` + ${push}` : ''} = {d.demand[t]}
+                    <span className="faint">（上限 {d.demandBase[t] + cap}）</span>
                   </span>
                   <span className="faint xs">
                     售价 {wan(d.price[t])} · 库存 {p.qty} · 订单 {orderQtyBy[t]} · 现货预计 {est} 件
@@ -861,7 +863,7 @@ function SellPage({ g }: { g: Game }) {
               <div key={t} className="hstack-between">
                 <span className="sm">
                   {TIER_LABEL[t]}
-                  <span className="faint xs"> · {cost} 点/需求 · 上限 {cap}</span>
+                  <span className="faint xs"> · {cost} 点/需求</span>
                 </span>
                 <span className="hstack" style={{ gap: 'var(--s2)' }}>
                   <button
