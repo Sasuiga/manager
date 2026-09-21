@@ -830,10 +830,10 @@ function TierRowCells({
             </span>
             {totalQty > 0 ? <span className="xs faint">{orderDesc}</span> : null}
           </span>
-          <span className="mono" style={{ textAlign: 'right' }}>
+          <span className="mono xs" style={{ textAlign: 'right' }}>
             {totalQty > 0 ? wan(orderPrice!) : <span className="faint">—</span>}
           </span>
-          <span className="mono" style={{ textAlign: 'right' }}>
+          <span className="mono xs" style={{ textAlign: 'right' }}>
             {totalQty > 0 ? `${taken} 件` : <span className="faint">—</span>}
           </span>
         </>
@@ -843,7 +843,7 @@ function TierRowCells({
             {demand}<span className="faint">（上限 {demandBase! + cap!}）</span>
             {over > 0 ? <span className="faint" style={{ color: 'var(--red, #c0392b)' }}> · 超 {over}</span> : null}
           </span>
-          <span className="mono" style={{ textAlign: 'right' }}>{wan(price!)}</span>
+          <span className="mono xs" style={{ textAlign: 'right' }}>{wan(price!)}</span>
           <span style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
             <span className="mono sm">
               {avail}
@@ -895,8 +895,8 @@ function SellPage({ g }: { g: Game }) {
         <div className="title-rule" />
         {/* 市场需求表：四列（类型 / 需求 / 售价 / 库存），库存已扣除订单占用量 */}
         <div style={{ display: 'grid', gridTemplateColumns: 'auto 1.2fr 0.8fr 0.6fr', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
-          <span className="xs faint">类型</span>
-          <span className="xs faint" style={{ textAlign: 'right' }}>市场需求</span>
+          <span className="xs" style={{ color: 'var(--gold)' }}>市场需求</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>需求数</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>售价</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>可用库存</span>
           {TIER_ORDER.map((t) => {
@@ -926,12 +926,12 @@ function SellPage({ g }: { g: Game }) {
         </div>
 
         {/* 订单需求表：同样四列，无订单的层也保留行（需求列为“无”） */}
-        <div style={{ margin: 'var(--s3) 0' }} />
+        <div className="title-rule" />
         <div style={{ display: 'grid', gridTemplateColumns: 'auto 1.2fr 0.8fr 0.6fr', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
-          <span className="xs faint">类型</span>
-          <span className="xs faint" style={{ textAlign: 'right' }}>订单需求</span>
+          <span className="xs" style={{ color: 'var(--gold)' }}>订单需求</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>订单数</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>订单价</span>
-          <span className="xs faint" style={{ textAlign: 'right' }}>占用</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>占用库存</span>
           {TIER_ORDER.map((t) => {
             const p = gs.products[t]
             const forcedQty = forcedQtyBy[t]
