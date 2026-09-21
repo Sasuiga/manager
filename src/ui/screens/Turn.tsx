@@ -840,12 +840,9 @@ function TierRowCells({
         </>
       ) : (
         <>
-          <span style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
-            <span className={`mono sm${push > 0 ? ' gold' : ''}`}>
-              {demand}
-              {push > 0 ? <span className="faint">（+{push}）</span> : null}
-            </span>
-            <span className="xs faint">上限 {demandBase! + cap!}{over > 0 ? ` · 超 ${over}` : ''}</span>
+          <span className={`mono sm${push > 0 ? ' gold' : ''}`} style={{ textAlign: 'right' }}>
+            {demand}<span className="faint">（上限 {demandBase! + cap!}）</span>
+            {over > 0 ? <span className="faint" style={{ color: 'var(--red, #c0392b)' }}> · 超 {over}</span> : null}
           </span>
           <span className="mono" style={{ textAlign: 'right' }}>{wan(price!)}</span>
           <span style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
