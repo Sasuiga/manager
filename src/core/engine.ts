@@ -19,7 +19,7 @@ import type { Climate, GameEventDef, GameState, GoalDef, GoalTrack, Ledger, Mone
 export * from './types'
 export { derive, mergeMods } from './derive'
 export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityOf, buildDeck } from './game'
-export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers } from './settle'
+export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct } from './settle'
 export type { SettleReport } from './settle'
 export {
   hire,

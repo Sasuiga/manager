@@ -508,7 +508,7 @@ function priceAt(id: string, shift: number): Money {
   return arr[Math.max(0, Math.min(4, 2 + shift))]
 }
 
-function priceAtProduct(tier: Tier, shift: number): Money {
+export function priceAtProduct(tier: Tier, shift: number): Money {
   const arr = PROD_PRICE[tier]
   return arr[Math.max(0, Math.min(4, 2 + shift))]
 }

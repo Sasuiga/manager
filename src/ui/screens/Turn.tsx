@@ -2,6 +2,7 @@ import { useState } from 'react'
 import * as E from '../../core/engine'
 import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT } from '../../data/game'
 import type { CardCtx } from '../../data/game'
+import type { Tier } from '../../core/types'
 import { Icon, type IconName } from '../icons'
 import { Medallion } from '../ornaments'
 import { Row, Sheet } from '../Sheet'
@@ -784,6 +785,78 @@ function EquipmentSheet({ g, onClose }: { g: Game; onClose: () => void }) {
 
 /* ══════════════ 销售部 ══════════════ */
 
+/* 需求表的一行单元格（类型 / 需求 / 价格 / 库存），支持市场需求与订单需求两种模式。 */
+interface TierRowCellsBase {
+  t: Tier
+  p: { built: boolean; qty: number }
+  orderMode?: boolean
+  forcedQty?: number
+  optionalQty?: number
+  totalQty?: number
+  orderPrice?: number
+  taken?: number
+  push?: number
+  over?: number
+  demand?: number
+  demandBase?: number
+  cap?: number
+  price?: number
+  avail?: number
+  est?: number
+  orderTaken?: number
+}
+
+function TierRowCells({
+  t, p, orderMode,
+  forcedQty = 0, optionalQty = 0, totalQty = 0, orderPrice, taken = 0,
+  push = 0, over = 0, demand, demandBase, cap, price, avail, est,
+  orderTaken = 0,
+}: TierRowCellsBase) {
+  return (
+    <>
+      <span className="sm">
+        <b>{TIER_LABEL[t]}</b>
+        {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
+      </span>
+      {orderMode ? (
+        <>
+          <span className={`mono${totalQty > 0 ? ' gold' : ''}`} style={{ textAlign: 'right' }}>
+            {totalQty === 0 ? <span className="faint">无</span> : (
+              <>
+                {totalQty} 件
+                {forcedQty > 0 && optionalQty > 0 ? <span className="faint">（强 {forcedQty} + 自 {optionalQty}）</span> : null}
+                {forcedQty > 0 && optionalQty === 0 ? <span className="faint">（强制）</span> : null}
+                {forcedQty === 0 && optionalQty > 0 ? <span className="faint">（自然）</span> : null}
+              </>
+            )}
+          </span>
+          <span className="mono" style={{ textAlign: 'right' }}>
+            {totalQty > 0 ? `${wan(orderPrice!)}` : <span className="faint">—</span>}
+          </span>
+          <span className="mono" style={{ textAlign: 'right' }}>
+            {totalQty > 0 ? taken : <span className="faint">—</span>}
+          </span>
+        </>
+      ) : (
+        <>
+          <span className={`mono${push > 0 ? ' gold' : ''}`} style={{ textAlign: 'right' }}>
+            {demandBase}
+            {push > 0 ? <span className="faint"> +{push}</span> : null} = {demand}
+            <span className="faint">（上限 {demandBase! + cap!}）</span>
+            {over > 0 ? <span style={{ color: 'var(--red, #c0392b)' }}> · 超 {over} 点</span> : null}
+          </span>
+          <span className="mono" style={{ textAlign: 'right' }}>{wan(price!)}</span>
+          <span className="mono" style={{ textAlign: 'right' }}>
+            {orderTaken > 0 ? <span className="faint">{avail}</span> : avail}
+            <span className="faint xs"> /{p.qty}</span>
+            {p.built ? <span className="faint xs"> · 可销 {est}</span> : null}
+          </span>
+        </>
+      )}
+    </>
+  )
+}
+
 function SellPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
@@ -821,44 +894,72 @@ function SellPage({ g }: { g: Game }) {
       <div className="card">
         <h3>本月需求与售价</h3>
         <div className="title-rule" />
-        <div className="stack-sm">
+        {/* 市场需求表：四列（类型 / 需求 / 售价 / 库存），库存已扣除订单占用量 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1.2fr 0.8fr 0.6fr', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+          <span className="xs faint">类型</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>市场需求</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>售价</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>可用库存</span>
           {TIER_ORDER.map((t) => {
             const p = gs.products[t]
-            const alloc = gs.salesAlloc[t]
             const cost = d.salesPushCost[t]
             const cap = d.salesPushCap[t]
             const push = d.salesPush[t]
-            const over = Math.max(0, alloc - cap * cost)
-            const est = p.built
-              ? Math.min(p.qty, d.demand[t] - forcedQtyBy[t] - acceptEstBy[t])
-              : 0
+            const over = Math.max(0, gs.salesAlloc[t] - cap * cost)
+            const orderTaken = forcedQtyBy[t] + acceptEstBy[t]
+            const avail = Math.max(0, p.qty - orderTaken)
+            const est = p.built ? Math.min(avail, d.demand[t]) : 0
             return (
-              <div key={t} className="hstack-between" style={{ gap: 'var(--s2)' }}>
-                <span className="sm">
-                  <b>{TIER_LABEL[t]}</b>
-                  {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
-                </span>
-                <span className="hstack" style={{ gap: 'var(--s3)' }}>
-                  <span className={`mono${push > 0 ? ' gold' : ''}`}>
-                    需求 {d.demandBase[t]}
-                    {push > 0 ? ` + ${push}` : ''} = {d.demand[t]}
-                    <span className="faint">（上限 {d.demandBase[t] + cap}）</span>
-                  </span>
-                  <span className="faint xs">
-                    售价 {wan(d.price[t])} · 库存 {p.qty}
-                    {forcedQtyBy[t] > 0 ? ` · 强制订单 ${forcedQtyBy[t]}` : ''}
-                    {acceptEstBy[t] > 0 ? ` · 将接单 ${acceptEstBy[t]}` : ''}
-                    {' · 现货预计 '}{est} 件
-                  </span>
-                  {over > 0 ? <span className="faint xs"> · 超出上限 {over} 点</span> : null}
-                </span>
-              </div>
+              <TierRowCells
+                key={t}
+                t={t}
+                p={p}
+                push={push}
+                over={over}
+                demand={d.demand[t]}
+                demandBase={d.demandBase[t]}
+                cap={cap}
+                price={d.price[t]}
+                avail={avail}
+                est={est}
+                orderTaken={orderTaken}
+              />
+            )
+          })}
+        </div>
+
+        {/* 订单需求表：同样四列，无订单的层也保留行（需求列为“无”） */}
+        <div style={{ margin: 'var(--s3) 0' }} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1.2fr 0.8fr 0.6fr', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+          <span className="xs faint">类型</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>订单需求</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>订单价</span>
+          <span className="xs faint" style={{ textAlign: 'right' }}>占用</span>
+          {TIER_ORDER.map((t) => {
+            const p = gs.products[t]
+            const forcedQty = forcedQtyBy[t]
+            const optionalQty = orderQtyBy[t] - forcedQty
+            const totalQty = forcedQty + optionalQty
+            const orderPrice = E.priceAtProduct(t, d.orderPriceShift + d.priceShift[t])
+            const taken = forcedQty + acceptEstBy[t]
+            return (
+              <TierRowCells
+                key={t}
+                t={t}
+                p={p}
+                orderMode
+                forcedQty={forcedQty}
+                optionalQty={optionalQty}
+                totalQty={totalQty}
+                orderPrice={orderPrice}
+                taken={taken}
+              />
             )
           })}
         </div>
         <div className="hint">
-          需求 = 基础 + 事件 + 加点；加点成本：低端 1 点/需求 · 中端 2 点 · 高端 3 点 · 特殊 4 点（每层上限 3 倍基础需求，当月有效）。
-          订单独立定价并占用本层需求：强制订单（事件/卡牌）到月必交；自然订单库存足够才自动接，不足留到下月。未满足的需求不会累积。
+          市场需求 = 基础 + 事件 + 加点（成本：低 1 / 中 2 / 高 3 / 特 4 点/需求，每层上限 3 倍基础需求）。
+          订单独立定价（高 1 档）：强制订单到月必交；自然订单库存足够才自动接。可用库存 = 总库存 − 订单占用。
         </div>
       </div>
 
@@ -911,17 +1012,8 @@ function SellPage({ g }: { g: Game }) {
       </div>
 
       {gs.orders.length ? (
-        <div className="card">
-          <h3>待交付订单</h3>
-          <div className="title-rule" />
-          {gs.orders.map((o) => (
-            <Row
-              key={o.id}
-              k={`${TIER_LABEL[o.tier]} × ${o.qty}${o.forced ? '（强制）' : ''}`}
-              v={`${o.from} · ${o.dueMonth}月前${o.forced ? '必交' : '接（库存够才接）'}`}
-            />
-          ))}
-          <div className="hint">强制订单到月必交，库存不足部分失效；自然订单库存足够时自动接，不足留到下月再判断。</div>
+        <div className="hint" style={{ padding: 'var(--s2) 0' }}>
+          订单来源：{gs.orders.map((o) => o.from).filter((v, i, a) => a.indexOf(v) === i).join('、')} · 强制必交 / 自然库存够才接，不足留到下月。
         </div>
       ) : null}
     </>
