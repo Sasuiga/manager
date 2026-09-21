@@ -808,6 +808,7 @@ function TierRowCells({
         <b>{TIER_LABEL[t]}</b>
         {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
       </span>
+      <span />
       <span className={`mono sm${push > 0 ? ' gold' : ''}`} style={{ textAlign: 'right' }}>
         {demand}<span className="faint">（上限 {demandBase + cap}）</span>
         {over > 0 ? <span className="faint" style={{ color: 'var(--red, #c0392b)' }}> · 超 {over}</span> : null}
@@ -921,8 +922,9 @@ function SellPage({ g }: { g: Game }) {
         <h3>本月需求与售价</h3>
         <div className="title-rule" />
         {/* 市场需求表：四列（类型 / 需求 / 售价 / 库存），库存已扣除订单占用量 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1.2fr 0.8fr 0.6fr', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 0.8fr 0.8fr', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
           <span className="xs" style={{ color: 'var(--gold)' }}>市场需求</span>
+          <span />
           <span className="xs faint" style={{ textAlign: 'right' }}>需求数</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>市价</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>可用库存</span>
@@ -952,9 +954,9 @@ function SellPage({ g }: { g: Game }) {
           })}
         </div>
 
-        {/* 订单需求表：五列（类型 / 需求数 / 订单价 / 状态 / 来源） */}
+        {/* 订单需求表：五列（类型 / 来源 / 需求数 / 订单价 / 状态），列宽与上方对齐 */}
         <div className="title-rule" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 0.8fr auto', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 0.8fr 0.8fr', columnGap: 'var(--s3)', rowGap: 'var(--s2)', alignItems: 'center' }}>
           <span className="xs" style={{ color: 'var(--gold)' }}>订单需求</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>来源</span>
           <span className="xs faint" style={{ textAlign: 'right' }}>需求数</span>
