@@ -1003,7 +1003,7 @@ function SellPage({ g }: { g: Game }) {
           })}
         </div>
         <div className="hint">
-          剩余可分配 {Math.max(0, d.salesResource - used)} 点。点 + 按整档扣减（低 1 / 中 2 / 高 3 / 特殊 4 点），点 − 对称回退；点数为需求数 × 每档成本，到头点不动。
+          剩余可分配 {Math.max(0, d.salesResource - used)} 点
         </div>
       </div>
 
