@@ -93,6 +93,7 @@ export function newGame(seed: number): GameState {
     orders: [],
     declinedOrders: [],
     acceptedOrders: [],
+    monthLedger: [],
 
     rnd: Object.fromEntries(RND_PROJECTS.map((p) => [p.id, { projectId: null, progress: 0, done: false }])),
     ipOwned: [],

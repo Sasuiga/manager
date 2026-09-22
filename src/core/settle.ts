@@ -14,6 +14,7 @@ import {
 } from '../data/game'
 import { derive, mergeMods } from './derive'
 import { balanceSheet, equipmentNet, equityOf, inventoryValue } from './game'
+import { issueMaterials, postProductionInbound } from './actions'
 import { Rng } from './rng'
 import type {
   BalanceSheet,
@@ -90,6 +91,22 @@ export function settle(state: GameState): SettleReport {
     }
     // addMaterial 内部负责扣款与移动加权平均
     const added = addMaterial(state, ag.materialId, want, unit, false, true)
+    if (added > 0) {
+      const name = nameOf(ag.materialId)
+      // 协议到货同属采购入账：借 库存 / 贷 现金，金额与实付现金、库存增加额严格相等
+      state.monthLedger.push({
+        dept: 'buy',
+        item: `协议到货 ${name} ×${added}`,
+        debit: `库存 ${name}`,
+        credit: '现金',
+        debitAmt: added * unit,
+        creditAmt: added * unit,
+        detail: [
+          `${added} 件 × ${unit / 10}w（协议锁价，不占本月采购档数）`,
+          '现金实付全额转入库存（移动加权平均计价）',
+        ],
+      })
+    }
     autoPurchase.push({
       id: ag.materialId,
       name: nameOf(ag.materialId),
@@ -133,18 +150,11 @@ export function settle(state: GameState): SettleReport {
     }
     producedUnitCost = planned > 0 ? Math.round((materialCost / planned) * d.costFactor) : 0
     /**
+     * 扣减与记账同 confirmProduction 共用 issueMaterials：
      * 出库按账面单价等比例结转，并与入库使用同一个 materialCost，
      * 保证「原料减多少 = 成品加多少（除以成本系数之前）」。
-     * 两侧若各用各的舍入数，差额会一路漂进资产负债表。
      */
-    for (const [id, need] of Object.entries(bom.recipe)) {
-      const per = Math.max(1, need - d.matSave)
-      const qty = per * planned
-      const mat = state.materials[id]
-      const unitValue = mat.qty > 0 ? mat.value / mat.qty : 0
-      mat.value -= unitValue * qty
-      mat.qty -= qty
-    }
+    issueMaterials(state, plannedTier, planned, d.matSave)
     produced = planned
     /**
      * 【流水线】成就（生产 5 人）：每 5 件额外入库 1 件。
@@ -159,6 +169,7 @@ export function settle(state: GameState): SettleReport {
     p.qty += produced + bonus
     p.avgCost = p.qty > 0 ? Math.round(p.value / p.qty) : 0
     if (bonus > 0) warnings.push(`流水线效应：额外入库 ${bonus} 件`)
+    postProductionInbound(state, plannedTier, produced, bonus, batchCost, unitCostIn)
     prodVariance = materialCost * (1 - d.costFactor)
   }
   // 加班费（现金）
@@ -228,6 +239,45 @@ export function settle(state: GameState): SettleReport {
     spots.push({ tier: t, qty: sell, unitPrice: unit, unitCost: Math.round(unitValue), cost: unitValue * sell, revenue: unit * sell, channel: 'spot' })
     lost[t] = remaining - sell
     filled[t] += sell
+  }
+
+  // 2.3 销售账务：收入与成本结转分别入账（借 现金/销售成本，贷 销售收入/存货），
+  // 各行金额与利润表「销售收入 / 销售成本」及存货减记严格相等，
+  // 与生产入库（借 存货）同科目勾稽：存货借方合计 − 贷方合计 = 期末成品存货。
+  for (const t of TIERS) {
+    const rec = [...orders, ...spots].filter((r) => r.tier === t)
+    if (rec.length === 0) continue
+    const rev = rec.reduce((a, r) => a + r.revenue, 0)
+    const cost = rec.reduce((a, r) => a + (r.cost ?? Math.round(r.qty * r.unitCost)), 0)
+    const soldQty = rec.reduce((a, r) => a + r.qty, 0)
+    if (rev > 0) {
+      state.monthLedger.push({
+        dept: 'sell',
+        item: `销售收入 ${TIER_LABEL[t]}`,
+        debit: '现金',
+        credit: '销售收入',
+        debitAmt: rev,
+        creditAmt: rev,
+        detail: [
+          `订单 + 现货成交 ${soldQty} 件`,
+          '现金增加额 = 利润表「销售收入」',
+        ],
+      })
+    }
+    if (cost > 0) {
+      state.monthLedger.push({
+        dept: 'sell',
+        item: `销售成本 ${TIER_LABEL[t]}`,
+        debit: '销售成本',
+        credit: `存货 ${BOMS[t].name}`,
+        debitAmt: cost,
+        creditAmt: 0,
+        detail: [
+          '成品存货减记全额结转为销售成本（移动加权平均）',
+          '与利润表「销售成本」一致，与生产入库同科目勾稽',
+        ],
+      })
+    }
   }
 
   // ══════════ 3. 研发 ══════════
@@ -714,6 +764,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.lotsUsed = 0
   state.plan = { tier: state.plan.tier, qty: 0, overtime: false }
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
+  state.monthLedger = []
   state.declinedOrders = []
   state.acceptedOrders = []
   state.futures = {}

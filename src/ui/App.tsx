@@ -12,7 +12,7 @@ import { ReportSheet } from './screens/Report'
 import { GoalsSheet } from './screens/Goals'
 import { Panel } from './screens/Panel'
 import { Icon } from './icons'
-import { wan } from './format'
+import { wan, TIER_ORDER } from './format'
 
 type Tab = 'run' | 'report' | 'log'
 
@@ -106,7 +106,7 @@ function SettleFlow({ g, onDone }: { g: Game; onDone: () => void }) {
   }, [s, g.tick])
 
   if (step === 'confirm') {
-    const prodReady = s.plan.tier && s.plan.qty > 0
+    const plannedProd = TIER_ORDER.reduce((a, t) => a + (s.plan.tier === t ? s.plan.qty : 0), 0)
     return (
       <Sheet
         title="结束本月"
@@ -128,8 +128,8 @@ function SettleFlow({ g, onDone }: { g: Game; onDone: () => void }) {
           <div className="section-label">本月安排</div>
           <Row
             k="生产"
-            v={prodReady ? `${E.TIER_LABEL[s.plan.tier!]} × ${s.plan.qty} 件` : '未安排'}
-            cls={prodReady ? '' : 'red'}
+            v={plannedProd > 0 ? `待生产 ${plannedProd} 件（已确认部分已入库）` : '未安排'}
+            cls={plannedProd > 0 ? '' : 'red'}
           />
           <Row k="产能" v={`${E.planCapacity(s)}`} />
           <Row k="销售资源" v={`${E.allocUsed(s)}/${hud.salesResource}`} />

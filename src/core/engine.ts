@@ -48,6 +48,8 @@ export {
   setPlan,
   planCapacity,
   maxProducible,
+  maxProducibleByTier,
+  confirmProduction,
   toggleOvertime,
   setAlloc,
   allocUsed,

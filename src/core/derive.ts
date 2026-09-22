@@ -102,7 +102,7 @@ export interface DerivedTotals {
   matSave: number
   notes: string[]
   /** 各部门本月账务记录：复式记账，借贷两列，让玩家理解账务处理 */
-  deptLedger: Record<Dept, { item: string; debit: string; debitAmt: number; credit: string; creditAmt: number }[]>
+  deptLedger: Record<Dept, { item: string; debit: string; debitAmt: number; credit: string; creditAmt: number; detail?: string[] }[]>
 }
 
 /** 合并多个 MonthMods，后者叠加到前者之上。 */
@@ -404,7 +404,7 @@ export function derive(state: GameState): DerivedTotals {
     const def = CARD_BY_ID[c.defId]
     if (def?.kind) proposalCostBy[def.kind] += def.cost ?? 0
   }
-  const deptLedger: Record<Dept, { item: string; debit: string; debitAmt: number; credit: string; creditAmt: number }[]> = {
+  const deptLedger: Record<Dept, { item: string; debit: string; debitAmt: number; credit: string; creditAmt: number; detail?: string[] }[]> = {
     ops: [], buy: [], make: [], sell: [], rnd: [],
   }
   for (const dp of DEPT_ORDER) {
@@ -439,6 +439,8 @@ export function derive(state: GameState): DerivedTotals {
     if (proposalCostBy[dp] > 0) {
       rows.push({ item: '提案费用', debit: '管理费用', debitAmt: proposalCostBy[dp], credit: '现金', creditAmt: proposalCostBy[dp] })
     }
+    // 手工记账（如生产确认时的「原料→存货」），按发生顺序排在自动计提之后
+    for (const r of state.monthLedger) if (r.dept === dp) rows.push(r)
     deptLedger[dp] = rows
   }
 

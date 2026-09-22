@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import * as E from '../../core/engine'
-import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT } from '../../data/game'
+import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID } from '../../data/game'
 import type { CardCtx } from '../../data/game'
 import type { Tier } from '../../core/types'
 import { Icon, type IconName } from '../icons'
@@ -22,6 +22,7 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
 
   /** 点击金额弹出/收起计算说明，返回行说明 */
   const getDetailLines = (r: typeof rows[number]): string[] => {
+    if (r.detail?.length) return r.detail
     if (r.item.includes('工资')) {
       const per = d.salaryPer[dept]
       const base = STAFF[dept].salary
@@ -56,6 +57,17 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
     if (r.item.includes('加班')) return ['加班费固定 0.5w（需生产 ≥ 3 人）']
     if (r.item.includes('研发')) return [`每个项目每月 ${wan(RND_COST_PER_PROJECT)}`, '本月推进 1 个项目']
     if (r.item.includes('提案')) return ['提案实施费用合计（含卡牌费用等）']
+    // 手工记账行的兜底说明（正常路径由 r.detail 提供）
+    if (r.item.startsWith('采购') || r.item.includes('贸易商') || r.item.includes('协议到货'))
+      return ['现金实付全额转入库存（移动加权平均计价）', '库存增加额 = 现金扣减额，与生产领料出库勾稽']
+    if (r.item.includes('原料出库'))
+      return ['按账面单价（移动加权平均）出库', '库存减记全额转入制造费用，与采购入库同科目勾稽']
+    if (r.item.includes('存货入库'))
+      return ['领料成本按成本系数折价入账', '降本差异计入生产费用（结算报表可见）']
+    if (r.item.includes('销售收入'))
+      return ['现金增加，确认销售收入', '金额 = 利润表「销售收入」']
+    if (r.item.includes('销售成本'))
+      return ['成品存货减记全额结转', '金额 = 利润表「销售成本」，与生产入库同科目勾稽']
     return []
   }
 
@@ -149,7 +161,7 @@ export function TurnScreen({
   const dots: Record<E.Dept, boolean> = {
     ops: s.hand.length > 0 && s.plays > 0,
     buy: E.allocUsed(s) >= 0 && d.materials.pkg && Object.values(s.materials).some((m) => !m.chosenLot && m.qty === 0),
-    make: s.plan.qty === 0 && E.maxProducible(s, 'low') > 0,
+    make: E.maxProducible(s, 'low') > 0,
     sell: s.orders.length > 0,
     rnd: E.activeResearch(s) === null && s.depts.rnd.staff > 0,
   }
@@ -354,6 +366,9 @@ function BuyPage({ g }: { g: Game }) {
           每月为原料选择采购档位，签长期协议锁定供货量；人员越多档位越宽、可解锁高级材料。
         </p>
         <LedgerSection g={g} dept="buy" />
+        <p className="hint" style={{ marginTop: 'var(--s2)' }}>
+          采购实付现金自动入账「借 库存 / 贷 现金」，金额与库存账面、生产领料出库严格勾稽。
+        </p>
       </div>
 
       {mats.map((m) => (
@@ -599,9 +614,13 @@ function AgreementSheet({ g, onClose }: { g: Game; onClose: () => void }) {
 
 function MakePage({ g }: { g: Game }) {
   const gs = g.s
-  const d = E.derive(gs)
   const cap = E.planCapacity(gs)
+  /** 各层 BOM 可产上限（受产能 + 原料双重限制），分配与看板共用。 */
+  const maxBy = E.maxProducibleByTier(gs)
+  const plannedTotal = TIER_ORDER.reduce((a, t) => a + (gs.plan.tier === t ? gs.plan.qty : 0), 0)
+  const remainingCap = Math.max(0, cap - plannedTotal)
   const [equip, setEquip] = useState(false)
+  const [confirm, setConfirm] = useState(false)
 
   return (
     <>
@@ -609,100 +628,128 @@ function MakePage({ g }: { g: Game }) {
         <h3>生产部</h3>
         <div className="title-rule" />
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          安排本月生产计划，按 BOM 消耗原料；设备与加班可提升产能上限，人员越多单月产量越高。
+          将产能分配到各产品线，确认后按 BOM 立即扣料入库；设备与加班可提升产能上限，人员越多单月产量越高。
         </p>
         <LedgerSection g={g} dept="make" />
       </div>
 
+      {/* 产品 BOM 看板：与销售部「市场需求表」同款布局，仅展示已解锁产品线 */}
       <div className="card">
-        <h3>本月生产计划</h3>
+        <h3>产品 BOM</h3>
         <div className="title-rule" />
-        {/*
-          产能与需求必须并排给玩家看：只显示产能会诱导盲目生产，
-          而卖不掉的成品会沉在库存里，占用现金却换不回收入。
-        */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+          <span className="xs" style={{ color: 'var(--gold)' }}>产品</span>
+          <span className="xs faint">配方（每件）</span>
+          <span className="xs faint">库存 / 成本</span>
+          {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
+            const bom = BOMS[t]
+            const p = gs.products[t]
+            const recipeText = Object.entries(bom.recipe)
+              .map(([id, n]) => `${MATERIAL_BY_ID[id]?.name ?? id}×${n}`)
+              .join(' + ')
+            return (
+              <Fragment key={t}>
+                <span className="sm">
+                  <b>{bom.name}</b>
+                  <span className="faint xs"> · {TIER_LABEL[t]}</span>
+                </span>
+                <span className="xs faint">{recipeText}</span>
+                <span>
+                  <span className="mono sm">{p.qty}</span>
+                  <span className="faint xs"> 件 · {wan(p.avgCost)}/件</span>
+                </span>
+              </Fragment>
+            )
+          })}
+        </div>
+        <div className="hint">配方按 BOM 扣料；库存为成品总件数，单位成本为最近批次入账均价。</div>
+      </div>
+
+      {/* 产能分配：与销售资源分配面板同款，已分配产能可在已解锁产品线间自由腾挪 */}
+      <div className="card">
+        <h3>产能分配</h3>
+        <div className="title-rule" />
         <div className="grid-3" style={{ marginBottom: 'var(--s3)' }}>
           <div>
             <div className="stat-label">本月产能</div>
             <div className="stat-value">{cap}</div>
           </div>
           <div>
-            <div className="stat-label">预计需求</div>
-            <div className="stat-value">{d.demand.low}</div>
+            <div className="stat-label">已安排</div>
+            <div className="stat-value">{plannedTotal}</div>
           </div>
           <div>
-            <div className="stat-label">成品库存</div>
-            <div className="stat-value">{TIER_ORDER.reduce((a, t) => a + gs.products[t].qty, 0)}</div>
+            <div className="stat-label">剩余</div>
+            <div className="stat-value gold">{remainingCap}</div>
           </div>
         </div>
-        <div className="stack">
-          {TIER_ORDER.map((t) => {
-            const p = gs.products[t]
-            const bom = TIER_LABEL[t]
-            const max = p.built ? E.maxProducible(gs, t) : 0
+        <div className="stack-sm">
+          {/* 未解锁的产品线先不出现，解锁一个出一个 */}
+          {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
+            const max = maxBy[t]
             const on = gs.plan.tier === t
-            const recipe = Object.entries(E.derive(gs).materials && {})
-            void recipe
+            const qty = on ? gs.plan.qty : 0
+            const plusDisabled = qty >= max
+            const minusDisabled = qty <= 0
             return (
-              <div key={t} className={`card-item d-make${on ? ' on' : ''}`} style={{ cursor: p.built ? 'pointer' : 'default' }}>
-                <span className="spine" />
-                <span className="card-body">
-                  <span className="hstack-between">
-                    <span className="card-name">{bom}</span>
-                    <span className="tag">{p.built ? `可产 ${max}` : '未解锁'}</span>
+              <div key={t} className="hstack-between">
+                <span className="sm">
+                  {TIER_LABEL[t]}
+                  <span className="faint xs"> · 可产 {max}</span>
+                </span>
+                <span className="hstack" style={{ gap: 'var(--s2)' }}>
+                  <button
+                    className="btn btn-nav"
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: minusDisabled ? 0.4 : 1 }}
+                    disabled={minusDisabled}
+                    onClick={() => g.mutate((st) => E.setPlan(st, { tier: t, qty: Math.max(0, st.plan.qty - 1) }))}
+                  >
+                    <span>−</span>
+                  </button>
+                  <span className="mono gold" style={{ minWidth: 28, textAlign: 'center' }}>
+                    {qty}
                   </span>
-                  <span className="card-desc">
-                    库存 {p.qty} 件 · 单位成本 {wan(p.avgCost)}
-                  </span>
-                  {p.built ? (
-                    <span className="hstack" style={{ gap: 'var(--s2)', marginTop: 'var(--s2)' }}>
-                      <button
-                        className="btn btn-nav"
-                        style={{ width: 'auto', padding: '2px var(--s3)' }}
-                        onClick={() => g.mutate((st) => E.setPlan(st, { tier: t, qty: Math.max(0, st.plan.qty - 1) }))}
-                      >
-                        <span>−</span>
-                      </button>
-                      <span className="mono gold" style={{ minWidth: 40, textAlign: 'center' }}>
-                        {on ? gs.plan.qty : 0}
-                      </span>
-                      <button
-                        className="btn btn-nav"
-                        style={{ width: 'auto', padding: '2px var(--s3)' }}
-                        onClick={() =>
-                          g.mutate((st) =>
-                            E.setPlan(st, {
-                              tier: t,
-                              qty: clamp((st.plan.tier === t ? st.plan.qty : 0) + 1, 0, E.maxProducible(st, t)),
-                            }),
-                          )
-                        }
-                      >
-                        <span>+</span>
-                      </button>
-                      <button
-                        className="btn btn-mini"
-                        style={{ width: 'auto' }}
-                        onClick={() => g.mutate((st) => E.setPlan(st, { tier: t, qty: E.maxProducible(st, t) }))}
-                      >
-                        <span className="btn-main xs">拉满</span>
-                      </button>
-                    </span>
-                  ) : null}
+                  <button
+                    className="btn btn-nav"
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: plusDisabled ? 0.4 : 1 }}
+                    disabled={plusDisabled}
+                    onClick={() =>
+                      g.mutate((st) =>
+                        E.setPlan(st, {
+                          tier: t,
+                          qty: clamp((st.plan.tier === t ? st.plan.qty : 0) + 1, 0, E.maxProducible(st, t)),
+                        }),
+                      )
+                    }
+                  >
+                    <span>+</span>
+                  </button>
+                  <button
+                    className="btn btn-mini"
+                    style={{ width: 'auto', opacity: qty >= max ? 0.4 : 1 }}
+                    disabled={qty >= max}
+                    onClick={() => g.mutate((st) => E.setPlan(st, { tier: t, qty: E.maxProducible(st, t) }))}
+                  >
+                    <span className="btn-main xs">拉满</span>
+                  </button>
                 </span>
               </div>
             )
           })}
         </div>
-        {/*
-          产能要跟两个出口一起看：现货需求 + 确定性订单。
-          订单先结算并占用本层需求，且价格高一档，所以只看现货会低估可销量。
-        */}
         <div className="hint">
-          按 BOM 消耗原料：低端 包材×2 + 树脂×1；中端 树脂×2 + 合金×1。产量受产能与原料双重限制。
-          <br />
-          销路有两条：现货（吃各层需求，见销售页）与订单（{gs.orders.reduce((a, o) => a + o.qty, 0)} 件在手，
-          先结算并占用本层需求，价格高 1 档）。超过这两者的产量只会变成库存压住现金。
+          1 点产能生产 1 件；可在已解锁产品线间自由分配，各线受产能与原料双重限制。剩余 {remainingCap} 点未分配。
+        </div>
+        <div style={{ marginTop: 'var(--s3)' }}>
+          <button
+            className="btn btn-primary"
+            style={{ width: '100%' }}
+            disabled={plannedTotal <= 0}
+            onClick={() => setConfirm(true)}
+          >
+            <span className="btn-main">确认生产安排</span>
+            <span className="btn-sub">{plannedTotal > 0 ? `共 ${plannedTotal} 件，确认后立即扣料入库` : '先分配产量'}</span>
+          </button>
         </div>
       </div>
 
@@ -745,8 +792,58 @@ function MakePage({ g }: { g: Game }) {
         </div>
       ) : null}
 
+      {/* 确认生产安排：按 BOM 立即扣料入库，「原料→存货」记账到部门账务 */}
+      {confirm ? (
+        <ProductionConfirmSheet g={g} planned={plannedTotal} onDone={() => setConfirm(false)} />
+      ) : null}
       {equip ? <EquipmentSheet g={g} onClose={() => setEquip(false)} /> : null}
     </>
+  )
+}
+
+/** 确认生产安排弹窗：列出将入库的各线产量与原料消耗，确认后扣料入库。 */
+function ProductionConfirmSheet({ g, planned, onDone }: { g: Game; planned: number; onDone: () => void }) {
+  const gs = g.s
+  const lines = TIER_ORDER
+    .map((t) => ({ t, qty: gs.plan.tier === t ? gs.plan.qty : 0, max: E.maxProducible(gs, t) }))
+    .filter((l) => l.qty > 0)
+  const willBonus = gs.depts.make.staff >= 5
+  const confirm = () => {
+    const r = g.act((st) => E.confirmProduction(st))
+    if (r.ok) {
+      g.setToast(r.msg ?? '生产完成')
+      onDone()
+    }
+  }
+  return (
+    <Sheet
+      title="确认生产安排"
+      sub={planned > 0 ? `共 ${planned} 件，确认后立即按 BOM 扣料入库` : null}
+      onClose={onDone}
+      footer={
+        <button className="btn btn-primary" style={{ width: '100%' }} onClick={confirm}>
+          <span className="btn-main">确认生产入库</span>
+          <span className="btn-sub">原料出库、成品入库，记账到生产账务</span>
+        </button>
+      }
+    >
+      <div className="card">
+        <div className="section-label">生产安排</div>
+        {lines.map(({ t, qty, max }) => (
+          <Row
+            key={t}
+            k={TIER_LABEL[t]}
+            v={`${qty} 件${qty > max ? `（原料仅够 ${max}，多出的 ${qty - max} 件留到下月）` : ''}`}
+            cls={qty > max ? 'red' : ''}
+          />
+        ))}
+        {lines.length === 0 ? <Row k="安排" v="未分配产量" cls="red" /> : null}
+        {willBonus ? <Row k="流水线" v="每 5 件额外入库 1 件（生产 5 人）" /> : null}
+      </div>
+      <div className="hint">
+        确认后即按 BOM 消耗原料并入库（单位成本按账面价结转），本月账务新增「原料→存货」记录；未分配的剩余产能月末释放。
+      </div>
+    </Sheet>
   )
 }
 
@@ -912,6 +1009,9 @@ function SellPage({ g }: { g: Game }) {
           将销售资源投向各层需求，资源越多需求盘子越大；人员越多销售资源越丰富，可解锁自然订单。
         </p>
         <LedgerSection g={g} dept="sell" />
+        <p className="hint" style={{ marginTop: 'var(--s2)' }}>
+          结算后自动入账「销售收入 / 销售成本」：收入 = 现金增加，成本 = 成品存货减记，与利润表严格勾稽。
+        </p>
       </div>
 
       {/*
@@ -994,7 +1094,8 @@ function SellPage({ g }: { g: Game }) {
         <h3>销售资源分配</h3>
         <div className="title-rule" />
         <div className="stack-sm">
-          {TIER_ORDER.map((t) => {
+          {/* 未解锁的产品线没有分配必要，解锁一个出一个 */}
+          {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
             const cost = d.salesPushCost[t]
             const cap = d.salesPushCap[t]
             const remaining = d.salesResource - used

@@ -593,6 +593,12 @@ export interface GameState {
   lotsUsed: number
   /** 本月生产计划 */
   plan: { tier: Tier | null; qty: number; overtime: boolean }
+  /**
+   * 本月部门账务（手工记账：采购入库、生产领料/成品入库、销售收入与成本结转）。
+   * 各行只作展示，不参与损益计算（采购与领料是资产内部转换），
+   * 但金额与现金流水、利润表科目、存货账面严格勾稽。
+   */
+  monthLedger: { dept: Dept; item: string; debit: string; credit: string; debitAmt: Money; creditAmt: Money; detail?: string[] }[]
   /** 一次性收益将在下月到账 */
   /**
    * 跨月挂账：当月确认、次月收付现金。

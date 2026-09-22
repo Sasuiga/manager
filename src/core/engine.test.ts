@@ -396,4 +396,137 @@ describe('引擎', () => {
     // 现货只剩需求 - 订单量的部分
     expect(lowSpot).toBe(Math.max(0, Math.min(7, d.demand.low - 3)))
   })
+
+  it('确认生产：按 BOM 立即扣料入库，记账原料→存货', () => {
+    const s = E.newGame(1)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    E.enterDraw(s)
+    E.enterOperate(s)
+    // 备料：低端 BOM 包材×2 + 树脂×1，产 5 件需 10 包材 + 5 树脂
+    s.materials.pkg.qty = 10
+    s.materials.pkg.value = 10 * 10
+    s.materials.resin.qty = 5
+    s.materials.resin.value = 5 * 20
+    const before = s.products.low
+    const qtyBefore = before.qty
+    const valBefore = before.value
+    E.setPlan(s, { tier: 'low', qty: 5 })
+    const r = E.confirmProduction(s)
+    expect(r.ok).toBe(true)
+    expect(s.materials.pkg.qty).toBe(0)
+    expect(s.materials.resin.qty).toBe(0)
+    expect(s.plan.qty).toBe(0)
+    // 原料账面 10×10 + 5×20 = 200，costFactor 1 时成品入库同额
+    expect(before.qty).toBe(qtyBefore + 5)
+    expect(before.value - valBefore).toBe(200)
+    // 部门账务出现「原料出库 → 存货入库」两笔
+    const make = s.monthLedger.filter((l) => l.dept === 'make')
+    expect(make.filter((l) => l.item.includes('原料出库 包材'))).toHaveLength(1)
+    expect(make.filter((l) => l.item.includes('原料出库 树脂'))).toHaveLength(1)
+    expect(make.filter((l) => l.item.includes('存货入库 标准品'))).toHaveLength(1)
+    // 已全部生产完：再确认提示无剩余量
+    const r2 = E.confirmProduction(s)
+    expect(r2.ok).toBe(false)
+  })
+
+  it('采购记账：借库存贷现金，金额与现金扣减、库存账面勾稽', () => {
+    const s = E.newGame(1)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    s.monthMods = {} // 排除即时事件修饰，保证价格/需求确定
+    E.enterDraw(s)
+    E.enterOperate(s)
+    const cashBefore = s.cash
+    const valBefore = s.materials.pkg.value
+    const r = E.buyMaterial(s, 'pkg', 'mid')
+    expect(r.ok).toBe(true)
+    const cashPaid = cashBefore - s.cash
+    expect(cashPaid).toBeGreaterThan(0)
+    // 库存账面增加额 = 现金实付（移动加权平均入库）
+    expect(s.materials.pkg.value - valBefore).toBe(cashPaid)
+    // 本月账务出现采购行：借 库存 包材 / 贷 现金，金额与实付严格相等
+    const entry = s.monthLedger.find((l) => l.dept === 'buy' && l.item.startsWith('采购 包材'))
+    expect(entry).toBeTruthy()
+    expect(entry!.debit).toBe('库存 包材')
+    expect(entry!.credit).toBe('现金')
+    expect(entry!.debitAmt).toBe(cashPaid)
+    expect(entry!.creditAmt).toBe(cashPaid)
+  })
+
+  it('月末结算：生产与销售记账与损益表勾稽', () => {
+    const s = E.newGame(7)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    s.monthMods = {} // 排除即时事件修饰，保证需求/价格确定
+    E.enterDraw(s)
+    E.enterOperate(s)
+    // 备料：低端 BOM 包材×2 + 树脂×1，产 4 件需 8 包材 + 4 树脂
+    s.materials.pkg.qty = 8
+    s.materials.pkg.value = 80
+    s.materials.resin.qty = 4
+    s.materials.resin.value = 80
+    // 成品库存 5 件（供现货销售）
+    s.products.low.qty = 5
+    s.products.low.value = 5 * 40
+    // 不点确认，产量留给月末结算路径
+    E.setPlan(s, { tier: 'low', qty: 4 })
+    const rep = E.settleMonth(s)
+    const r2 = (n: number) => Math.round(n * 10000) / 10000
+    // 生产记账：月末生产路径同样记 出库/入库，且方向为 借 制造费用 / 贷 库存
+    const outRows = s.monthLedger.filter((l) => l.dept === 'make' && l.item.startsWith('原料出库'))
+    expect(outRows.length).toBe(2)
+    for (const l of outRows) {
+      expect(l.debit).toBe('制造费用')
+      expect(l.credit).toMatch(/^库存 /)
+    }
+    // 出库合计 = 原料账面减记（8×10 + 4×20 = 160）
+    expect(outRows.reduce((a, l) => a + l.debitAmt, 0)).toBe(160)
+    const inRow = s.monthLedger.find((l) => l.dept === 'make' && l.item.startsWith('存货入库 标准品'))
+    expect(inRow).toBeTruthy()
+    expect(inRow!.debitAmt).toBe(160)
+    // 销售记账：收入行金额 = 利润表「销售收入」，成本行合计 = 利润表「销售成本」
+    const sellRows = s.monthLedger.filter((l) => l.dept === 'sell')
+    const revRows = sellRows.filter((l) => l.item.startsWith('销售收入'))
+    const cogsRows = sellRows.filter((l) => l.item.startsWith('销售成本'))
+    expect(revRows.length).toBe(1)
+    expect(revRows[0].debit).toBe('现金')
+    expect(revRows[0].credit).toBe('销售收入')
+    expect(revRows[0].debitAmt).toBe(rep.ledger.revenue)
+    expect(r2(cogsRows.reduce((a, l) => a + l.debitAmt, 0))).toBe(r2(rep.ledger.cogs))
+    // 存货科目勾稽：期初 + 生产入库 − 销售结转 = 期末成品账面
+    const prodValEnd = s.products.low.value
+    expect(r2(200 + 160 - cogsRows.reduce((a, l) => a + l.debitAmt, 0))).toBe(r2(prodValEnd))
+  })
+
+  it('长期协议到货记账：借库存贷现金，与实付金额勾稽', () => {
+    const s = E.newGame(13)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    s.monthMods = {} // 排除即时事件修饰，保证协议锁价与现金变动确定
+    E.enterDraw(s)
+    E.enterOperate(s)
+    E.signAgreement(s, 'pkg', 3, true) // free：不占名额/AP/现金
+    const cashBefore = s.cash
+    const rep = E.settleMonth(s)
+    const ag = rep.autoPurchase.find((a) => a.from.startsWith('长期协议'))
+    expect(ag).toBeTruthy()
+    expect(ag!.total).toBeGreaterThan(0)
+    // 本月无生产无销售无薪酬，现金变动全部来自协议到货
+    expect(cashBefore - s.cash).toBe(ag!.total)
+    const entry = s.monthLedger.find((l) => l.dept === 'buy' && l.item.startsWith('协议到货'))
+    expect(entry).toBeTruthy()
+    expect(entry!.debit).toBe(`库存 ${ag!.name}`)
+    expect(entry!.credit).toBe('现金')
+    expect(entry!.debitAmt).toBe(ag!.total)
+    expect(s.materials[ag!.id].value).toBe(ag!.total)
+  })
 })

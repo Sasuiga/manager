@@ -1,6 +1,7 @@
 import {
   BOMS,
   CARD_BY_ID,
+  MATERIAL_BY_ID,
   CARDS,
   DEPT_NAMES,
   EQUIPMENT_SHOP,
@@ -523,6 +524,23 @@ export function buyMaterial(state: GameState, materialId: string, lot: LotSize):
   state.lotsUsed += 1
   mat.chosenLot = lot
   const added = addMaterial(state, materialId, qty, unit, state.monthFlags.includes('noCap'))
+  if (added > 0) {
+    const name = nameOf(materialId)
+    // 采购入库记账：借 库存 / 贷 现金。金额 = 实付现金（受仓库上限截断后的入库量 × 单价），
+    // 与库存账面价值增加额、现金扣减额三者严格相等，供生产领料/销售成本逐层勾稽。
+    state.monthLedger.push({
+      dept: 'buy',
+      item: `采购 ${name} ${lotLabel(lot)} ×${added}`,
+      debit: `库存 ${name}`,
+      credit: '现金',
+      debitAmt: added * unit,
+      creditAmt: added * unit,
+      detail: [
+        `${added} 件 × ${unit / 10}w = ${((added * unit) / 10).toFixed(1)}w`,
+        '现金实付全额转入库存（移动加权平均计价），与生产领料出库勾稽',
+      ],
+    })
+  }
   pushLog(state, 'action', `采购 ${nameOf(materialId)} · ${lotLabel(lot)}`, [
     `${added} 单位 × ${unit / 10}w = ${((added * unit) / 10).toFixed(1)}w`,
   ])
@@ -588,6 +606,21 @@ export function buyFromTrader(state: GameState, materialId: string, qty: number,
   if (state.flags[`trader:${materialId}`]) return fail('该品种本月已采购')
   state.flags[`trader:${materialId}`] = 1
   const added = addMaterial(state, materialId, qty, price, false)
+  if (added > 0) {
+    const name = nameOf(materialId)
+    state.monthLedger.push({
+      dept: 'buy',
+      item: `贸易商采购 ${name} ×${added}`,
+      debit: `库存 ${name}`,
+      credit: '现金',
+      debitAmt: added * price,
+      creditAmt: added * price,
+      detail: [
+        `${added} 件 × ${price / 10}w（贸易商小批，价格 +1 档）`,
+        '现金实付全额转入库存（移动加权平均计价），不占本月采购档数',
+      ],
+    })
+  }
   pushLog(state, 'action', `贸易商采购 ${nameOf(materialId)}`, [`${added} 单位 × ${price / 10}w`])
   return { ok: true, msg: `入库 ${added} 单位` }
 }
@@ -696,6 +729,105 @@ export function maxProducible(state: GameState, tier: Tier): number {
     max = Math.min(max, Math.floor(avail / per))
   }
   return Math.max(0, max)
+}
+
+/** 各层 BOM 可产上限（受产能与原料双重限制），供 UI 分配面板用。 */
+export function maxProducibleByTier(state: GameState): Record<Tier, number> {
+  const out = { low: 0, mid: 0, high: 0, special: 0 }
+  for (const t of TIERS) if (state.products[t].built) out[t] = maxProducible(state, t)
+  return out
+}
+
+/**
+ * 按 BOM 领料出库（移动加权平均）并同步记生产账务，返回本批原料成本。
+ *
+ * 确认生产（confirmProduction）与月末结算（§1 生产段）共用同一实现，
+ * 保证两条生产路径的扣减与记账口径完全一致：
+ *   领料出库：借 制造费用 / 贷 库存 X —— 库存减记额与账面价严格相等；
+ *   与采购入库（借 库存 X / 贷 现金）同一库存科目，借方合计 − 贷方合计 = 期末原料存货。
+ */
+export function issueMaterials(state: GameState, tier: Tier, qty: number, matSave: number): Money {
+  const bom = BOMS[tier]
+  let materialCost = 0
+  for (const [id, need] of Object.entries(bom.recipe)) {
+    const per = Math.max(1, need - matSave)
+    const n = per * qty
+    const mat = state.materials[id]
+    /** 出库按账面单价等比例结转，与入库同一份 materialCost，资产负债表恒等式不乱。 */
+    const unitValue = mat.qty > 0 ? mat.value / mat.qty : 0
+    const cost = unitValue * n
+    mat.value -= cost
+    mat.qty -= n
+    materialCost += cost
+    const name = MATERIAL_BY_ID[id]?.name ?? id
+    state.monthLedger.push({
+      dept: 'make',
+      item: `原料出库 ${name}`,
+      debit: '制造费用',
+      credit: `库存 ${name}`,
+      debitAmt: Math.round(cost),
+      creditAmt: 0,
+      detail: [
+        `按账面单价 ${unitValue > 0 ? (unitValue / 10).toFixed(2) : '0'}w × ${n} 件`,
+        '库存减记全额转入制造费用（移动加权平均），与采购入库同科目勾稽',
+      ],
+    })
+  }
+  return materialCost
+}
+
+/** 成品入库的生产账务（确认生产与月末结算共用）。 */
+export function postProductionInbound(
+  state: GameState,
+  tier: Tier,
+  produced: number,
+  bonus: number,
+  batchCost: Money,
+  unitCostIn: number,
+) {
+  const bom = BOMS[tier]
+  state.monthLedger.push({
+    dept: 'make',
+    item: `存货入库 ${bom.name} ×${produced + bonus}`,
+    debit: `存货 ${bom.name}`,
+    credit: '制造费用',
+    debitAmt: Math.round(batchCost + bonus * unitCostIn),
+    creditAmt: 0,
+    detail: [
+      `成品按本批单位成本入账，制造费用结转后余额为零`,
+      '出库成本 × 成本系数；降本差异计入生产费用，资产侧不漂移',
+    ],
+  })
+}
+
+/**
+ * 确认生产安排：立即按 BOM 扣料、成品入库，并把「原料→存货」记账到本月生产账务。
+ * 与月末结算（§1 生产段）同口径：账面价等比例结转 + costFactor 折价入账，
+ * 因此之后无论再结算几次，同一批货的成本都不会重复进利润表（结算时 plan.qty 已清零）。
+ */
+export function confirmProduction(state: GameState): ActionResult {
+  const tier = state.plan.tier
+  const want = state.plan.qty
+  if (!tier || want <= 0) return fail('尚未安排产量')
+  if (!state.products[tier].built) return fail('该层级未解锁')
+  const qty = Math.min(want, maxProducible(state, tier))
+  if (qty <= 0) return fail('原料不足，先采购')
+  const d = derive(state)
+  const bom = BOMS[tier]
+  const materialCost = issueMaterials(state, tier, qty, d.matSave)
+  /** 【流水线】成就（生产 5 人）：每 5 件额外入库 1 件，按本批单位成本计价入账。 */
+  const bonus = state.depts.make.staff >= 5 ? Math.floor(qty / 5) : 0
+  const batchCost = Math.round(materialCost * d.costFactor)
+  const unitCostIn = qty > 0 ? batchCost / qty : 0
+  const p = state.products[tier]
+  p.value += batchCost + bonus * unitCostIn
+  p.qty += qty + bonus
+  p.avgCost = p.qty > 0 ? Math.round(p.value / p.qty) : 0
+  postProductionInbound(state, tier, qty, bonus, batchCost, unitCostIn)
+  if (bonus > 0) pushLog(state, 'action', `流水线效应：${bom.name} 额外入库 ${bonus} 件`)
+  /** 已生产完的部分从计划中扣除，月末结算不再重复生产。 */
+  state.plan.qty = Math.max(0, want - qty)
+  return { ok: true, msg: `${bom.name} ${qty + bonus} 件已入库` }
 }
 
 export function toggleOvertime(state: GameState): ActionResult {
