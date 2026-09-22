@@ -1,6 +1,6 @@
 import { useState, Fragment } from 'react'
 import * as E from '../../core/engine'
-import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, EVENTS } from '../../data/game'
+import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS } from '../../data/game'
 import type { CardCtx } from '../../data/game'
 import type { Tier } from '../../core/types'
 import { Icon, type IconName } from '../icons'
@@ -361,6 +361,7 @@ function BuyPage({ g }: { g: Game }) {
   const d = E.derive(gs)
   const mats = E.materialViews(gs)
   const [buy, setBuy] = useState<{ id: string; lot: E.LotSize } | null>(null)
+  const [pickLot, setPickLot] = useState<string | null>(null)
   const [trader, setTrader] = useState(false)
   const [agreement, setAgreement] = useState(false)
 
@@ -390,36 +391,27 @@ function BuyPage({ g }: { g: Game }) {
             </span>
           </div>
           <div className="title-rule" />
-          <div className="hstack-between">
-            <span className="xs faint">
-              供给 <span className="mono">{m.supply}</span>
+          <div className="hstack-between" style={{ marginBottom: 'var(--s2)' }}>
+            <span className="xs">
+              <span className="faint">供给 </span>
+              <span className="mono">{m.supply}</span>
             </span>
-            <span className={`xs mono ${tierClass(m.tierShift)}`}>价格：{tierName(m.tierShift)}</span>
+            <span className={`xs mono ${tierClass(m.tierShift)}`}>
+              价格水平 {tierName(m.tierShift)}
+            </span>
           </div>
 
-          <div className="lot-row">
-            {(['small', 'mid', 'large'] as E.LotSize[]).map((lot) => {
-              const qty = E.lotQty(gs, m.id, lot)
-              const price = E.lotPrice(gs, m.id, lot)
-              const total = qty * price
-              const chosen = m.chosenLot === lot
-              const disabled =
-                m.chosenLot !== null || qty <= 0 || gs.lotsUsed >= d.buyLots || total > gs.cash
-              return (
-                <button
-                  key={lot}
-                  className={`btn btn-mini${chosen ? ' on' : ''}`}
-                  disabled={disabled}
-                  onClick={() => setBuy({ id: m.id, lot })}
-                >
-                  <span className="btn-main xs">{E.lotLabel(lot)}</span>
-                  <span className="btn-sub xs">
-                    {qty} 件 · {wan(price)}/件 = {wan(total)}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+          <button
+            className="btn btn-nav"
+            style={{ width: '100%', alignItems: 'center' }}
+            disabled={m.supply <= 0 || m.chosenLot !== null || gs.lotsUsed >= d.buyLots}
+            onClick={() => setPickLot(m.id)}
+          >
+            <span className="btn-main xs">
+              {m.chosenLot ? `已选 ${E.lotLabel(m.chosenLot)}` : '采购'}
+            </span>
+            <Icon name="chevron" size={13} />
+          </button>
         </div>
       ))}
 
@@ -443,6 +435,38 @@ function BuyPage({ g }: { g: Game }) {
           </button>
         </div>
       </div>
+
+      {pickLot ? (
+        <Sheet title="选择采购档位" sub={mats.find((x) => x.id === pickLot)?.name} onClose={() => setPickLot(null)}>
+          <div className="stack">
+            {(['small', 'mid', 'large'] as E.LotSize[]).map((lot) => {
+              const qty = E.lotQty(gs, pickLot, lot)
+              const price = E.lotPrice(gs, pickLot, lot)
+              const total = qty * price
+              const chosen = mats.find((x) => x.id === pickLot)?.chosenLot === lot
+              const disabled =
+                mats.find((x) => x.id === pickLot)?.chosenLot !== null ||
+                qty <= 0 ||
+                gs.lotsUsed >= d.buyLots ||
+                total > gs.cash
+              return (
+                <button
+                  key={lot}
+                  className={`btn btn-mini${chosen ? ' on' : ''}`}
+                  disabled={disabled}
+                  onClick={() => {
+                    setBuy({ id: pickLot, lot })
+                    setPickLot(null)
+                  }}
+                >
+                  <span className="btn-main xs">{E.lotLabel(lot)}</span>
+                  <span className="btn-sub xs">{qty} 件 · {wan(price)}/件 = {wan(total)}</span>
+                </button>
+              )
+            })}
+          </div>
+        </Sheet>
+      ) : null}
 
       {buy ? (
         <BuyConfirmSheet
@@ -468,8 +492,6 @@ function BuyConfirmSheet({
 }) {
   const gs = g.s
   const m = E.materialViews(gs).find((x) => x.id === data.id)!
-  const d = E.derive(gs)
-  const dm = d.materials[data.id]
   const qty = E.lotQty(gs, data.id, data.lot)
   const price = E.lotPrice(gs, data.id, data.lot)
   const total = qty * price
@@ -497,14 +519,12 @@ function BuyConfirmSheet({
       <div className="card">
         <div className="section-label">本次采购</div>
         <Row k="采购量" v={`${qty} 件`} />
-        <button
-          className="btn btn-nav"
-          onClick={() => setShowPriceSrc(true)}
-          style={{ width: '100%', alignItems: 'center', justifyContent: 'space-between' }}
-        >
-          <span className="btn-main xs">单价 {wan(price)}/件</span>
-          <span className="xs faint">怎么算的 ›</span>
-        </button>
+                <Row k="单价" v={wan(price) + '/件'} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--s2)' }}>
+          <button onClick={() => setShowPriceSrc(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.8em', display: 'inline-flex', alignItems: 'center', gap: 2, padding: 0 }}>
+            价格拆解 <Icon name="chevron" size={10} />
+          </button>
+        </div>
         <Row k="总价" v={wan(total)} bold />
       </div>
 
@@ -527,7 +547,7 @@ function BuyConfirmSheet({
         >
           <div className="card">
             <div className="section-label">价格拆解</div>
-            <Row k="基础价" v={`${wan(dm?.price ?? m.price)}/件`} />
+            <Row k="基础价" v={`${wan(MATERIAL_BY_ID[m.id]?.basePrice ?? m.price)}/件`} />
             {(() => {
               const climateShift = CLIMATE_MATERIAL[gs.climate].tierShift[m.id] ?? 0
               const eventShift = gs.monthMods.allTierShift ?? 0
@@ -554,9 +574,25 @@ function BuyConfirmSheet({
               }
               return (
                 <>
-                  <Row k="气候修正" v={`${climateShift > 0 ? '+' : ''}${climateShift} 档`} />
-                  {eventShift !== 0 ? <Row k="事件修正" v={`${eventShift > 0 ? '+' : ''}${eventShift} 档${eventNames.length ? `（${eventNames.join('、')}）` : ''}`} /> : null}
-                  {cardShift !== 0 ? <Row k="卡牌修正" v={`${cardShift > 0 ? '+' : ''}${cardShift} 档${cardNames.length ? `（${cardNames.join('、')}）` : ''}`} /> : null}
+                  <Row k={`气候修正（${CLIMATE_NAMES[gs.climate]}）`} v={`${climateShift > 0 ? '+' : ''}${climateShift} 档`} />
+                  {eventShift !== 0 ? (
+                    <div className="row">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span className="row-key">事件修正</span>
+                        {eventNames.length > 0 ? <span className="xs faint">{eventNames.join('、')}</span> : null}
+                      </div>
+                      <span className="row-val">{eventShift > 0 ? '+' : ''}{eventShift} 档</span>
+                    </div>
+                  ) : null}
+                  {cardShift !== 0 ? (
+                    <div className="row">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span className="row-key">卡牌修正</span>
+                        {cardNames.length > 0 ? <span className="xs faint">{cardNames.join('、')}</span> : null}
+                      </div>
+                      <span className="row-val">{cardShift > 0 ? '+' : ''}{cardShift} 档</span>
+                    </div>
+                  ) : null}
                   {staffShift !== 0 ? <Row k="采购人数" v={`${staffShift} 档`} /> : null}
                   <Row k="市场基准价" v={`${wan(m.price)}/件`} />
                   <Row k="批量修正" v={`${lotShift > 0 ? '+' : ''}${lotShift} 档`} />
