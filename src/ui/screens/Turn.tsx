@@ -1,6 +1,6 @@
 import { useState, Fragment } from 'react'
 import * as E from '../../core/engine'
-import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID } from '../../data/game'
+import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, EVENTS } from '../../data/game'
 import type { CardCtx } from '../../data/game'
 import type { Tier } from '../../core/types'
 import { Icon, type IconName } from '../icons'
@@ -360,7 +360,7 @@ function BuyPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
   const mats = E.materialViews(gs)
-  const [detail, setDetail] = useState<string | null>(null)
+  const [buy, setBuy] = useState<{ id: string; lot: E.LotSize } | null>(null)
   const [trader, setTrader] = useState(false)
   const [agreement, setAgreement] = useState(false)
 
@@ -410,28 +410,16 @@ function BuyPage({ g }: { g: Game }) {
                   key={lot}
                   className={`btn btn-mini${chosen ? ' on' : ''}`}
                   disabled={disabled}
-                  onClick={() => g.act((st) => E.buyMaterial(st, m.id, lot))}
+                  onClick={() => setBuy({ id: m.id, lot })}
                 >
                   <span className="btn-main xs">{E.lotLabel(lot)}</span>
                   <span className="btn-sub xs">
-                    {qty} 件 · {wan(total)}
+                    {qty} 件 · {wan(price)}/件 = {wan(total)}
                   </span>
                 </button>
               )
             })}
           </div>
-
-          <div className="hint">
-            账面单价 {wan(m.avgCost)}/件
-            {m.chosenLot ? ' · 本月已选档' : ''}
-          </div>
-
-          {m.supply > 0 ? (
-            <button className="btn btn-nav" style={{ marginTop: 'var(--s2)' }} onClick={() => setDetail(m.id)}>
-              <span className="btn-main xs">查看明细</span>
-              <Icon name="chevron" size={13} />
-            </button>
-          ) : null}
         </div>
       ))}
 
@@ -456,46 +444,129 @@ function BuyPage({ g }: { g: Game }) {
         </div>
       </div>
 
-      {detail ? <MaterialSheet g={g} id={detail} onClose={() => setDetail(null)} /> : null}
+      {buy ? (
+        <BuyConfirmSheet
+          g={g}
+          data={{ id: buy.id, lot: buy.lot }}
+          onClose={() => setBuy(null)}
+        />
+      ) : null}
       {trader ? <TraderSheet g={g} onClose={() => setTrader(false)} /> : null}
       {agreement ? <AgreementSheet g={g} onClose={() => setAgreement(false)} /> : null}
     </>
   )
 }
 
-function MaterialSheet({ g, id, onClose }: { g: Game; id: string; onClose: () => void }) {
+function BuyConfirmSheet({
+  g,
+  data,
+  onClose,
+}: {
+  g: Game
+  data: { id: string; lot: E.LotSize }
+  onClose: () => void
+}) {
   const gs = g.s
-  const m = E.materialViews(gs).find((x) => x.id === id)!
+  const m = E.materialViews(gs).find((x) => x.id === data.id)!
   const d = E.derive(gs)
-  const dm = d.materials[id]
+  const dm = d.materials[data.id]
+  const qty = E.lotQty(gs, data.id, data.lot)
+  const price = E.lotPrice(gs, data.id, data.lot)
+  const total = qty * price
+  const [showPriceSrc, setShowPriceSrc] = useState(false)
 
   return (
-    <Sheet title={m.name} sub={`供给 ${m.supply} · 库存 ${m.qty}/${m.cap}`} onClose={onClose}>
+    <Sheet
+      title={`${m.name} · ${E.lotLabel(data.lot)}`}
+      onClose={onClose}
+      footer={
+        <button
+          className="btn btn-nav"
+          disabled={qty <= 0 || total > gs.cash}
+          onClick={() => {
+            g.act((st) => E.buyMaterial(st, data.id, data.lot))
+            onClose()
+          }}
+        >
+          <span className="btn-main">
+            {qty <= 0 ? '无供给' : total > gs.cash ? '现金不足' : '确认采购'}
+          </span>
+        </button>
+      }
+    >
       <div className="card">
-        <Row k="市场供给" v={`${m.supply} 件`} />
-        <Row k="价格档位" v={tierName(m.tierShift)} cls={tierClass(m.tierShift)} />
-        <Row k="当前单价" v={`${wan(m.price)}/件`} />
-        <Row k="库存上限" v={`${m.cap}`} />
-        <Row k="账面单价" v={`${wan(m.avgCost)}/件`} />
-        <Row k="账面价值" v={wan(m.avgCost * m.qty)} />
+        <div className="section-label">本次采购</div>
+        <Row k="采购量" v={`${qty} 件`} />
+        <button
+          className="btn btn-nav"
+          onClick={() => setShowPriceSrc(true)}
+          style={{ width: '100%', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <span className="btn-main xs">单价 {wan(price)}/件</span>
+          <span className="xs faint">怎么算的 ›</span>
+        </button>
+        <Row k="总价" v={wan(total)} bold />
       </div>
 
       <div className="card">
-        <div className="section-label">价格来源</div>
-        <Row k="基础价" v={wan(dm?.price ?? m.price)} />
-        <Row k="气候修正" v={tierName(m.tierShift)} cls={tierClass(m.tierShift)} />
-        <Row k="采购人数加成" v={`${gs.depts.buy.staff} 人`} />
-        {m.developed > 0 ? <Row k="供应商开发" v={`基础供给 +${m.developed}`} /> : null}
+        <div className="section-label">当前情况</div>
+        <Row k="供给" v={`${m.supply} 件`} />
+        <Row k="库存" v={`${m.qty}/${m.cap}`} />
+        {m.qty > 0 ? (
+          <>
+            <Row k="账面单价" v={`${wan(m.avgCost)}/件`} />
+            <Row k="账面价值" v={wan(m.avgCost * m.qty)} />
+          </>
+        ) : null}
       </div>
 
-      <div className="card">
-        <div className="section-label">各档报价</div>
-        {(['small', 'mid', 'large'] as E.LotSize[]).map((lot) => {
-          const qty = E.lotQty(gs, id, lot)
-          const price = E.lotPrice(gs, id, lot)
-          return <Row key={lot} k={E.lotLabel(lot)} v={`${qty} 件 × ${wan(price)} = ${wan(qty * price)}`} />
-        })}
-      </div>
+      {showPriceSrc ? (
+        <Sheet
+          title={`${m.name} ${E.lotLabel(data.lot)} 单价 ${wan(price)}/件`}
+          onClose={() => setShowPriceSrc(false)}
+        >
+          <div className="card">
+            <div className="section-label">价格拆解</div>
+            <Row k="基础价" v={`${wan(dm?.price ?? m.price)}/件`} />
+            {(() => {
+              const climateShift = CLIMATE_MATERIAL[gs.climate].tierShift[m.id] ?? 0
+              const eventShift = gs.monthMods.allTierShift ?? 0
+              const cardShift = E.buyCardShift(gs)
+              const staffShift = gs.depts.buy.staff >= 4 ? -1 : 0
+              const lotShift = data.lot === 'small' ? 1 : data.lot === 'large' ? -1 : 0
+              // 查找事件名称
+              const eventNames: string[] = []
+              if (eventShift !== 0) {
+                for (const ev of EVENTS) {
+                  if (ev.mods?.allTierShift === eventShift) {
+                    eventNames.push(ev.name)
+                  }
+                }
+              }
+              // 查找卡牌名称
+              const cardNames: string[] = []
+              for (const c of gs.playedThisMonth) {
+                const def = CARD_BY_ID[c.defId]
+                if (!def || def.kind !== 'buy') continue
+                const ctx = E.cardCtx(gs, c.empowered)
+                const e = c.empowered && def.strong ? def.strong(ctx) : def.base(ctx)
+                if (e.buyTierShift) cardNames.push(`${def.name}(${e.buyTierShift > 0 ? '+' : ''}${e.buyTierShift})`)
+              }
+              return (
+                <>
+                  <Row k="气候修正" v={`${climateShift > 0 ? '+' : ''}${climateShift} 档`} />
+                  {eventShift !== 0 ? <Row k="事件修正" v={`${eventShift > 0 ? '+' : ''}${eventShift} 档${eventNames.length ? `（${eventNames.join('、')}）` : ''}`} /> : null}
+                  {cardShift !== 0 ? <Row k="卡牌修正" v={`${cardShift > 0 ? '+' : ''}${cardShift} 档${cardNames.length ? `（${cardNames.join('、')}）` : ''}`} /> : null}
+                  {staffShift !== 0 ? <Row k="采购人数" v={`${staffShift} 档`} /> : null}
+                  <Row k="市场基准价" v={`${wan(m.price)}/件`} />
+                  <Row k="批量修正" v={`${lotShift > 0 ? '+' : ''}${lotShift} 档`} />
+                  <Row k="最终单价" v={`${wan(price)}/件`} bold />
+                </>
+              )
+            })()}
+          </div>
+        </Sheet>
+      ) : null}
 
       {m.isNew ? (
         <div className="card">
@@ -506,7 +577,7 @@ function MaterialSheet({ g, id, onClose }: { g: Game; id: string; onClose: () =>
             <button
               className="btn btn-mini"
               disabled={m.developed >= 6 || gs.ap < 1 || gs.cash < 30}
-              onClick={() => g.act((st) => E.developSupplier(st, id))}
+              onClick={() => g.act((st) => E.developSupplier(st, data.id))}
             >
               <span className="btn-main">开发供应商</span>
               <span className="btn-sub">1 AP + 3w · 供给 +2</span>

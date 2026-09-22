@@ -476,9 +476,10 @@ export function lotPrice(state: GameState, materialId: string, lot: LotSize): Mo
   const d = derive(state)
   const base = d.materials[materialId]
   if (!base) return 0
+  // 基准价(中批) = base.price,已包含气候/事件修正后的档位。
+  // 小批: 基准价 +1 档;大批: 基准价 -1 档。卡牌修正叠加在基准档位上。
   const shift = lot === 'small' ? 1 : lot === 'large' ? -1 : 0
-  const totalShift = base.tierShift + shift + buyCardShift(state)
-  return priceAtShift(materialId, totalShift)
+  return priceAtShift(materialId, base.tierShift + shift + buyCardShift(state))
 }
 
 /** 卡牌带来的额外采购价格档位（批量采购、清仓等）。 */
@@ -585,7 +586,7 @@ function nameOf(id: string) {
 }
 
 export function lotLabel(lot: LotSize) {
-  return lot === 'small' ? '小批' : lot === 'mid' ? '中批' : '大批'
+  return lot === 'small' ? '小批采购' : lot === 'mid' ? '中批采购' : '大批采购'
 }
 
 /** 贸易商：每月随机供应一种原料的小批，价格 +1 档，不占档数。 */

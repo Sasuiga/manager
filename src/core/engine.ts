@@ -67,6 +67,7 @@ export {
   pushLog,
   cardCtx,
   addMaterial,
+  buyCardShift,
 } from './actions'
 
 /** 事件池构建与抽取（§3.2）：当季 8 张 + 相邻气候各 2 张 + 其他各 1 张。 */
