@@ -153,7 +153,6 @@ function BalanceCard({ bal }: { bal: E.BalanceSheet }) {
         <Row k="现金" v={wan(bal.cash)} cls={bal.cash < 0 ? 'red' : ''} />
         <Row k="原料存货" v={wan(bal.inventoryMaterial)} />
         <Row k="成品存货" v={wan(bal.inventoryProduct)} />
-        <Row k="待摊招聘费" v={wan(bal.prepaid) || '—'} />
         <Row
           k={`设备净值（原值 ${wan(bal.equipmentGross)}）`}
           v={wan(net)}
@@ -247,8 +246,9 @@ function DrillSheet({ name, led, onClose }: { name: string; led: E.Ledger; onClo
     case '管理费用':
       lines.push(['运营人员薪酬', wan(p['运营人员薪酬'] ?? 0)])
       lines.push(['采购人员薪酬', wan(p['采购人员薪酬'] ?? 0)])
-      lines.push(['招聘费摊销', wan(p['招聘费摊销'] ?? 0)])
-      note = '招聘费先资本化为待摊费用，按 6 个月摊销。'
+      lines.push(['招聘费（净）', wan(p['招聘费'] ?? 0)])
+      lines.push(['提案费用', wan(p['提案费用'] ?? 0)])
+      note = '招聘费与提案（卡牌）实施费当期费用化进管理费用；裁员返还从招聘费中抵减。'
       break
     case '研发费用':
       lines.push(['研发人员薪酬', wan(p['研发人员薪酬'] ?? 0)])
@@ -257,8 +257,7 @@ function DrillSheet({ name, led, onClose }: { name: string; led: E.Ledger; onClo
     case '财务费用':
       lines.push(['借款利息', wan(p['借款利息'] ?? 0)])
       lines.push(['事件与杂项支出', wan(p['事件与杂项支出'] ?? 0)])
-      lines.push(['提案费用', wan(p['提案与事件费用'] ?? 0)])
-      note = '事件与实施费用在支付当时已扣现金，结算时只确认费用，不重复扣款。'
+      note = '事件开销、协议手续费等在支付当月确认，结算不重复扣现金；提案（卡牌）费已计入管理费用。'
       break
   }
 

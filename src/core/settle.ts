@@ -338,36 +338,37 @@ export function settle(state: GameState): SettleReport {
   /**
    * 打牌时支付的现金（技术引进 3w 等）。
    *
-   * 这笔钱在 playCard 里已扣现金、并计入 miscExpense，
-   * 最终通过 financeExpense 确认为当期费用——所以这里只作报表拆分，
-   * 绝不能再单独加进各费用科目，否则同一笔牌费会被计三次。
+   * 这笔钱在 playCard 里已扣现金、并计入 miscExpense；
+   * 部门账务按「提案费用：借 管理费用 / 贷 现金」入账，
+   * 因此损益侧也从 misc 里拆出、计入管理费用，与部门账务同科目。
    */
   const paidCardBy = (kind: Dept) =>
     state.playedThisMonth
       .filter((c) => CARD_BY_ID[c.defId]?.kind === kind)
       .reduce((a, c) => a + (CARD_BY_ID[c.defId]?.cost ?? 0), 0)
+  const cardFees = paidCardBy('make') + paidCardBy('sell') + paidCardBy('buy') + paidCardBy('ops') + paidCardBy('rnd')
 
   /**
-   * 本月发生的杂项支出（事件开销、打牌费用、协议手续费、供应商开发等）。
-   * 现金在发生时已付出，这里统一确认为当期营业外支出，
+   * 本月发生的杂项支出（事件开销、协议手续费、供应商开发等）。
+   * 现金在发生时已付出，这里统一确认为当期费用，
    * 使「利润」与「现金」始终对得上。
    */
   const misc = state.miscExpense
 
+  /** 招聘费净额（招聘实付 − 裁员返还）：当期费用化进管理费用 */
+  const hireFee = Object.values(state.hireFeeBy).reduce((a, v) => a + v, 0)
+
   const mfgExpense = salaryBy.make + depreciation + overtimeCost + prodVariance
   const sellExpense = salaryBy.sell
-  const adminExpense = salaryBy.ops + salaryBy.buy
+  const adminExpense = salaryBy.ops + salaryBy.buy + hireFee + cardFees
   const rndExpense = salaryBy.rnd + projectCost
-  const financeExpense = d.interest + misc
+  const financeExpense = d.interest + (misc - cardFees)
   const otherIncome = state.miscIncome
 
   /**
    * 现金流出：只包含真正动用现金的部分。
-   * 折旧、生产领料、招聘费摊销都是非现金项目。
-   *
-   * 注意 financeExpense 里含 misc（事件开销、打牌费用、协议手续费等），
-   * 这部分现金在发生当时就已扣除，此处只能再付其中的利息，
-   * 否则同一笔钱会被扣两次。
+   * 折旧、生产领料都是非现金项目；招聘费/打牌费在发生时已扣现金，
+   * 结算只确认费用，不再重复扣款。
    */
   const cashOut = salaryBy.ops + salaryBy.buy + salaryBy.make + salaryBy.sell + salaryBy.rnd + projectCost + d.interest
   state.cash -= cashOut
@@ -412,19 +413,21 @@ export function settle(state: GameState): SettleReport {
       '销售人员薪酬': salaryBy.sell,
       '运营人员薪酬': salaryBy.ops,
       '采购人员薪酬': salaryBy.buy,
+      '招聘费': hireFee,
+      '提案费用': cardFees,
       '研发人员薪酬': salaryBy.rnd,
       '研发项目投入': Math.max(0, d.rndCostTotal),
       '借款利息': d.interest,
-      '事件与杂项支出': misc,
+      '事件与杂项支出': misc - cardFees,
       '营业外收入': otherIncome,
       '所得税': tax,
-      '卡牌与事件费用': paidCardBy('make') + paidCardBy('sell') + paidCardBy('buy') + paidCardBy('ops') + paidCardBy('rnd'),
     },
     demandFilled: TIERS.reduce((a, t) => a + filled[t], 0),
     demandTotal,
   }
   state.miscExpense = 0
   state.miscIncome = 0
+  state.hireFeeBy = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
   state.ledgers.push(ledger)
   const balance = balanceSheet(state)
   state.balanceHistory.push(balance)

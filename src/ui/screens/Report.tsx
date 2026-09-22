@@ -127,7 +127,6 @@ export function ReportSheet({ g, onAdvance }: { g: Game; onAdvance: () => void }
           <Row k="现金" v={wan(bal.cash)} cls={bal.cash < 0 ? 'red' : ''} />
           <Row k="原料存货" v={wan(bal.inventoryMaterial)} />
           <Row k="成品存货" v={wan(bal.inventoryProduct)} />
-          <Row k="待摊招聘费" v={wan(bal.prepaid) || '—'} />
           <Row k="设备净值" v={wan(bal.equipmentGross - bal.equipmentAccum)} />
           <Row k="资产合计" v={wan(bal.totalAssets)} bold />
         </div>
@@ -205,7 +204,8 @@ function DrillSheet({
     case '管理费用':
       lines.push(['运营人员薪酬', wan(p['运营人员薪酬'] ?? 0)])
       lines.push(['采购人员薪酬', wan(p['采购人员薪酬'] ?? 0)])
-      lines.push(['招聘费摊销', wan(p['招聘费摊销'] ?? 0)])
+      lines.push(['招聘费（净）', wan(p['招聘费'] ?? 0)])
+      lines.push(['提案费用', wan(p['提案费用'] ?? 0)])
       break
     case '研发费用':
       lines.push(['研发人员薪酬', wan(p['研发人员薪酬'] ?? 0)])
@@ -214,7 +214,6 @@ function DrillSheet({
     case '财务费用':
       lines.push(['借款利息', wan(p['借款利息'] ?? 0)])
       lines.push(['事件与杂项支出', wan(p['事件与杂项支出'] ?? 0)])
-      lines.push(['提案费用', wan(p['提案与事件费用'] ?? 0)])
       break
     default:
       lines.push(['金额', wan(0)])
@@ -228,7 +227,7 @@ function DrillSheet({
         ))}
       </div>
       <div className="hint">
-        事件开销与实施费用在支付当月确认为费用，结算时不再重复扣减现金。
+        事件开销、协议手续费等在支付当月确认，结算不重复扣现金；提案（卡牌）费与招聘费计入管理费用。
       </div>
     </Sheet>
   )

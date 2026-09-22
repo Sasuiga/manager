@@ -32,7 +32,7 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
         lines.push(`修正后 ${wan(per)} / 人（${delta > 0 ? '+' : ''}${wan(delta)}，受 IP / 事件影响）`)
       }
       lines.push(`人数 ${s.depts[dept].staff} 人`)
-      lines.push(`计提额 ${wan(per * s.depts[dept].staff)}`)
+      lines.push(`支付额 ${wan(per * s.depts[dept].staff)}（结算时现金支付，资产负债不挂应付工资）`)
       return lines
     }
     if (r.item.includes('招聘')) {
@@ -56,7 +56,14 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
     }
     if (r.item.includes('加班')) return ['加班费固定 0.5w（需生产 ≥ 3 人）']
     if (r.item.includes('研发')) return [`每个项目每月 ${wan(RND_COST_PER_PROJECT)}`, '本月推进 1 个项目']
-    if (r.item.includes('提案')) return ['提案实施费用合计（含卡牌费用等）']
+    if (r.item.includes('提案')) return ['提案实施费用合计（含卡牌费用），计入管理费用']
+    if (r.item.includes('借款利息')) return ['借款余额 × 月利率，计入财务费用']
+    if (r.item.includes('生产费用结转')) return ['制造费用未转入存货的部分（工资/折旧/加班/降本差异）当期费用化，与损益表「生产费用」一致']
+    if (r.item.includes('流水线入库')) return ['白得产出按本批单位成本计价入库，贷记营业外收入，恒等式不漂移']
+    if (r.item.includes('协议手续费')) return ['签订长期协议费用 1w，计入事件与杂项支出']
+    if (r.item.includes('供应商开发')) return ['开发费 3w 计入事件与杂项支出；基础供给 +2 立即生效']
+    if (r.item.includes('设备购置')) return ['现金资本化为固定资产，不计当期损益；折旧逐月进生产费用']
+    if (r.item.includes('借款')) return ['现金与负债同步增减，净资产不变；利息按月确认进财务费用']
     // 手工记账行的兜底说明（正常路径由 r.detail 提供）
     if (r.item.startsWith('采购') || r.item.includes('贸易商') || r.item.includes('协议到货'))
       return ['现金实付全额转入库存（移动加权平均计价）', '库存增加额 = 现金扣减额，与生产领料出库勾稽']

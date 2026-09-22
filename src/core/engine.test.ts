@@ -529,4 +529,100 @@ describe('引擎', () => {
     expect(entry!.debitAmt).toBe(ag!.total)
     expect(s.materials[ag!.id].value).toBe(ag!.total)
   })
+
+  it('流水线 bonus：资产增加同步贷记营业外收入，恒等式不漂移', () => {
+    const s = E.newGame(1)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    s.monthMods = {}
+    E.enterDraw(s)
+    E.enterOperate(s)
+    s.depts.make.staff = 5
+    s.materials.pkg.qty = 20
+    s.materials.pkg.value = 200
+    s.materials.resin.qty = 10
+    s.materials.resin.value = 200
+    const gapOf = () => {
+      const b = E.balanceSheet(s)
+      return Math.round((b.totalAssets - b.debt - b.equity) * 10000) / 10000
+    }
+    const gapBefore = gapOf()
+    E.setPlan(s, { tier: 'low', qty: 5 })
+    expect(E.confirmProduction(s).ok).toBe(true) // 5 件 → bonus 1 件
+    // bonus 按本批单位成本计入存货（资产 +40），必须同步贷记营业外收入
+    // （miscIncome 在结算 §4 才确认为留存收益，故先验状态、再结算后验恒等式）
+    expect(s.miscIncome).toBe(40)
+    const bonusRow = s.monthLedger.find((l) => l.dept === 'make' && l.item.startsWith('流水线入库'))
+    expect(bonusRow).toBeTruthy()
+    expect(bonusRow!.credit).toBe('营业外收入')
+    E.settleMonth(s)
+    expect(gapOf()).toBe(gapBefore)
+  })
+
+  it('协议手续费当期费用化：签订与结算后恒等式不漂', () => {
+    const s = E.newGame(13)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    s.monthMods = {}
+    E.enterDraw(s)
+    E.enterOperate(s)
+    s.depts.buy.staff = 3
+    const gapOf = () => {
+      const b = E.balanceSheet(s)
+      return Math.round((b.totalAssets - b.debt - b.equity) * 10000) / 10000
+    }
+    const gapBefore = gapOf()
+    expect(E.signAgreement(s, 'pkg', 3).ok).toBe(true) // 非 free：1 AP + 1w
+    // 现金 -10 已付，未结算前恒等式暂时漂 10；结算确认费用后收回
+    const rep = E.settleMonth(s)
+    expect(rep.ledger.parts['事件与杂项支出'] ?? 0).toBeGreaterThanOrEqual(10)
+    expect(gapOf()).toBe(gapBefore)
+  })
+
+  it('招聘费计入管理费用（不再走杂项/财务费用）', () => {
+    const s = E.newGame(1)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    s.monthMods = {}
+    E.enterDraw(s)
+    E.enterOperate(s)
+    const fee = E.hireCost(s, 'buy')
+    expect(fee).toBeGreaterThan(0)
+    expect(E.hire(s, 'buy').ok).toBe(true)
+    // 账务行：借 管理费用 / 贷 现金，金额 = 实际招聘费
+    const row = E.derive(s).deptLedger['buy'].find((l) => l.item === '招聘费')
+    expect(row).toBeTruthy()
+    expect(row!.debit).toBe('管理费用')
+    expect(row!.debitAmt).toBe(fee)
+    const rep = E.settleMonth(s)
+    expect(rep.ledger.parts['招聘费'] ?? 0).toBe(fee)
+    // 招聘费不再走事件与杂项（财务费用）
+    expect(rep.ledger.parts['事件与杂项支出'] ?? 0).toBe(0)
+  })
+
+  it('生产费用结转：制造费用未转存货部分与损益表「生产费用」一致', () => {
+    const s = E.newGame(1)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    s.monthMods = {}
+    E.enterDraw(s)
+    E.enterOperate(s)
+    s.depts.make.staff = 2 // 有工资；无生产 → 降本差异为 0
+    const d = E.derive(s)
+    const rep = E.settleMonth(s)
+    const closing = d.deptLedger['make'].find((l) => l.item === '生产费用结转')
+    expect(closing).toBeTruthy()
+    // 无生产无降本差异：结转额 = 生产工资 + 折旧 + 加班费 = 损益表「生产费用」
+    expect(closing!.debitAmt).toBe(rep.ledger.mfgExpense)
+    expect(closing!.debit).toBe('生产费用')
+    expect(closing!.credit).toBe('制造费用')
+  })
 })

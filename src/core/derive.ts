@@ -27,7 +27,6 @@ import {
   TIERS,
   priceOf,
 } from '../data/game'
-import { hireCost } from './actions'
 import type { CardPlayEffect, Dept, GameState, MonthMods, Tier } from './types'
 
 /**
@@ -409,38 +408,83 @@ export function derive(state: GameState): DerivedTotals {
   }
   for (const dp of DEPT_ORDER) {
     const rows: typeof deptLedger.ops = []
-    // 工资（次月发放，当月计提）
+    // 工资（月末结算现金支付；资产负债无「应付工资」科目，不再挂账）
     if (salaryPer[dp] > 0 && staffCount[dp] > 0) {
       const acc = dp === 'make' ? '制造费用' : dp === 'rnd' ? '研发费用' : '管理费用'
       const per = salaryPer[dp]
       const total = per * staffCount[dp]
-      rows.push({ item: '工资计提', debit: acc, debitAmt: total, credit: '应付工资', creditAmt: total })
+      rows.push({ item: '工资支付', debit: acc, debitAmt: total, credit: '现金', creditAmt: total })
     }
     // 设备折旧（非现金）
     if (dp === 'make' && makeDepreciation > 0) {
       rows.push({ item: '设备折旧', debit: '制造费用', debitAmt: makeDepreciation, credit: '累计折旧', creditAmt: makeDepreciation })
     }
-    // 加班费（当月已付现金）
+    // 加班费（结算时现金支付）
     if (dp === 'make' && overtimeCost > 0) {
       rows.push({ item: '加班费', debit: '制造费用', debitAmt: overtimeCost, credit: '现金', creditAmt: overtimeCost })
     }
-    // 研发项目投入（当月已付现金）
+    // 研发项目投入（结算时现金支付）
     if (dp === 'rnd' && rndCostTotal > 0) {
       rows.push({ item: '研发投入', debit: '研发费用', debitAmt: rndCostTotal, credit: '现金', creditAmt: rndCostTotal })
     }
-    // 招聘费（当月已付现金）
-    if (hireThisMonth[dp] > 0) {
-      const fee = hireCost(state, dp)
-      if (fee > 0) {
-        rows.push({ item: '招聘费', debit: '管理费用', debitAmt: fee * hireThisMonth[dp], credit: '现金', creditAmt: fee * hireThisMonth[dp] })
-      }
+    // 招聘费净额（招聘实付 − 裁员返还，发生即付现金，当期费用化进管理费用）
+    const hireFee = state.hireFeeBy[dp]
+    if (hireFee !== 0) {
+      rows.push({
+        item: '招聘费',
+        debit: hireFee > 0 ? '管理费用' : '现金',
+        debitAmt: Math.abs(hireFee),
+        credit: hireFee > 0 ? '现金' : '管理费用',
+        creditAmt: Math.abs(hireFee),
+        detail: [
+          `本月招聘 ${hireThisMonth[dp]} 人、裁员返还已抵减，净额 ${(Math.abs(hireFee) / 10).toFixed(1)}w`,
+          hireFee > 0 ? '当期费用化：计入管理费用（不再资本化为待摊费用）' : '裁员返还多于本月招聘费：反向冲减管理费用',
+        ],
+      })
     }
-    // 提案实施费用（当月已付现金）
+    // 提案实施费用（发生时付现金，结算计入管理费用，与损益表同科目）
     if (proposalCostBy[dp] > 0) {
       rows.push({ item: '提案费用', debit: '管理费用', debitAmt: proposalCostBy[dp], credit: '现金', creditAmt: proposalCostBy[dp] })
     }
-    // 手工记账（如生产确认时的「原料→存货」），按发生顺序排在自动计提之后
+    // 借款利息（结算时现金支付，归运营部列示）
+    if (dp === 'ops' && interest > 0) {
+      rows.push({
+        item: '借款利息',
+        debit: '财务费用',
+        debitAmt: interest,
+        credit: '现金',
+        creditAmt: interest,
+        detail: [
+          `借款余额 ${(state.debt / 10).toFixed(0)}w × 月利率 ${(rate * 100).toFixed(1)}%`,
+          '计入财务费用，结算时现金支付',
+        ],
+      })
+    }
+    // 手工记账（采购入库、生产领料/入库、销售收入/成本等），按发生顺序排在自动分录之后
     for (const r of state.monthLedger) if (r.dept === dp) rows.push(r)
+    // 制造费用结转（仅生产部）：未转入存货的部分（工资/折旧/加班/降本差异）当期费用化，
+    // 金额与损益表「生产费用」一致，保证制造费用归集科目期末无余额
+    if (dp === 'make') {
+      let outTotal = 0
+      let inTotal = 0
+      for (const r of state.monthLedger) {
+        if (r.dept !== 'make') continue
+        if (r.item.startsWith('原料出库')) outTotal += r.debitAmt
+        else if (r.item.startsWith('存货入库')) inTotal += r.debitAmt
+      }
+      const wageTotal = salaryPer.make * staffCount.make
+      const variance = Math.max(0, outTotal - inTotal)
+      const closing = wageTotal + makeDepreciation + overtimeCost + variance
+      if (closing > 0) {
+        const lines: string[] = []
+        if (wageTotal > 0) lines.push(`生产人员工资 ${(wageTotal / 10).toFixed(1)}w`)
+        if (makeDepreciation > 0) lines.push(`设备折旧 ${(makeDepreciation / 10).toFixed(1)}w`)
+        if (overtimeCost > 0) lines.push(`加班费 ${(overtimeCost / 10).toFixed(1)}w`)
+        if (variance > 0) lines.push(`降本差异 ${(variance / 10).toFixed(1)}w`)
+        lines.push('制造费用中未转入存货的部分当期费用化（工资/折旧不资本化进存货成本），与损益表「生产费用」一致')
+        rows.push({ item: '生产费用结转', debit: '生产费用', debitAmt: closing, credit: '制造费用', creditAmt: closing, detail: lines })
+      }
+    }
     deptLedger[dp] = rows
   }
 

@@ -554,7 +554,7 @@ export interface GameState {
   paidIn: Money
   /** 股东以实物投入的资产（开局的初始产线），计入所有者权益 */
   ownerCapital: Money
-  /** 待摊招聘费：招聘支出先资本化，按 RECRUIT_AMORT_MONTHS 个月摊销进管理费用 */
+  /** 待摊招聘费（预留科目：当前招聘费直接计入当期管理费用，本字段恒为 0） */
   prepaid: Money
   retained: Money
 
@@ -617,6 +617,11 @@ export interface GameState {
   miscExpense: Money
   /** 本月因事件直接获得的、需要计入当期收益的现金 */
   miscIncome: Money
+  /**
+   * 本月招聘费净额（招聘实付 − 裁员返还），月末计入管理费用。
+   * 招聘支出是现金流出，若不确认费用，资产会凭空减少、恒等式失衡。
+   */
+  hireFeeBy: Record<Dept, Money>
 
   deck: CardInstance[]
   hand: CardInstance[]

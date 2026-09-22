@@ -107,6 +107,7 @@ export function newGame(seed: number): GameState {
     plan: { tier: 'low', qty: 0, overtime: false },
     pendingIncome: 0,
     pendingCost: 0,
+    hireFeeBy: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 },
     nextMonthPrice: {},
     rndStartsThisMonth: [],
     miscExpense: 0,

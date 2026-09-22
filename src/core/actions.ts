@@ -68,7 +68,8 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   if (!check.ok) return check
   const fee = hireCost(state, dept)
   state.cash -= fee
-  state.miscExpense += fee
+  /** 招聘费当期费用化（管理费用）：不能只扣现金不记费用，否则资产凭空减少、恒等式失衡 */
+  state.hireFeeBy[dept] += fee
   state.ap -= 1
   state.depts[dept].staff += 1
   state.depts[dept].hired += 1
@@ -115,7 +116,8 @@ export function fire(state: GameState, dept: Dept): ActionResult {
   state.depts[dept].staff -= 1
   const refund = Math.round(STAFF[dept].hireFees[0] * 0.5)
   state.cash += refund
-  state.miscExpense -= refund
+  /** 返款从本月招聘费净额中抵减（与招聘费同科目，进管理费用） */
+  state.hireFeeBy[dept] -= refund
   state.monthFlags = state.monthFlags.filter((f) => f !== 'canFire')
   pushLog(state, 'action', `解雇 1 名${DEPT_NAMES[dept]}人员`, [`返还招聘费 ${refund / 10}w`])
   return { ok: true, msg: `解雇 1 人，返还 ${refund / 10}w` }
@@ -650,7 +652,18 @@ export function signAgreement(state: GameState, materialId: string, months: numb
   if (!free) {
     state.ap -= 1
     state.cash -= 10
+    /** 手续费当期费用化（事件与杂项支出）：只扣现金不记费用会破恒等式 */
+    state.miscExpense += 10
     state.flags['agreementsSigned'] = (state.flags['agreementsSigned'] ?? 0) + 1
+    state.monthLedger.push({
+      dept: 'buy',
+      item: '协议手续费',
+      debit: '财务费用',
+      credit: '现金',
+      debitAmt: 10,
+      creditAmt: 10,
+      detail: ['签订长期协议的费用 1w（1 AP 不占现金），当期确认'],
+    })
     pushLog(state, 'action', `签订长期协议：${nameOf(materialId)}`, [
       `锁定 ${months} 个月`,
       `每月中批 ${qty} 单位`,
@@ -679,6 +692,15 @@ export function developSupplier(state: GameState, materialId: string): ActionRes
   state.miscExpense += 30
   state.materialsDeveloped[materialId] = cur + 2
   state.flags[`dev:${materialId}`] = (state.flags[`dev:${materialId}`] ?? 0) + 1
+  state.monthLedger.push({
+    dept: 'buy',
+    item: `供应商开发 ${def.name}`,
+    debit: '财务费用',
+    credit: '现金',
+    debitAmt: 30,
+    creditAmt: 30,
+    detail: ['开发费 3w 当期确认（事件与杂项支出）', '基础供给 +2，立即生效'],
+  })
   pushLog(state, 'action', `供应商开发：${def.name}`, [`基础供给 +2（当前 ${cur + 2}）`])
   return { ok: true, msg: `供给 +2` }
 }
@@ -703,6 +725,18 @@ export function buyEquipment(state: GameState, shopId: string): ActionResult {
     purchasedAt: state.month,
   })
   state.flags['capexQ'] = (state.flags['capexQ'] ?? 0) + 1
+  state.monthLedger.push({
+    dept: 'make',
+    item: `设备购置 ${shop.name}`,
+    debit: '固定资产',
+    credit: '现金',
+    debitAmt: shop.price,
+    creditAmt: shop.price,
+    detail: [
+      `现金支出 ${shop.price / 10}w 资本化为固定资产（不计入当期损益）`,
+      `月折旧 ${shop.depreciation / 10}w 为非现金费用，逐月进生产费用`,
+    ],
+  })
   pushLog(state, 'action', `购置设备【${shop.name}】`, [`${shop.price / 10}w`, shop.desc])
   return { ok: true, msg: `产能 +${shop.capacity}` }
 }
@@ -776,7 +810,13 @@ export function issueMaterials(state: GameState, tier: Tier, qty: number, matSav
   return materialCost
 }
 
-/** 成品入库的生产账务（确认生产与月末结算共用）。 */
+/**
+ * 成品入库的生产账务（确认生产与月末结算共用）：
+ *   · 生产部分：借 存货 / 贷 制造费用，金额为折价后的本批成本；
+ *   · 流水线 bonus 部分：白得的产出按本批单位成本入账是资产凭空增加，
+ *     必须贷记「营业外收入」同时计入 miscIncome，
+ *     否则资产增加而权益不动，恒等式会漂出 bonus × 单位成本的缺口（到售出才消化）。
+ */
 export function postProductionInbound(
   state: GameState,
   tier: Tier,
@@ -788,16 +828,32 @@ export function postProductionInbound(
   const bom = BOMS[tier]
   state.monthLedger.push({
     dept: 'make',
-    item: `存货入库 ${bom.name} ×${produced + bonus}`,
+    item: `存货入库 ${bom.name} ×${produced}`,
     debit: `存货 ${bom.name}`,
     credit: '制造费用',
-    debitAmt: Math.round(batchCost + bonus * unitCostIn),
+    debitAmt: Math.round(batchCost),
     creditAmt: 0,
     detail: [
-      `成品按本批单位成本入账，制造费用结转后余额为零`,
+      `成品按本批单位成本入账，制造费用对应部分结转完毕`,
       '出库成本 × 成本系数；降本差异计入生产费用，资产侧不漂移',
     ],
   })
+  if (bonus > 0) {
+    const bonusVal = bonus * unitCostIn
+    state.miscIncome += bonusVal
+    state.monthLedger.push({
+      dept: 'make',
+      item: `流水线入库 ${bom.name} ×${bonus}`,
+      debit: `存货 ${bom.name}`,
+      credit: '营业外收入',
+      debitAmt: Math.round(bonusVal),
+      creditAmt: Math.round(bonusVal),
+      detail: [
+        `每 5 件额外入库 1 件（生产 5 人），按本批单位成本 ${unitCostIn > 0 ? (unitCostIn / 10).toFixed(1) : '0'}w 计价`,
+        '贷记营业外收入：资产与权益同步增加，恒等式不漂移',
+      ],
+    })
+  }
 }
 
 /**
@@ -947,6 +1003,18 @@ export function borrow(state: GameState, amount: Money): ActionResult {
   if (amount % 10 !== 0) return fail('借款以 1w 为单位')
   state.cash += amount
   state.debt += amount
+  state.monthLedger.push({
+    dept: 'ops',
+    item: '借款',
+    debit: '现金',
+    credit: '借款',
+    debitAmt: amount,
+    creditAmt: amount,
+    detail: [
+      `到账 ${amount / 10}w，新增负债 ${amount / 10}w`,
+      '现金与负债同步增加，净资产不变；利息按月确认进财务费用',
+    ],
+  })
   pushLog(state, 'action', `借款 ${amount / 10}w`, [`月利率 ${(d.rate * 100).toFixed(1)}%`])
   return { ok: true, msg: `到账 ${amount / 10}w` }
 }
@@ -957,6 +1025,15 @@ export function repay(state: GameState, amount: Money): ActionResult {
   if (amount > state.cash) return fail('现金不足')
   state.cash -= amount
   state.debt -= amount
+  state.monthLedger.push({
+    dept: 'ops',
+    item: '还款',
+    debit: '借款',
+    credit: '现金',
+    debitAmt: amount,
+    creditAmt: amount,
+    detail: [`归还 ${amount / 10}w，负债同步减少`],
+  })
   pushLog(state, 'action', `还款 ${amount / 10}w`)
   return { ok: true, msg: `已还 ${amount / 10}w` }
 }
