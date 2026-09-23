@@ -94,11 +94,15 @@ describe('固定经营场景', () => {
     expect(make('cheap_low_demand').climate).toBe('depression')
     expect(make('expensive_high_demand').climate).toBe('overheat')
     expect(make('order_heavy').orders).toHaveLength(4)
-    expect(make('spot_heavy').orders).toHaveLength(0)
+    expect(make('shared_material_shortage').depts.sell.staff).toBe(4)
     expect(E.derive(make('shared_material_shortage')).materials.alloy.supply).toBeLessThan(
       E.derive(make('order_heavy')).materials.alloy.supply,
     )
+    expect(make('spot_heavy').orders).toHaveLength(0)
+    expect(make('spot_heavy').depts.sell.staff).toBe(0)
     expect(make('cash_constrained').cash).toBe(250)
+    expect(make('cash_constrained').depts.sell.staff).toBe(2)
+    expect(make('order_heavy').depts.sell.staff).toBe(4)
   })
 })
 

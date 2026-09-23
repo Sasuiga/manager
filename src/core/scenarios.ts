@@ -35,6 +35,8 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.retained = 0
   state.monthMods = setup.mods ?? {}
   state.cardMods = {}
+  /** 场景预设订单需要销售团队作为来源：无销售则开局无订单。 */
+  state.depts.sell.staff = setup.sellStaff ?? 0
   state.orders = setup.orders.map((o, i) => makeOrder(state, i, o))
   state.acceptedOrders = []
   state.declinedOrders = []
@@ -59,6 +61,8 @@ interface ScenarioSetup {
   cash: number
   mods?: MonthMods
   orders: { tier: Tier; qty: number; priceShift?: number }[]
+  /** 开局销售人数：为场景预设订单提供「来源」，与人员模型自洽。 */
+  sellStaff?: number
 }
 
 const SCENARIO_SETUP: Record<CoreScenarioId, ScenarioSetup> = {
@@ -66,11 +70,13 @@ const SCENARIO_SETUP: Record<CoreScenarioId, ScenarioSetup> = {
     climate: 'depression',
     cash: 600,
     orders: [{ tier: 'low', qty: 3 }],
+    sellStaff: 2,
   },
   expensive_high_demand: {
     climate: 'overheat',
     cash: 600,
     orders: [{ tier: 'high', qty: 2 }],
+    sellStaff: 2,
   },
   order_heavy: {
     climate: 'boom',
@@ -81,6 +87,7 @@ const SCENARIO_SETUP: Record<CoreScenarioId, ScenarioSetup> = {
       { tier: 'high', qty: 2 },
       { tier: 'special', qty: 1 },
     ],
+    sellStaff: 4,
   },
   spot_heavy: {
     climate: 'boom',
@@ -100,11 +107,13 @@ const SCENARIO_SETUP: Record<CoreScenarioId, ScenarioSetup> = {
       { tier: 'mid', qty: 3 },
       { tier: 'high', qty: 2 },
     ],
+    sellStaff: 4,
   },
   cash_constrained: {
     climate: 'recovery',
     cash: 250,
     orders: [{ tier: 'mid', qty: 2 }],
+    sellStaff: 2,
   },
 }
 
