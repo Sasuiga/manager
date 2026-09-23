@@ -1089,7 +1089,8 @@ function TierOrderRow({
         <button
           className="btn btn-nav"
           style={{ width: 'auto', padding: '2px var(--s3)', fontSize: 'var(--fs-xs)', opacity: 0.6 }}
-          onClick={onToggle}
+          disabled={!canAccept}
+          onClick={canAccept ? onToggle : onShortClick}
         >
           已放弃（点接）
         </button>
@@ -1156,7 +1157,7 @@ function SellPage({ g }: { g: Game }) {
           <span />
           <span className="xs faint">需求数</span>
           <span className="xs faint">市价</span>
-          <span className="xs faint">可用库存</span>
+          <span className="xs faint">{gs.mode === 'core' ? '可承诺量' : '可用库存'}</span>
           {TIER_ORDER.map((t) => {
             const p = gs.products[t]
             const cost = d.salesPushCost[t]
@@ -1164,7 +1165,7 @@ function SellPage({ g }: { g: Game }) {
             const push = d.salesPush[t]
             const over = Math.max(0, gs.salesAlloc[t] - cap * cost)
             const orderTaken = forcedQtyBy[t] + acceptedQtyBy[t]
-            const avail = Math.max(0, p.qty - orderTaken)
+            const avail = Math.max(0, E.committableProductQty(gs, t) - orderTaken)
             return (
               <TierRowCells
                 key={t}
@@ -1195,7 +1196,7 @@ function SellPage({ g }: { g: Game }) {
             const orderPrice = E.priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
             const isAccepted = gs.acceptedOrders.includes(o.id)
             const isDeclined = gs.declinedOrders.includes(o.id)
-            const canAccept = gs.products[o.tier].qty >= o.qty
+            const canAccept = E.canAcceptOrder(gs, o.id)
             return (
               <TierOrderRow
                 key={o.id}
@@ -1209,13 +1210,15 @@ function SellPage({ g }: { g: Game }) {
                 isDeclined={isDeclined}
                 canAccept={canAccept}
                 onToggle={() => g.mutate((st) => E.toggleOrder(st, o.id))}
-                onShortClick={() => g.setToast('库存不足，先生产再接单')}
+                onShortClick={() => g.setToast(gs.mode === 'core' ? '可承诺产品不足，请先增加该产品排产' : '库存不足，先生产再接单')}
               />
             )
           })}
         </div>
         <div className="hint">
-          可用库存 = 总库存 − 强制订单占用 − 已接自然订单占用。强制订单到月必交；自然订单点接后锁定库存，再点取消。
+          {gs.mode === 'core'
+            ? '可承诺量 = 现有库存 + 本月排产 − 强制订单占用 − 已接自然订单占用。排产减少时，无法足额履约的订单会自动取消。'
+            : '可用库存 = 总库存 − 强制订单占用 − 已接自然订单占用。强制订单到月必交；自然订单点接后锁定库存，再点取消。'}
         </div>
       </div>
 

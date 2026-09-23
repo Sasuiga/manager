@@ -748,6 +748,7 @@ export function setPlan(state: GameState, tier: Tier, qty: number) {
   const other = TIERS.reduce((sum, t) => sum + (t === tier ? 0 : state.plan.quantities[t]), 0)
   const cap = Math.max(0, planCapacity(state) - other)
   state.plan.quantities[tier] = Math.max(0, Math.min(Math.floor(qty), cap))
+  reconcileAcceptedOrders(state)
 }
 
 export function plannedTotal(state: GameState): number {
@@ -932,6 +933,47 @@ export function allocUsed(state: GameState): number {
   return TIERS.reduce((a, t) => a + state.salesAlloc[t], 0)
 }
 
+/** 当前可用于履约的产品量：核心模式包含本月排产，完整模式沿用已入库成品。 */
+export function committableProductQty(state: GameState, tier: Tier): number {
+  return state.products[tier].qty + (state.mode === 'core' ? state.plan.quantities[tier] : 0)
+}
+
+/** 指定订单尚可使用的履约数量，扣除强制订单和其他已接订单。 */
+export function availableForOrder(state: GameState, orderId: string): number {
+  const order = state.orders.find((o) => o.id === orderId)
+  if (!order) return 0
+  const reserved = state.orders.reduce((sum, other) => {
+    if (other.id === orderId || other.tier !== order.tier) return sum
+    if (other.forced || state.acceptedOrders.includes(other.id)) return sum + other.qty
+    return sum
+  }, 0)
+  return Math.max(0, committableProductQty(state, order.tier) - reserved)
+}
+
+export function canAcceptOrder(state: GameState, orderId: string): boolean {
+  const order = state.orders.find((o) => o.id === orderId)
+  return !!order && !order.forced && availableForOrder(state, orderId) >= order.qty
+}
+
+/**
+ * 排产减少时，按接单先后保留仍可足额履约的订单；超出可承诺量的订单恢复为未选择状态。
+ * 不标记为“已放弃”，以便玩家增加排产后重新选择。
+ */
+export function reconcileAcceptedOrders(state: GameState) {
+  const reserved: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  for (const order of state.orders) if (order.forced) reserved[order.tier] += order.qty
+  const kept: string[] = []
+  for (const id of state.acceptedOrders) {
+    const order = state.orders.find((o) => o.id === id)
+    if (!order || order.forced) continue
+    if (reserved[order.tier] + order.qty <= committableProductQty(state, order.tier)) {
+      reserved[order.tier] += order.qty
+      kept.push(id)
+    }
+  }
+  state.acceptedOrders = kept
+}
+
 /** 接取 / 放弃自然订单（当月决策，不接的当月失效，不跨月）。 */
 export function toggleOrder(state: GameState, orderId: string): ActionResult {
   const o = state.orders.find((x) => x.id === orderId)
@@ -945,6 +987,7 @@ export function toggleOrder(state: GameState, orderId: string): ActionResult {
     state.declinedOrders.push(orderId)
     return { ok: true, msg: '已取消订单' }
   }
+  if (!canAcceptOrder(state, orderId)) return fail('可承诺产品不足，请先增加该产品排产')
   if (declineIdx >= 0) {
     // 已放弃 → 接取
     state.declinedOrders.splice(declineIdx, 1)

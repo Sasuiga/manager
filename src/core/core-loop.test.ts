@@ -99,3 +99,58 @@ describe('固定经营场景', () => {
     expect(make('cash_constrained').cash).toBe(250)
   })
 })
+
+describe('订单与排产联动', () => {
+  function orderState() {
+    const s = E.newGame(88, 'core')
+    E.startGame(s)
+    s.orders = [
+      { id: 'o1', tier: 'low', qty: 3, priceShift: 1, dueMonth: 1, from: 'test' },
+      { id: 'o2', tier: 'low', qty: 2, priceShift: 1, dueMonth: 1, from: 'test' },
+    ]
+    s.acceptedOrders = []
+    s.declinedOrders = []
+    s.materials.pkg.qty = 20
+    s.materials.pkg.value = 200
+    s.materials.resin.qty = 10
+    s.materials.resin.value = 200
+    return s
+  }
+
+  it('没有对应排产时订单不可接受，排产足够后才可接受', () => {
+    const s = orderState()
+    expect(E.canAcceptOrder(s, 'o1')).toBe(false)
+    expect(E.toggleOrder(s, 'o1').ok).toBe(false)
+
+    E.setPlan(s, 'low', 3)
+    expect(E.canAcceptOrder(s, 'o1')).toBe(true)
+    expect(E.toggleOrder(s, 'o1').ok).toBe(true)
+    expect(s.acceptedOrders).toEqual(['o1'])
+  })
+
+  it('已接订单占用可承诺量，排产减少后自动取消无法履约的订单', () => {
+    const s = orderState()
+    E.setPlan(s, 'low', 5)
+    expect(E.toggleOrder(s, 'o1').ok).toBe(true)
+    expect(E.toggleOrder(s, 'o2').ok).toBe(true)
+    expect(s.acceptedOrders).toEqual(['o1', 'o2'])
+
+    E.setPlan(s, 'low', 4)
+    expect(s.acceptedOrders).toEqual(['o1'])
+    expect(E.canAcceptOrder(s, 'o2')).toBe(false)
+
+    E.setPlan(s, 'low', 5)
+    expect(E.canAcceptOrder(s, 'o2')).toBe(true)
+    expect(E.toggleOrder(s, 'o2').ok).toBe(true)
+    expect(s.acceptedOrders).toEqual(['o1', 'o2'])
+  })
+
+  it('现有成品库存与本月排产共同构成可承诺量', () => {
+    const s = orderState()
+    s.products.low.qty = 1
+    s.products.low.value = 40
+    E.setPlan(s, 'low', 2)
+    expect(E.availableForOrder(s, 'o1')).toBe(3)
+    expect(E.canAcceptOrder(s, 'o1')).toBe(true)
+  })
+})
