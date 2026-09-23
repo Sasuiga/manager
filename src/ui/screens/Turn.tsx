@@ -163,6 +163,7 @@ export function TurnScreen({
 }) {
   const s = g.s
   const d = E.derive(s)
+  const visibleDepts: E.Dept[] = s.mode === 'core' ? ['buy', 'make', 'sell'] : DEPTS
 
   /** 轨道红点：有未处理事项时亮起。 */
   const dots: Record<E.Dept, boolean> = {
@@ -182,11 +183,11 @@ export function TurnScreen({
         {dept === 'sell' ? <SellPage g={g} /> : null}
         {dept === 'rnd' ? <RndPage g={g} /> : null}
 
-        <HireBlock g={g} dept={dept} />
+        {s.mode === 'full' ? <HireBlock g={g} dept={dept} /> : null}
       </div>
 
       <nav className="track">
-        {DEPTS.map((k) => (
+        {visibleDepts.map((k) => (
           <button key={k} className={`track-btn${dept === k ? ' on' : ''}`} onClick={() => onDept(k)}>
             {dots[k] ? <span className="track-dot" /> : null}
             <Icon name={DEPT_ICON[k]} size={19} />
@@ -743,7 +744,7 @@ function MakePage({ g }: { g: Game }) {
   const cap = E.planCapacity(gs)
   /** 各层 BOM 可产上限（受产能 + 原料双重限制），分配与看板共用。 */
   const maxBy = E.maxProducibleByTier(gs)
-  const plannedTotal = TIER_ORDER.reduce((a, t) => a + (gs.plan.tier === t ? gs.plan.qty : 0), 0)
+  const plannedTotal = E.plannedTotal(gs)
   const remainingCap = Math.max(0, cap - plannedTotal)
   const [equip, setEquip] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -813,8 +814,7 @@ function MakePage({ g }: { g: Game }) {
           {/* 未解锁的产品线先不出现，解锁一个出一个 */}
           {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
             const max = maxBy[t]
-            const on = gs.plan.tier === t
-            const qty = on ? gs.plan.qty : 0
+            const qty = gs.plan.quantities[t]
             const plusDisabled = qty >= max
             const minusDisabled = qty <= 0
             return (
@@ -828,7 +828,7 @@ function MakePage({ g }: { g: Game }) {
                     className="btn btn-nav"
                     style={{ width: 'auto', padding: '2px var(--s3)', opacity: minusDisabled ? 0.4 : 1 }}
                     disabled={minusDisabled}
-                    onClick={() => g.mutate((st) => E.setPlan(st, { tier: t, qty: Math.max(0, st.plan.qty - 1) }))}
+                    onClick={() => g.mutate((st) => E.setPlan(st, t, Math.max(0, st.plan.quantities[t] - 1)))}
                   >
                     <span>−</span>
                   </button>
@@ -841,10 +841,7 @@ function MakePage({ g }: { g: Game }) {
                     disabled={plusDisabled}
                     onClick={() =>
                       g.mutate((st) =>
-                        E.setPlan(st, {
-                          tier: t,
-                          qty: clamp((st.plan.tier === t ? st.plan.qty : 0) + 1, 0, E.maxProducible(st, t)),
-                        }),
+                        E.setPlan(st, t, clamp(st.plan.quantities[t] + 1, 0, E.maxProducible(st, t))),
                       )
                     }
                   >
@@ -854,7 +851,7 @@ function MakePage({ g }: { g: Game }) {
                     className="btn btn-mini"
                     style={{ width: 'auto', opacity: qty >= max ? 0.4 : 1 }}
                     disabled={qty >= max}
-                    onClick={() => g.mutate((st) => E.setPlan(st, { tier: t, qty: E.maxProducible(st, t) }))}
+                    onClick={() => g.mutate((st) => E.setPlan(st, t, E.maxProducible(st, t)))}
                   >
                     <span className="btn-main xs">拉满</span>
                   </button>
@@ -931,7 +928,7 @@ function MakePage({ g }: { g: Game }) {
 function ProductionConfirmSheet({ g, planned, onDone }: { g: Game; planned: number; onDone: () => void }) {
   const gs = g.s
   const lines = TIER_ORDER
-    .map((t) => ({ t, qty: gs.plan.tier === t ? gs.plan.qty : 0, max: E.maxProducible(gs, t) }))
+    .map((t) => ({ t, qty: gs.plan.quantities[t], max: gs.plan.quantities[t] + E.maxProducible(gs, t) }))
     .filter((l) => l.qty > 0)
   const willBonus = gs.depts.make.staff >= 5
   const confirm = () => {

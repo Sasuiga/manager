@@ -87,7 +87,7 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
 
     // ── 生产 ──
     const maxQ = E.maxProducible(s, 'low')
-    E.setPlan(s, { tier: 'low', qty: Math.min(maxQ, planQty) })
+    E.setPlan(s, 'low', Math.min(maxQ, planQty))
 
     // ── 销售资源分配 ──
     const d = E.derive(s)
@@ -413,12 +413,12 @@ describe('引擎', () => {
     const before = s.products.low
     const qtyBefore = before.qty
     const valBefore = before.value
-    E.setPlan(s, { tier: 'low', qty: 5 })
+    E.setPlan(s, 'low', 5)
     const r = E.confirmProduction(s)
     expect(r.ok).toBe(true)
     expect(s.materials.pkg.qty).toBe(0)
     expect(s.materials.resin.qty).toBe(0)
-    expect(s.plan.qty).toBe(0)
+    expect(s.plan.quantities.low).toBe(0)
     // 原料账面 10×10 + 5×20 = 200，costFactor 1 时成品入库同额
     expect(before.qty).toBe(qtyBefore + 5)
     expect(before.value - valBefore).toBe(200)
@@ -430,6 +430,31 @@ describe('引擎', () => {
     // 已全部生产完：再确认提示无剩余量
     const r2 = E.confirmProduction(s)
     expect(r2.ok).toBe(false)
+  })
+
+  it('多产品排产：共享产能与原料，并一次确认多条产品线', () => {
+    const s = E.newGame(11, 'core')
+    E.startGame(s)
+    s.materials.pkg.qty = 4
+    s.materials.pkg.value = 40
+    s.materials.resin.qty = 6
+    s.materials.resin.value = 120
+    s.materials.alloy.qty = 2
+    s.materials.alloy.value = 80
+
+    E.setPlan(s, 'low', 2)
+    E.setPlan(s, 'mid', 2)
+    expect(E.plannedTotal(s)).toBe(4)
+    expect(s.plan.quantities).toEqual({ low: 2, mid: 2, high: 0, special: 0 })
+
+    const r = E.confirmProduction(s)
+    expect(r.ok).toBe(true)
+    expect(s.products.low.qty).toBe(2)
+    expect(s.products.mid.qty).toBe(2)
+    expect(s.materials.pkg.qty).toBe(0)
+    expect(s.materials.resin.qty).toBe(0)
+    expect(s.materials.alloy.qty).toBe(0)
+    expect(E.plannedTotal(s)).toBe(0)
   })
 
   it('采购记账：借库存贷现金，金额与现金扣减、库存账面勾稽', () => {
@@ -476,7 +501,7 @@ describe('引擎', () => {
     s.products.low.qty = 5
     s.products.low.value = 5 * 40
     // 不点确认，产量留给月末结算路径
-    E.setPlan(s, { tier: 'low', qty: 4 })
+    E.setPlan(s, 'low', 4)
     const rep = E.settleMonth(s)
     const r2 = (n: number) => Math.round(n * 10000) / 10000
     // 生产记账：月末生产路径同样记 出库/入库，且方向为 借 制造费用 / 贷 库存
@@ -549,7 +574,7 @@ describe('引擎', () => {
       return Math.round((b.totalAssets - b.debt - b.equity) * 10000) / 10000
     }
     const gapBefore = gapOf()
-    E.setPlan(s, { tier: 'low', qty: 5 })
+    E.setPlan(s, 'low', 5)
     expect(E.confirmProduction(s).ok).toBe(true) // 5 件 → bonus 1 件
     // bonus 按本批单位成本计入存货（资产 +40），必须同步贷记营业外收入
     // （miscIncome 在结算 §4 才确认为留存收益，故先验状态、再结算后验恒等式）

@@ -354,12 +354,12 @@ export function derive(state: GameState): DerivedTotals {
   // 品牌加成计入资源池（新模型下品牌 = 更多推力）
   const brandBonus = (staffCount.sell >= 5 ? 3 : 0) + ip.brandBonus
   const salesResource = BASE_SALES_RESOURCE + salesResourceFromStaff(Math.min(5, staffCount.sell)) + ip.salesResource + brandBonus + (mods.salesResource ?? 0)
-  const orderCount = SALES_ORDER_COUNT[Math.min(5, staffCount.sell)] + ip.orderBonus + (mods.orders ?? 0)
+  const orderCount = (state.mode === 'core' ? 2 : SALES_ORDER_COUNT[Math.min(5, staffCount.sell)]) + ip.orderBonus + (mods.orders ?? 0)
   const orderQty = mods.orderQty ?? 10
   const orderPriceShift = 1 + ip.orderPriceShift + (mods.orderPriceShift ?? 0)
 
   // ── 采购 ──
-  const buyLots = BUY_LOT_SLOTS[Math.min(5, staffCount.buy)] + (mods.buyLots ?? 0)
+  const buyLots = (state.mode === 'core' ? 4 : BUY_LOT_SLOTS[Math.min(5, staffCount.buy)]) + (mods.buyLots ?? 0)
 
   // ── 研发 ──
   const rndProgress = staffCount.rnd * 2 + (mods.rndProgress ?? 0) + ip.rndProgress

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import * as E from '../core/engine'
-import type { GameState } from '../core/engine'
+import type { GameMode, GameState } from '../core/engine'
 import type { ActionResult } from '../core/actions'
 
 /**
@@ -23,14 +23,14 @@ export interface Game {
   tick: number
 }
 
-export function useGame(seed: number | null): Game | null {
+export function useGame(seed: number | null, mode: GameMode = 'full'): Game | null {
   const [tick, setTick] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
   const [lastReport, setReport] = useState<E.SettleReport | null>(null)
   const ref = useRef<GameState | null>(null)
 
   if (seed !== null && ref.current === null) {
-    ref.current = E.newGame(seed)
+    ref.current = E.newGame(seed, mode)
     E.startGame(ref.current)
   }
 

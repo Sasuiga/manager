@@ -12,22 +12,22 @@ import { ReportSheet } from './screens/Report'
 import { GoalsSheet } from './screens/Goals'
 import { Panel } from './screens/Panel'
 import { Icon } from './icons'
-import { wan, TIER_ORDER } from './format'
+import { wan } from './format'
 
 type Tab = 'run' | 'report' | 'log'
 
 export function App() {
-  const [seed, setSeed] = useState<number | null>(null)
-  const g = useGame(seed)
+  const [run, setRun] = useState<{ seed: number; mode: E.GameMode } | null>(null)
+  const g = useGame(run?.seed ?? null, run?.mode ?? 'full')
 
-  if (!g || seed === null) return <TitleScreen onStart={setSeed} />
-  return <GameRoot g={g} onRestart={() => setSeed(null)} />
+  if (!g || run === null) return <TitleScreen onStart={(seed, mode) => setRun({ seed, mode })} />
+  return <GameRoot g={g} onRestart={() => setRun(null)} />
 }
 
 function GameRoot({ g, onRestart }: { g: Game; onRestart: () => void }) {
   const s = g.s
   const [tab, setTab] = useState<Tab>('run')
-  const [dept, setDept] = useState<E.Dept>('ops')
+  const [dept, setDept] = useState<E.Dept>(s.mode === 'core' ? 'buy' : 'ops')
   const [goalsOpen, setGoalsOpen] = useState(false)
   const [settling, setSettling] = useState(false)
 
@@ -106,7 +106,7 @@ function SettleFlow({ g, onDone }: { g: Game; onDone: () => void }) {
   }, [s, g.tick])
 
   if (step === 'confirm') {
-    const plannedProd = TIER_ORDER.reduce((a, t) => a + (s.plan.tier === t ? s.plan.qty : 0), 0)
+    const plannedProd = E.plannedTotal(s)
     return (
       <Sheet
         title="结束本月"

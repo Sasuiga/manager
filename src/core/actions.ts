@@ -742,8 +742,16 @@ export function buyEquipment(state: GameState, shopId: string): ActionResult {
   return { ok: true, msg: `产能 +${shop.capacity}` }
 }
 
-export function setPlan(state: GameState, patch: Partial<GameState['plan']>) {
-  state.plan = { ...state.plan, ...patch }
+/** 设置单条产品线的排产量；所有产品线共享同一个产能池。 */
+export function setPlan(state: GameState, tier: Tier, qty: number) {
+  if (!state.products[tier].built) return
+  const other = TIERS.reduce((sum, t) => sum + (t === tier ? 0 : state.plan.quantities[t]), 0)
+  const cap = Math.max(0, planCapacity(state) - other)
+  state.plan.quantities[tier] = Math.max(0, Math.min(Math.floor(qty), cap))
+}
+
+export function plannedTotal(state: GameState): number {
+  return TIERS.reduce((sum, t) => sum + state.plan.quantities[t], 0)
 }
 
 export function planCapacity(state: GameState): number {
@@ -757,10 +765,16 @@ export function planCapacity(state: GameState): number {
 export function maxProducible(state: GameState, tier: Tier): number {
   const d = derive(state)
   const bom = BOMS[tier]
-  let max = planCapacity(state)
+  const otherCapacity = TIERS.reduce((sum, t) => sum + (t === tier ? 0 : state.plan.quantities[t]), 0)
+  let max = Math.max(0, planCapacity(state) - otherCapacity)
   for (const [id, need] of Object.entries(bom.recipe)) {
     const per = Math.max(1, need - d.matSave)
-    const avail = state.materials[id]?.qty ?? 0
+    const reserved = TIERS.reduce((sum, t) => {
+      if (t === tier) return sum
+      const otherNeed = BOMS[t].recipe[id] ?? 0
+      return sum + Math.max(0, otherNeed - d.matSave) * state.plan.quantities[t]
+    }, 0)
+    const avail = Math.max(0, (state.materials[id]?.qty ?? 0) - reserved)
     max = Math.min(max, Math.floor(avail / per))
   }
   return Math.max(0, max)
@@ -860,31 +874,36 @@ export function postProductionInbound(
 /**
  * 确认生产安排：立即按 BOM 扣料、成品入库，并把「原料→存货」记账到本月生产账务。
  * 与月末结算（§1 生产段）同口径：账面价等比例结转 + costFactor 折价入账，
- * 因此之后无论再结算几次，同一批货的成本都不会重复进利润表（结算时 plan.qty 已清零）。
+ * 因此之后无论再结算几次，同一批货的成本都不会重复进利润表（确认后各线计划已清零）。
  */
 export function confirmProduction(state: GameState): ActionResult {
-  const tier = state.plan.tier
-  const want = state.plan.qty
-  if (!tier || want <= 0) return fail('尚未安排产量')
-  if (!state.products[tier].built) return fail('该层级未解锁')
-  const qty = Math.min(want, maxProducible(state, tier))
-  if (qty <= 0) return fail('原料不足，先采购')
+  if (plannedTotal(state) <= 0) return fail('尚未安排产量')
   const d = derive(state)
-  const bom = BOMS[tier]
-  const materialCost = issueMaterials(state, tier, qty, d.matSave)
-  /** 【流水线】成就（生产 5 人）：每 5 件额外入库 1 件，按本批单位成本计价入账。 */
-  const bonus = state.depts.make.staff >= 5 ? Math.floor(qty / 5) : 0
-  const batchCost = Math.round(materialCost * d.costFactor)
-  const unitCostIn = qty > 0 ? batchCost / qty : 0
-  const p = state.products[tier]
-  p.value += batchCost + bonus * unitCostIn
-  p.qty += qty + bonus
-  p.avgCost = p.qty > 0 ? Math.round(p.value / p.qty) : 0
-  postProductionInbound(state, tier, qty, bonus, batchCost, unitCostIn)
-  if (bonus > 0) pushLog(state, 'action', `流水线效应：${bom.name} 额外入库 ${bonus} 件`)
-  /** 已生产完的部分从计划中扣除，月末结算不再重复生产。 */
-  state.plan.qty = Math.max(0, want - qty)
-  return { ok: true, msg: `${bom.name} ${qty + bonus} 件已入库` }
+  const completed: string[] = []
+  for (const tier of TIERS) {
+    const want = state.plan.quantities[tier]
+    if (want <= 0 || !state.products[tier].built) continue
+    // 其他产品线仍占用产能与原料，本线清零后计算自身可执行量。
+    state.plan.quantities[tier] = 0
+    const qty = Math.min(want, maxProducible(state, tier))
+    if (qty <= 0) continue
+    const bom = BOMS[tier]
+    const materialCost = issueMaterials(state, tier, qty, d.matSave)
+    const bonus = state.depts.make.staff >= 5 ? Math.floor(qty / 5) : 0
+    const batchCost = Math.round(materialCost * d.costFactor)
+    const unitCostIn = qty > 0 ? batchCost / qty : 0
+    const p = state.products[tier]
+    p.value += batchCost + bonus * unitCostIn
+    p.qty += qty + bonus
+    p.avgCost = p.qty > 0 ? Math.round(p.value / p.qty) : 0
+    postProductionInbound(state, tier, qty, bonus, batchCost, unitCostIn)
+    if (bonus > 0) pushLog(state, 'action', `流水线效应：${bom.name} 额外入库 ${bonus} 件`)
+    completed.push(`${bom.name} ${qty + bonus} 件`)
+  }
+  for (const tier of TIERS) state.plan.quantities[tier] = 0
+  return completed.length
+    ? { ok: true, msg: `${completed.join('、')}已入库` }
+    : fail('原料不足，先采购')
 }
 
 export function toggleOvertime(state: GameState): ActionResult {

@@ -47,6 +47,7 @@ export {
   buyEquipment,
   setPlan,
   planCapacity,
+  plannedTotal,
   maxProducible,
   maxProducibleByTier,
   confirmProduction,
@@ -88,6 +89,12 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
 
 /** 开局：进入第 1 个月的事件阶段（第 1 月即季度首月，召开董事会）。 */
 export function startGame(state: GameState) {
+  if (state.mode === 'core') {
+    state.phase = 'operate'
+    state.boardPrompted = false
+    generateMonthlyOrders(state)
+    return
+  }
   state.phase = 'board'
   state.boardPrompted = false
   maybeDrawBoardGoals(state, new Rng(state.seed * 31 + 7))
@@ -272,6 +279,12 @@ export function nextMonth(state: GameState) {
   const rng = Rng.fromState(state.rngState)
   advanceMonthCore(state, rng)
   state.rngState = rng.state
+  if (state.mode === 'core') {
+    state.phase = 'operate'
+    state.boardPrompted = false
+    generateMonthlyOrders(state)
+    return
+  }
   state.phase = 'board'
   state.boardPrompted = false
   maybeDrawBoardGoals(state, new Rng(state.rngState + state.month * 7919))

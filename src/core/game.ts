@@ -24,15 +24,17 @@ import type {
   Climate,
   Dept,
   GameState,
+  GameMode,
   Momentum,
   Money,
 } from './types'
 
 /** 构建一局新游戏。 */
-export function newGame(seed: number): GameState {
+export function newGame(seed: number, mode: GameMode = 'full'): GameState {
   const rng = new Rng(seed)
   const climate = CLIMATE_ORDER[rng.int(6)]
   const state: GameState = {
+    mode,
     seed,
     rngState: rng.state,
     month: 1,
@@ -81,7 +83,7 @@ export function newGame(seed: number): GameState {
     ),
 
     products: Object.fromEntries(
-      TIERS.map((t) => [t, { tier: t, built: t === 'low', qty: 0, value: 0, avgCost: 0 }]),
+      TIERS.map((t) => [t, { tier: t, built: mode === 'core' || t === 'low', qty: 0, value: 0, avgCost: 0 }]),
     ) as GameState['products'],
 
     equipment: [
@@ -104,7 +106,7 @@ export function newGame(seed: number): GameState {
     futures: {},
     extraBuys: [],
     lotsUsed: 0,
-    plan: { tier: 'low', qty: 0, overtime: false },
+    plan: { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false },
     pendingIncome: 0,
     pendingCost: 0,
     hireFeeBy: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 },
