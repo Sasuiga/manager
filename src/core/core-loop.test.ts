@@ -59,3 +59,43 @@ describe('核心循环预演', () => {
     expect(p.revenue.min).toBe(p.revenue.max)
   })
 })
+
+describe('固定经营场景', () => {
+  it('六个场景均可复现并保持三环初始状态干净', () => {
+    expect(E.CORE_SCENARIOS).toHaveLength(6)
+    for (const def of E.CORE_SCENARIOS) {
+      const a = E.newGame(def.seed, 'core')
+      const b = E.newGame(def.seed, 'core')
+      E.startGame(a)
+      E.startGame(b)
+      E.applyCoreScenario(a, def.id)
+      E.applyCoreScenario(b, def.id)
+
+      expect(a.climate).toBe(b.climate)
+      expect(a.cash).toBe(b.cash)
+      expect(a.orders).toEqual(b.orders)
+      expect(E.plannedTotal(a)).toBe(0)
+      expect(E.allocUsed(a)).toBe(0)
+      expect(Object.values(a.materials).every((m) => m.qty === 0 && m.value === 0)).toBe(true)
+    }
+  })
+
+  it('固定场景表达各自的市场约束', () => {
+    const make = (id: E.CoreScenarioId) => {
+      const def = E.CORE_SCENARIOS.find((s) => s.id === id)!
+      const s = E.newGame(def.seed, 'core')
+      E.startGame(s)
+      E.applyCoreScenario(s, id)
+      return s
+    }
+
+    expect(make('cheap_low_demand').climate).toBe('depression')
+    expect(make('expensive_high_demand').climate).toBe('overheat')
+    expect(make('order_heavy').orders).toHaveLength(4)
+    expect(make('spot_heavy').orders).toHaveLength(0)
+    expect(E.derive(make('shared_material_shortage')).materials.alloy.supply).toBeLessThan(
+      E.derive(make('order_heavy')).materials.alloy.supply,
+    )
+    expect(make('cash_constrained').cash).toBe(250)
+  })
+})

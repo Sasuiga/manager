@@ -23,6 +23,8 @@ export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterL
 export type { SettleReport } from './settle'
 export { previewOperations } from './preview'
 export type { OperatingPreview, ProductPreview, ValueRange } from './preview'
+export { CORE_SCENARIOS, applyCoreScenario } from './scenarios'
+export type { CoreScenarioDef, CoreScenarioId } from './scenarios'
 export {
   hire,
   hireCost,

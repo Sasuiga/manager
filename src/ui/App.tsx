@@ -17,10 +17,10 @@ import { wan } from './format'
 type Tab = 'run' | 'report' | 'log'
 
 export function App() {
-  const [run, setRun] = useState<{ seed: number; mode: E.GameMode } | null>(null)
-  const g = useGame(run?.seed ?? null, run?.mode ?? 'full')
+  const [run, setRun] = useState<{ seed: number; mode: E.GameMode; scenario?: E.CoreScenarioId } | null>(null)
+  const g = useGame(run?.seed ?? null, run?.mode ?? 'full', run?.scenario)
 
-  if (!g || run === null) return <TitleScreen onStart={(seed, mode) => setRun({ seed, mode })} />
+  if (!g || run === null) return <TitleScreen onStart={(seed, mode, scenario) => setRun({ seed, mode, scenario })} />
   return <GameRoot g={g} onRestart={() => setRun(null)} />
 }
 
