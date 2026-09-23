@@ -4,6 +4,8 @@ import * as E from './engine'
 function preparedCoreState() {
   const s = E.newGame(20260923, 'core')
   E.startGame(s)
+  E.hire(s, 'make')
+  E.hire(s, 'make')
   s.orders = []
   s.acceptedOrders = []
   s.materials.pkg.qty = 20
@@ -155,6 +157,78 @@ describe('订单与排产联动', () => {
   })
 })
 
+describe('三線招聘（人员能力与解锁轨道）', () => {
+  function fresh(seed = 901) {
+    const s = E.newGame(seed, 'core')
+    E.startGame(s)
+    return s
+  }
+
+  it('初始产能 = 老板自产 5，采购档 2，确定性订单 0', () => {
+    const s = fresh()
+    const d = E.derive(s)
+    expect(d.capacity).toBe(5)
+    expect(d.buyLots).toBe(2)
+    expect(d.orderCount).toBe(0)
+  })
+
+  it('生产 2 人解锁后产能 5→10→17（每人 +1），工资按人计提', () => {
+    const s = fresh()
+    expect(E.hire(s, 'make').ok).toBe(true)
+    expect(E.derive(s).capacity).toBe(10)
+    expect(E.hire(s, 'make').ok).toBe(true)
+    expect(E.derive(s).capacity).toBe(17)
+    expect(E.derive(s).salaryTotal).toBe(10) // 2 人 × 0.5w
+    expect(s.ap).toBe(1)
+  })
+
+  it('采购：招聘费阶梯扣现，档数 2→3→5→6，3 人解锁协议位，4 人原料降价 1 档', () => {
+    const s = fresh()
+    const cash0 = s.cash
+    expect(E.hire(s, 'buy').ok).toBe(true)
+    expect(s.cash).toBe(cash0 - 50) // 5w 招聘费
+    expect(E.derive(s).buyLots).toBe(3)
+    expect(E.agreementSlots(s)).toBe(0)
+    s.ap = 5
+    expect(E.hire(s, 'buy').ok).toBe(true)
+    expect(E.hire(s, 'buy').ok).toBe(true)
+    expect(E.derive(s).buyLots).toBe(5)
+    expect(E.agreementSlots(s)).toBe(1)
+    expect(E.hire(s, 'buy').ok).toBe(true)
+    expect(E.derive(s).buyLots).toBe(6)
+    expect(E.derive(s).materials.pkg.tierShift).toBeLessThan(0) // 4 人降价 1 档
+  })
+
+  it('销售 2 人：当月立即补发 1 个订单，销售资源按阶梯增长', () => {
+    const s = fresh()
+    expect(E.hire(s, 'sell').ok).toBe(true)
+    expect(s.orders.length).toBe(0) // 1 人未达订单阈值
+    expect(E.hire(s, 'sell').ok).toBe(true)
+    expect(s.orders.length).toBe(1) // 2 人解锁 1 单，当月立即补发
+    expect(E.derive(s).orderCount).toBe(1)
+    expect(E.derive(s).salesResource).toBe(18) // 基础 10 + 2 人 × 4
+  })
+
+  it('3 名生产解锁加班：产能计划含 +10', () => {
+    const s = fresh(902)
+    s.ap = 5
+    expect(E.hire(s, 'make').ok).toBe(true)
+    expect(E.hire(s, 'make').ok).toBe(true)
+    expect(E.hire(s, 'make').ok).toBe(true)
+    expect(E.toggleOvertime(s).ok).toBe(true)
+    expect(E.planCapacity(s)).toBe(5 + 3 * 6 + 10)
+  })
+
+  it('预演包含当月招聘的效果：招 2 名生产后产能上限提升', () => {
+    const s = fresh(903)
+    const before = E.previewOperations(s).capacityTotal
+    E.hire(s, 'make')
+    E.hire(s, 'make')
+    const after = E.previewOperations(s).capacityTotal
+    expect(after).toBeGreaterThan(before)
+  })
+})
+
 describe('核心模式采购计划', () => {
   it('选择采购档位只预留现金与到货量，不立即扣款入库', () => {
     const s = E.newGame(91, 'core')
@@ -174,6 +248,8 @@ describe('核心模式采购计划', () => {
   it('生产可以使用计划到货；减少采购会保留生产计划，取消采购则清空生产计划', () => {
     const s = E.newGame(92, 'core')
     E.startGame(s)
+    E.hire(s, 'make')
+    E.hire(s, 'make')
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
     expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
 
@@ -195,6 +271,8 @@ describe('核心模式采购计划', () => {
   it('清空生产计划会一并取消加班并同步已接订单', () => {
     const s = E.newGame(95, 'core')
     E.startGame(s)
+    E.hire(s, 'make')
+    E.hire(s, 'make')
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
     expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
     E.setPlan(s, 'low', E.maxProducible(s, 'low'))

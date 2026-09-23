@@ -46,7 +46,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     cash: START_CASH,
     debt: 0,
     paidIn: START_CASH,
-    ownerCapital: 50, // 开局以实物投入一台产能 10 的产线
+    ownerCapital: 0, // 新模型开局无初始设备，实物投入归零
     prepaid: 0,
     retained: 0,
 
@@ -86,9 +86,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
       TIERS.map((t) => [t, { tier: t, built: mode === 'core' || t === 'low', qty: 0, value: 0, avgCost: 0 }]),
     ) as GameState['products'],
 
-    equipment: [
-      { id: 'eq-0', name: '初始产线', capacity: 10, depreciation: 20, creditLine: 50, cost: 50, accumulated: 0, purchasedAt: 1 },
-    ],
+    equipment: [],
 
     salesResource: BASE_SALES_RESOURCE,
     salesAlloc: { low: 0, mid: 0, high: 0, special: 0 },

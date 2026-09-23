@@ -207,7 +207,7 @@ describe('引擎', () => {
     E.enterDraw(s)
     E.enterOperate(s)
     const d = E.derive(s)
-    expect(d.capacity).toBe(10) // 开局一台产能 10 的设备，无生产人员
+    expect(d.capacity).toBe(5) // 老板自产 5，开局无生产人员、无设备
     expect(E.maxProducible(s, 'low')).toBe(0) // 无原料
   })
 
@@ -291,12 +291,12 @@ describe('引擎', () => {
   it('折旧提足原值即停，账面价值不会穿负', () => {
     const s = E.newGame(5)
     E.startGame(s)
-    const eq = s.equipment[0]
-    eq.accumulated = eq.cost // 已提足
+    // 新模型开局无设备，手动挂一台已提足的验证折旧会计路径
+    s.equipment.push({ id: 'eq-test', name: '测试产线', capacity: 10, depreciation: 20, creditLine: 0, cost: 50, accumulated: 50, purchasedAt: 1 })
     const before = E.balanceSheet(s).equipmentAccum
     const rep = E.settleMonth(s)
     // 不再计提：累计折旧停在原值，净值也不会被压成负数
-    expect(eq.accumulated).toBe(eq.cost)
+    expect(s.equipment[0].accumulated).toBe(50)
     expect(E.balanceSheet(s).equipmentAccum).toBe(before)
     expect(E.equipmentNet(s)).toBe(0)
     expect(rep.ledger.parts['设备折旧']).toBe(0)

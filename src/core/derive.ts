@@ -12,9 +12,10 @@ import {
   CLIMATE_MATERIAL,
   DEPT_ORDER,
   IP_BY_ID,
-  MAKER_CAP_NO_SLOT,
-  MAKER_CAP_WITH_SLOT,
+  EQUIP_CAP_PER_WORKER,
+  MAKER_CAP_BASE,
   MATERIALS,
+  OWNER_CAPACITY,
   MONTHLY_RATE,
   OVERTIME_COST,
   PRODUCT_PRICE,
@@ -324,15 +325,8 @@ export function derive(state: GameState): DerivedTotals {
   const price: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const t of TIERS) price[t] = productPriceRaw(t, priceShift[t])
 
-  // ── 产能 ──
-  const slots = state.equipment.length
-  const equipCap = state.equipment.reduce((a, e) => a + e.capacity + ip.equipCapacity, 0)
-  const placed = Math.min(staffCount.make, slots)
-  const unplaced = Math.max(0, staffCount.make - slots)
-  let makerCap = 0
-  const per = makerPerStaff(staffCount.make)
-  makerCap += placed * per + unplaced * MAKER_CAP_NO_SLOT
-  const capacity = Math.max(0, equipCap + makerCap + (mods.capacity ?? 0))
+  // ── 产能：老板自产 + 工人数 × 每人产能（基础 5，2 人/4 人解锁各 +1，每台设备 +2） ──
+  const capacity = Math.max(0, OWNER_CAPACITY + staffCount.make * makerPerStaff(staffCount.make, state.equipment.length) + (mods.capacity ?? 0))
 
   // ── 薪酬 ──
   const salaryPer: Record<Dept, number> = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
@@ -347,19 +341,18 @@ export function derive(state: GameState): DerivedTotals {
   // ── 资金 ──
   const rate = Math.max(0, MONTHLY_RATE + (mods.rateShift ?? 0) * 0.001 - ip.rateSave * 0.001)
   const interest = Math.max(0, Math.round(state.debt * rate) - ip.interestSave)
-  const equipCredit = state.equipment.reduce((a, e) => a + e.creditLine, 0)
-  const creditLine = Math.round((BASE_CREDIT_LINE + equipCredit + ip.creditLine) * (mods.creditFactor ?? 1))
+  const creditLine = Math.round((BASE_CREDIT_LINE + ip.creditLine) * (mods.creditFactor ?? 1))
 
   // ── 销售 ──
   // 品牌加成计入资源池（新模型下品牌 = 更多推力）
   const brandBonus = (staffCount.sell >= 5 ? 3 : 0) + ip.brandBonus
   const salesResource = BASE_SALES_RESOURCE + salesResourceFromStaff(Math.min(5, staffCount.sell)) + ip.salesResource + brandBonus + (mods.salesResource ?? 0)
-  const orderCount = (state.mode === 'core' ? 2 : SALES_ORDER_COUNT[Math.min(5, staffCount.sell)]) + ip.orderBonus + (mods.orders ?? 0)
+  const orderCount = SALES_ORDER_COUNT[Math.min(5, staffCount.sell)] + ip.orderBonus + (mods.orders ?? 0)
   const orderQty = mods.orderQty ?? 10
   const orderPriceShift = 1 + ip.orderPriceShift + (mods.orderPriceShift ?? 0)
 
   // ── 采购 ──
-  const buyLots = (state.mode === 'core' ? 4 : BUY_LOT_SLOTS[Math.min(5, staffCount.buy)]) + (mods.buyLots ?? 0)
+  const buyLots = BUY_LOT_SLOTS[Math.min(5, staffCount.buy)] + (mods.buyLots ?? 0)
 
   // ── 研发 ──
   const rndProgress = staffCount.rnd * 2 + (mods.rndProgress ?? 0) + ip.rndProgress
@@ -535,10 +528,11 @@ function productPriceRaw(tier: Tier, shift: number) {
   return arr[idx]
 }
 
-export function makerPerStaff(staff: number): number {
-  let v = MAKER_CAP_WITH_SLOT
-  if (staff >= 2) v += 2
+export function makerPerStaff(staff: number, equipmentCount = 0): number {
+  let v = MAKER_CAP_BASE
+  if (staff >= 2) v += 1
   if (staff >= 4) v += 1
+  v += equipmentCount * EQUIP_CAP_PER_WORKER
   return v
 }
 

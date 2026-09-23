@@ -232,9 +232,9 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '生产人员',
     hireFees: [0], // 生产人员无阶梯招聘费，仅消耗 AP
     salary: 5,
-    base: ['有设备坑位产能 +4，无坑位 +2'],
+    base: ['每人产能 +5'],
     unlocks: [
-      { at: 2, text: '每名工人产能 +2' },
+      { at: 2, text: '每名工人产能 +1' },
       { at: 3, text: '解锁加班：0.5w 临时 +10 产能，每月 1 次' },
       { at: 4, text: '每名工人产能 +1，并强化卡牌效果' },
       { at: 5, text: '每生产 5 件额外入库 1 件', achievement: '流水线' },
@@ -281,15 +281,19 @@ export const START_CASH = 1000 // 100w
 /** 采购档位：可选档数（§6.1.2）。 */
 export const BUY_LOT_SLOTS = [2, 3, 4, 5, 6, 7]
 
-/** 生产人员产能基础贡献。 */
-export const MAKER_CAP_WITH_SLOT = 4
-export const MAKER_CAP_NO_SLOT = 2
+/** 老板自产产能（玩家亲自下场的固定贡献，无工人也生效）。 */
+export const OWNER_CAPACITY = 5
+/** 每名工人的基础产能。 */
+export const MAKER_CAP_BASE = 5
+/** 每台设备给每名工人额外提供的产能（设备系统后续分支引入，先占位）。 */
+export const EQUIP_CAP_PER_WORKER = 2
 
-/** 加成计算：每名工人的产能（含解锁加成）。 */
-export function makerCapacityPerStaff(staff: number): number {
-  let v = MAKER_CAP_WITH_SLOT
-  if (staff >= 2) v += 2
+/** 加成计算：每名工人的产能（基础 5；生产 2 人 +1、4 人 +1 解锁；每台设备 +2）。 */
+export function makerCapacityPerStaff(staff: number, equipmentCount = 0): number {
+  let v = MAKER_CAP_BASE
+  if (staff >= 2) v += 1
   if (staff >= 4) v += 1
+  v += equipmentCount * EQUIP_CAP_PER_WORKER
   return v
 }
 

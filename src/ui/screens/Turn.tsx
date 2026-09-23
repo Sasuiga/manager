@@ -186,7 +186,7 @@ export function TurnScreen({
         {dept === 'rnd' ? <RndPage g={g} /> : null}
         {dept === 'preview' ? <PreviewPage g={g} onSettle={onSettle} /> : null}
 
-        {s.mode === 'full' && dept !== 'preview' ? <HireBlock g={g} dept={dept} /> : null}
+        {dept !== 'preview' ? <HireBlock g={g} dept={dept} /> : null}
       </div>
 
       <nav className="track">
@@ -461,7 +461,7 @@ function BuyPage({ g }: { g: Game }) {
         </div>
       ) : null}
 
-      {gs.mode === 'full' ? <div className="card">
+      <div className="card">
         <h3>其他采购手段</h3>
         <div className="title-rule" />
         <div className="stack">
@@ -480,7 +480,7 @@ function BuyPage({ g }: { g: Game }) {
             </span>
           </button>
         </div>
-      </div> : null}
+      </div>
 
       {pickLot ? (
         <Sheet title="选择采购档位" sub={mats.find((x) => x.id === pickLot)?.name} onClose={() => setPickLot(null)}>
@@ -786,7 +786,7 @@ function AgreementSheet({ g, onClose }: { g: Game; onClose: () => void }) {
         })}
       </div>
       <div className="hint">
-        采购 {d.buyLots} 档可用；研发到 5 人可将锁定期延长至 6 个月。
+        采购 {d.buyLots} 档可用；采购到 5 人可将锁定期延长至 6 个月。
       </div>
     </Sheet>
   )
@@ -931,8 +931,8 @@ function MakePage({ g }: { g: Game }) {
         </div> : null}
       </div>
 
-      {gs.mode === 'full' ? <div className="card">
-        <h3>加班与设备</h3>
+      <div className="card">
+        <h3>{gs.mode === 'core' ? '加班' : '加班与设备'}</h3>
         <div className="title-rule" />
         <div className="stack">
           <button
@@ -945,12 +945,14 @@ function MakePage({ g }: { g: Game }) {
               {gs.depts.make.staff < 3 ? '需生产 3 人解锁' : '0.5w · 本月产能 +10'}
             </span>
           </button>
-          <button className="btn btn-mini" onClick={() => setEquip(true)}>
-            <span className="btn-main">购买设备</span>
-            <span className="btn-sub">扩充产能与借款额度</span>
-          </button>
+          {gs.mode === 'full' ? (
+            <button className="btn btn-mini" onClick={() => setEquip(true)}>
+              <span className="btn-main">购买设备</span>
+              <span className="btn-sub">扩充产能与借款额度</span>
+            </button>
+          ) : null}
         </div>
-      </div> : null}
+      </div>
 
       {gs.equipment.length ? (
         <div className="card">
@@ -1171,7 +1173,8 @@ function SellPage({ g }: { g: Game }) {
   const d = E.derive(gs)
   const plannedTotal = TIER_ORDER.reduce((sum, tier) => sum + Math.max(0, gs.plan.quantities[tier]), 0)
   const depreciation = gs.equipment.reduce((sum, e) => sum + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0)
-  const fixedProductionCost = d.salaryPer.make * gs.depts.make.staff + depreciation
+  const overtimeCost = gs.plan.overtime && gs.depts.make.staff >= 3 ? E.OVERTIME_COST : 0
+  const fixedProductionCost = d.salaryPer.make * gs.depts.make.staff + depreciation + overtimeCost
   /** 预估单件毛利（万元）= 单价 − 变动单位成本 − 固定成本分摊；市价与订单价按单件同口径对比。 */
   const estimatedGrossProfit = (tier: Tier, price: number) => {
     const allocatedFixed = plannedTotal > 0 ? fixedProductionCost / plannedTotal : 0
