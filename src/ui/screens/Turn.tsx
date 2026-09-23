@@ -421,7 +421,7 @@ function BuyPage({ g }: { g: Game }) {
                 </td>
                 {gs.mode === 'core' ? (
                   <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
-                    {m.qty}/{m.cap}
+                    {m.qty + (m.chosenLot ? E.plannedPurchaseLine(gs, m.id).qty : 0)}/{m.cap}
                   </td>
                 ) : null}
                 <td style={{ textAlign: 'right', padding: '6px 8px' }}>
