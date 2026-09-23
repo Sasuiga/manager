@@ -14,7 +14,7 @@ import {
 } from '../data/game'
 import { derive, mergeMods } from './derive'
 import { balanceSheet, equipmentNet, equityOf, inventoryValue } from './game'
-import { issueMaterials, postProductionInbound } from './actions'
+import { executePlannedPurchases, issueMaterials, postProductionInbound } from './actions'
 import { Rng } from './rng'
 import type {
   BalanceSheet,
@@ -47,6 +47,7 @@ export interface SettleReport {
     tier: Tier | null
     consumed: { id: string; name: string; qty: number; cost: Money }[]
     unitCost: Money
+    lines: { tier: Tier; planned: number; produced: number; unitCost: Money }[]
   }
   sales: {
     orders: SaleRecord[]
@@ -66,9 +67,17 @@ export interface SettleReport {
   warnings: string[]
 }
 
-export function settle(state: GameState): SettleReport {
+export interface SettleOptions {
+  /** 核心模式现货需求倍率；预演用固定上下界，正式结算留空后按月随机。 */
+  spotDemandFactor?: Partial<Record<Tier, number>>
+}
+
+export function settle(state: GameState, options: SettleOptions = {}): SettleReport {
   const d = derive(state)
   const warnings: string[] = []
+
+  // 核心模式：普通采购在经营阶段只是计划，正式结算时先付款入库。
+  executePlannedPurchases(state)
 
   // ══════════ 0. 长期协议自动采购 ══════════
   const autoPurchase: SettleReport['autoPurchase'] = []
@@ -121,13 +130,13 @@ export function settle(state: GameState): SettleReport {
   const cashBegin = state.cash
 
   // ══════════ 1. 生产 ══════════
-  const plannedTier = state.plan.tier
   const capacity = planCapacity(state)
-  let planned = plannedTier ? Math.min(state.plan.qty, capacity, maxProducible(state, plannedTier)) : 0
-  planned = Math.max(0, planned)
+  const requested = TIERS.reduce((sum, t) => sum + state.plan.quantities[t], 0)
+  let planned = 0
   const consumed: SettleReport['production']['consumed'] = []
+  const productionLines: SettleReport['production']['lines'] = []
   let produced = 0
-  let producedUnitCost = 0
+  let producedValue = 0
   /**
    * 生产降本差异：原料按账面价全额出库、成品按 costFactor 折价入账的差额。
    *
@@ -136,42 +145,51 @@ export function settle(state: GameState): SettleReport {
    * 直到售出才通过销售成本消化——恒等式在月末即被破坏。
    */
   let prodVariance = 0
-  if (plannedTier && planned > 0) {
+  for (const plannedTier of TIERS) {
+    const want = state.plan.quantities[plannedTier]
+    if (want <= 0 || !state.products[plannedTier].built) continue
+    state.plan.quantities[plannedTier] = 0
+    const linePlanned = Math.min(want, maxProducible(state, plannedTier))
+    if (linePlanned <= 0) continue
+    planned += linePlanned
     const bom = BOMS[plannedTier]
     let materialCost = 0
     for (const [id, need] of Object.entries(bom.recipe)) {
       const per = Math.max(1, need - d.matSave)
-      const qty = per * planned
+      const qty = per * linePlanned
       const mat = state.materials[id]
       const unitValue = mat.qty > 0 ? mat.value / mat.qty : 0
       const cost = unitValue * qty
       materialCost += cost
       consumed.push({ id, name: nameOf(id), qty, cost: Math.round(cost) })
     }
-    producedUnitCost = planned > 0 ? Math.round((materialCost / planned) * d.costFactor) : 0
     /**
      * 扣减与记账同 confirmProduction 共用 issueMaterials：
      * 出库按账面单价等比例结转，并与入库使用同一个 materialCost，
      * 保证「原料减多少 = 成品加多少（除以成本系数之前）」。
      */
-    issueMaterials(state, plannedTier, planned, d.matSave)
-    produced = planned
+    issueMaterials(state, plannedTier, linePlanned, d.matSave)
     /**
      * 【流水线】成就（生产 5 人）：每 5 件额外入库 1 件。
      * 这些白得的产出若不计价，账面上就会出现「凭空多出来的资产」，
      * 因此按本批既有的单位成本计价，与自产产品同口径入账。
      */
-    const bonus = state.depts.make.staff >= 5 ? Math.floor(produced / 5) : 0
+    const bonus = state.depts.make.staff >= 5 ? Math.floor(linePlanned / 5) : 0
     const p = state.products[plannedTier]
     const batchCost = materialCost * d.costFactor
-    const unitCostIn = planned > 0 ? batchCost / planned : 0
+    const unitCostIn = linePlanned > 0 ? batchCost / linePlanned : 0
     p.value += batchCost + bonus * unitCostIn
-    p.qty += produced + bonus
+    p.qty += linePlanned + bonus
     p.avgCost = p.qty > 0 ? Math.round(p.value / p.qty) : 0
     if (bonus > 0) warnings.push(`流水线效应：额外入库 ${bonus} 件`)
-    postProductionInbound(state, plannedTier, produced, bonus, batchCost, unitCostIn)
-    prodVariance = materialCost * (1 - d.costFactor)
+    postProductionInbound(state, plannedTier, linePlanned, bonus, batchCost, unitCostIn)
+    prodVariance += materialCost * (1 - d.costFactor)
+    produced += linePlanned + bonus
+    producedValue += batchCost + bonus * unitCostIn
+    productionLines.push({ tier: plannedTier, planned: linePlanned, produced: linePlanned + bonus, unitCost: Math.round(unitCostIn) })
   }
+  for (const tier of TIERS) state.plan.quantities[tier] = 0
+  const producedUnitCost = produced > 0 ? Math.round(producedValue / produced) : 0
   // 加班费（现金）
   if (state.plan.overtime && state.depts.make.staff >= 3) {
     state.cash -= 5
@@ -182,8 +200,24 @@ export function settle(state: GameState): SettleReport {
   const orders: SaleRecord[] = []
   const spots: SaleRecord[] = []
   const filled: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
-  /** lost 以含加点的总需求为起点，订单交付会占用本层需求。 */
-  const lost: Record<Tier, number> = { ...d.demand }
+  /**
+   * 核心模式的现货成交具有不确定性：每层实际市场需求为公开上限的 50%～100%。
+   * 预演会分别传入 0.5 / 1 得到区间；正式结算按 seed、月份和产品层确定性抽取。
+   * 完整模式保持原有确定需求规则。
+   */
+  const spotRng = new Rng(state.seed + state.month * 65537 + 1709)
+  const spotFactor: Record<Tier, number> = { low: 1, mid: 1, high: 1, special: 1 }
+  for (const t of TIERS) {
+    spotFactor[t] = options.spotDemandFactor?.[t]
+      ?? (state.mode === 'core' ? 0.5 + spotRng.next() * 0.5 : 1)
+  }
+  /** lost 以本月实际现货需求为起点，订单交付会占用本层需求。 */
+  const lost: Record<Tier, number> = {
+    low: Math.floor(d.demand.low * spotFactor.low),
+    mid: Math.floor(d.demand.mid * spotFactor.mid),
+    high: Math.floor(d.demand.high * spotFactor.high),
+    special: Math.floor(d.demand.special * spotFactor.special),
+  }
   /** 满足率分母用自然需求（不含加点）：玩家自己推大的盘子不应拉低自己的达标率。 */
   const demandTotal = TIERS.reduce((a, t) => a + d.demandBase[t], 0)
 
@@ -484,7 +518,15 @@ export function settle(state: GameState): SettleReport {
 
   return {
     month: state.month,
-    production: { capacity, planned, produced, tier: plannedTier, consumed, unitCost: producedUnitCost },
+    production: {
+      capacity,
+      planned: requested || planned,
+      produced,
+      tier: productionLines.length === 1 ? productionLines[0].tier : null,
+      consumed,
+      unitCost: producedUnitCost,
+      lines: productionLines,
+    },
     sales: { orders, spots, revenue, demand: d.demand, filled, lost, fillRate: demandTotal ? TIERS.reduce((a, t) => a + filled[t], 0) / demandTotal : 1 },
     rnd: rndResult,
     ledger,
@@ -765,7 +807,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.monthFlags = []
   state.playedThisMonth = []
   state.lotsUsed = 0
-  state.plan = { tier: state.plan.tier, qty: 0, overtime: false }
+  state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false }
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   state.monthLedger = []
   state.declinedOrders = []

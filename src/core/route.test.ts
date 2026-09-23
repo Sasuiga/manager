@@ -72,7 +72,7 @@ function play(seed: number, cfg = { make: 3, sell: 3, buy: 2, rnd: 1, ops: 1, mi
         }
       }
     }
-    E.setPlan(s, { tier, qty: Math.min(E.maxProducible(s, tier), want) })
+    E.setPlan(s, tier, Math.min(E.maxProducible(s, tier), want))
     E.setAlloc(s, tier, E.derive(s).salesResource)
     if (s.depts.rnd.staff >= 1 && !E.activeResearch(s)) E.startResearch(s, s.products.mid.built ? 'ip-normal' : 'bom-mid')
     if (s.cash < 250) { const d2 = E.derive(s); const a = Math.min(d2.creditAvailable, 250); if (a >= 10) E.borrow(s, a - (a % 10)) }

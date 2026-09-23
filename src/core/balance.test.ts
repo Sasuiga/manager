@@ -64,7 +64,7 @@ function play(seed: number) {
       }
     }
 
-    E.setPlan(s, { tier: 'low', qty: Math.min(E.maxProducible(s, 'low'), want) })
+    E.setPlan(s, 'low', Math.min(E.maxProducible(s, 'low'), want))
     E.setAlloc(s, 'low', E.derive(s).salesResource)
     if (s.depts.rnd.staff >= 1 && !E.activeResearch(s)) E.startResearch(s, 'bom-mid')
 

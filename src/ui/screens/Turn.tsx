@@ -8,8 +8,10 @@ import { Medallion } from '../ornaments'
 import { Row, Sheet } from '../Sheet'
 import { wan, tierClass, tierName, TIER_ORDER, clamp } from '../format'
 import type { Game } from '../useGame'
+import { PreviewPage } from './Preview'
 
 const DEPTS: E.Dept[] = ['ops', 'buy', 'make', 'sell', 'rnd']
+export type TurnView = E.Dept | 'preview'
 
 function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
   const d = E.derive(g.s)
@@ -157,12 +159,13 @@ export function TurnScreen({
   onSettle,
 }: {
   g: Game
-  dept: E.Dept
-  onDept: (d: E.Dept) => void
+  dept: TurnView
+  onDept: (d: TurnView) => void
   onSettle: () => void
 }) {
   const s = g.s
   const d = E.derive(s)
+  const visibleDepts: E.Dept[] = s.mode === 'core' ? ['buy', 'make', 'sell'] : DEPTS
 
   /** 轨道红点：有未处理事项时亮起。 */
   const dots: Record<E.Dept, boolean> = {
@@ -181,21 +184,25 @@ export function TurnScreen({
         {dept === 'make' ? <MakePage g={g} /> : null}
         {dept === 'sell' ? <SellPage g={g} /> : null}
         {dept === 'rnd' ? <RndPage g={g} /> : null}
+        {dept === 'preview' ? <PreviewPage g={g} onSettle={onSettle} /> : null}
 
-        <HireBlock g={g} dept={dept} />
+        {s.mode === 'full' && dept !== 'preview' ? <HireBlock g={g} dept={dept} /> : null}
       </div>
 
       <nav className="track">
-        {DEPTS.map((k) => (
+        {visibleDepts.map((k) => (
           <button key={k} className={`track-btn${dept === k ? ' on' : ''}`} onClick={() => onDept(k)}>
             {dots[k] ? <span className="track-dot" /> : null}
             <Icon name={DEPT_ICON[k]} size={19} />
             <span>{DEPT_SHORT[k]}</span>
           </button>
         ))}
-        <button className="track-btn track-settle" onClick={onSettle}>
+        <button
+          className={`track-btn track-settle${dept === 'preview' ? ' on' : ''}`}
+          onClick={() => s.mode === 'core' ? onDept('preview') : onSettle()}
+        >
           <Icon name="settle" size={19} />
-          <span>结算</span>
+          <span>{s.mode === 'core' ? '预演' : '结算'}</span>
         </button>
       </nav>
     </>
@@ -375,7 +382,9 @@ function BuyPage({ g }: { g: Game }) {
         </p>
         <LedgerSection g={g} dept="buy" />
         <p className="hint" style={{ marginTop: 'var(--s2)' }}>
-          采购实付现金自动入账「借 库存 / 贷 现金」，金额与库存账面、生产领料出库严格勾稽。
+          {gs.mode === 'core'
+            ? '普通采购先形成计划，结算时按“采购入库 → 生产 → 销售”统一执行；结算前可调整。'
+            : '采购实付现金自动入账「借 库存 / 贷 现金」，金额与库存账面、生产领料出库严格勾稽。'}
         </p>
       </div>
 
@@ -385,9 +394,10 @@ function BuyPage({ g }: { g: Game }) {
           <thead>
             <tr style={{ borderBottom: '1px solid var(--line)' }}>
               <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>材料</th>
-              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>库存</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>{gs.mode === 'core' ? '库存 + 计划' : '库存'}</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>供给</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>价格水平</th>
+              {gs.mode === 'core' ? <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>库存占用</th> : null}
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>操作</th>
             </tr>
           </thead>
@@ -399,7 +409,9 @@ function BuyPage({ g }: { g: Game }) {
                   {m.isNew ? <span className="tag" style={{ marginLeft: 4, fontSize: '0.75em' }}>新</span> : null}
                 </td>
                 <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
-                  {m.qty}/{m.cap}
+                  {gs.mode === 'core' && m.chosenLot
+                    ? `${m.qty} + ${E.plannedPurchaseLine(gs, m.id).qty}`
+                    : `${m.qty}/${m.cap}`}
                 </td>
                 <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
                   {m.supply}
@@ -407,9 +419,22 @@ function BuyPage({ g }: { g: Game }) {
                 <td style={{ textAlign: 'right', padding: '6px 8px' }}>
                   <span className={tierClass(m.tierShift)}>{tierName(m.tierShift)}</span>
                 </td>
+                {gs.mode === 'core' ? (
+                  <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
+                    {m.qty + (m.chosenLot ? E.plannedPurchaseLine(gs, m.id).qty : 0)}/{m.cap}
+                  </td>
+                ) : null}
                 <td style={{ textAlign: 'right', padding: '6px 8px' }}>
                   {m.chosenLot ? (
-                    <span className="xs faint">已选 {E.lotLabel(m.chosenLot)}</span>
+                    gs.mode === 'core' ? (
+                      <button
+                        className="btn btn-mini"
+                        style={{ padding: '2px 8px', fontSize: '0.8em' }}
+                        onClick={() => setPickLot(m.id)}
+                      >
+                        调整
+                      </button>
+                    ) : <span className="xs faint">已选 {E.lotLabel(m.chosenLot)}</span>
                   ) : (
                     <button
                       className="btn btn-mini"
@@ -427,7 +452,16 @@ function BuyPage({ g }: { g: Game }) {
         </table>
       </div>
 
-      <div className="card">
+      {gs.mode === 'core' ? (
+        <div className="card">
+          <div className="section-label">采购计划汇总</div>
+          <Row k="计划支出" v={wan(E.plannedPurchaseCost(gs))} />
+          <Row k="计划后可用现金" v={wan(E.availableCashAfterPurchasePlan(gs))} />
+          <Row k="已选采购档" v={`${gs.lotsUsed} / ${d.buyLots}`} />
+        </div>
+      ) : null}
+
+      {gs.mode === 'full' ? <div className="card">
         <h3>其他采购手段</h3>
         <div className="title-rule" />
         <div className="stack">
@@ -446,21 +480,20 @@ function BuyPage({ g }: { g: Game }) {
             </span>
           </button>
         </div>
-      </div>
+      </div> : null}
 
       {pickLot ? (
         <Sheet title="选择采购档位" sub={mats.find((x) => x.id === pickLot)?.name} onClose={() => setPickLot(null)}>
           <div className="stack">
             {(['small', 'mid', 'large'] as E.LotSize[]).map((lot) => {
-              const qty = E.lotQty(gs, pickLot, lot)
+              const qty = gs.mode === 'core' ? E.plannedLotQty(gs, pickLot, lot) : E.lotQty(gs, pickLot, lot)
               const price = E.lotPrice(gs, pickLot, lot)
               const total = qty * price
               const chosen = mats.find((x) => x.id === pickLot)?.chosenLot === lot
-              const disabled =
-                mats.find((x) => x.id === pickLot)?.chosenLot !== null ||
-                qty <= 0 ||
-                gs.lotsUsed >= d.buyLots ||
-                total > gs.cash
+              const disabled = gs.mode === 'core'
+                ? !E.canSetPurchasePlan(gs, pickLot, lot).ok
+                : mats.find((x) => x.id === pickLot)?.chosenLot !== null ||
+                  qty <= 0 || gs.lotsUsed >= d.buyLots || total > gs.cash
               return (
                 <button
                   key={lot}
@@ -476,6 +509,19 @@ function BuyPage({ g }: { g: Game }) {
                 </button>
               )
             })}
+            {gs.mode === 'core' && mats.find((x) => x.id === pickLot)?.chosenLot ? (
+              <button
+                className="btn btn-mini"
+                disabled={!E.canSetPurchasePlan(gs, pickLot, null).ok}
+                onClick={() => {
+                  g.act((st) => E.setPurchasePlan(st, pickLot, null))
+                  setPickLot(null)
+                }}
+              >
+                <span className="btn-main xs">不采购</span>
+                <span className="btn-sub xs">取消本月采购计划</span>
+              </button>
+            ) : null}
           </div>
         </Sheet>
       ) : null}
@@ -504,9 +550,13 @@ function BuyConfirmSheet({
 }) {
   const gs = g.s
   const m = E.materialViews(gs).find((x) => x.id === data.id)!
-  const qty = E.lotQty(gs, data.id, data.lot)
+  const qty = gs.mode === 'core' ? E.plannedLotQty(gs, data.id, data.lot) : E.lotQty(gs, data.id, data.lot)
   const price = E.lotPrice(gs, data.id, data.lot)
   const total = qty * price
+  const canConfirm = gs.mode === 'core'
+    ? E.canSetPurchasePlan(gs, data.id, data.lot).ok
+    : qty > 0 && total <= gs.cash
+  const clearsPlan = gs.mode === 'core' && E.purchasePlanClearsProduction(gs, data.id, data.lot)
   const [showPriceSrc, setShowPriceSrc] = useState(false)
 
   return (
@@ -516,14 +566,14 @@ function BuyConfirmSheet({
       footer={
         <button
           className="btn btn-nav"
-          disabled={qty <= 0 || total > gs.cash}
+          disabled={!canConfirm}
           onClick={() => {
             g.act((st) => E.buyMaterial(st, data.id, data.lot))
             onClose()
           }}
         >
           <span className="btn-main">
-            {qty <= 0 ? '无供给' : total > gs.cash ? '现金不足' : '确认采购'}
+            {qty <= 0 ? '无供给' : !canConfirm ? '无法安排' : gs.mode === 'core' ? '确认采购计划' : '确认采购'}
           </span>
         </button>
       }
@@ -538,6 +588,12 @@ function BuyConfirmSheet({
           </button>
         </div>
         <Row k="总价" v={wan(total)} bold />
+        {gs.mode === 'core' ? <Row k="计划后可用现金" v={wan(E.availableCashAfterPurchasePlan(gs) - total + E.plannedPurchaseLine(gs, data.id).cost)} /> : null}
+        {clearsPlan ? (
+          <div className="info" style={{ marginTop: 'var(--s2)' }}>
+            该原料采购量低于原生产需求，确认后生产计划将清空，请重新安排生产。
+          </div>
+        ) : null}
       </div>
 
       <div className="card">
@@ -743,7 +799,7 @@ function MakePage({ g }: { g: Game }) {
   const cap = E.planCapacity(gs)
   /** 各层 BOM 可产上限（受产能 + 原料双重限制），分配与看板共用。 */
   const maxBy = E.maxProducibleByTier(gs)
-  const plannedTotal = TIER_ORDER.reduce((a, t) => a + (gs.plan.tier === t ? gs.plan.qty : 0), 0)
+  const plannedTotal = E.plannedTotal(gs)
   const remainingCap = Math.max(0, cap - plannedTotal)
   const [equip, setEquip] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -813,8 +869,7 @@ function MakePage({ g }: { g: Game }) {
           {/* 未解锁的产品线先不出现，解锁一个出一个 */}
           {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
             const max = maxBy[t]
-            const on = gs.plan.tier === t
-            const qty = on ? gs.plan.qty : 0
+            const qty = gs.plan.quantities[t]
             const plusDisabled = qty >= max
             const minusDisabled = qty <= 0
             return (
@@ -828,7 +883,7 @@ function MakePage({ g }: { g: Game }) {
                     className="btn btn-nav"
                     style={{ width: 'auto', padding: '2px var(--s3)', opacity: minusDisabled ? 0.4 : 1 }}
                     disabled={minusDisabled}
-                    onClick={() => g.mutate((st) => E.setPlan(st, { tier: t, qty: Math.max(0, st.plan.qty - 1) }))}
+                    onClick={() => g.mutate((st) => E.setPlan(st, t, Math.max(0, st.plan.quantities[t] - 1)))}
                   >
                     <span>−</span>
                   </button>
@@ -841,10 +896,7 @@ function MakePage({ g }: { g: Game }) {
                     disabled={plusDisabled}
                     onClick={() =>
                       g.mutate((st) =>
-                        E.setPlan(st, {
-                          tier: t,
-                          qty: clamp((st.plan.tier === t ? st.plan.qty : 0) + 1, 0, E.maxProducible(st, t)),
-                        }),
+                        E.setPlan(st, t, clamp(st.plan.quantities[t] + 1, 0, E.maxProducible(st, t))),
                       )
                     }
                   >
@@ -854,7 +906,7 @@ function MakePage({ g }: { g: Game }) {
                     className="btn btn-mini"
                     style={{ width: 'auto', opacity: qty >= max ? 0.4 : 1 }}
                     disabled={qty >= max}
-                    onClick={() => g.mutate((st) => E.setPlan(st, { tier: t, qty: E.maxProducible(st, t) }))}
+                    onClick={() => g.mutate((st) => E.setPlan(st, t, E.maxProducible(st, t)))}
                   >
                     <span className="btn-main xs">拉满</span>
                   </button>
@@ -866,7 +918,7 @@ function MakePage({ g }: { g: Game }) {
         <div className="hint">
           1 点产能生产 1 件；可在已解锁产品线间自由分配，各线受产能与原料双重限制。剩余 {remainingCap} 点未分配。
         </div>
-        <div style={{ marginTop: 'var(--s3)' }}>
+        {gs.mode === 'full' ? <div style={{ marginTop: 'var(--s3)' }}>
           <button
             className="btn btn-primary"
             style={{ width: '100%' }}
@@ -874,12 +926,12 @@ function MakePage({ g }: { g: Game }) {
             onClick={() => setConfirm(true)}
           >
             <span className="btn-main">确认生产安排</span>
-            <span className="btn-sub">{plannedTotal > 0 ? `共 ${plannedTotal} 件，确认后立即扣料入库` : '先分配产量'}</span>
+            <span className="btn-sub">{plannedTotal > 0 ? `共 ${plannedTotal} 件，于预演结算时统一入库` : '先分配产量'}</span>
           </button>
-        </div>
+        </div> : null}
       </div>
 
-      <div className="card">
+      {gs.mode === 'full' ? <div className="card">
         <h3>加班与设备</h3>
         <div className="title-rule" />
         <div className="stack">
@@ -898,7 +950,7 @@ function MakePage({ g }: { g: Game }) {
             <span className="btn-sub">扩充产能与借款额度</span>
           </button>
         </div>
-      </div>
+      </div> : null}
 
       {gs.equipment.length ? (
         <div className="card">
@@ -918,10 +970,8 @@ function MakePage({ g }: { g: Game }) {
         </div>
       ) : null}
 
-      {/* 确认生产安排：按 BOM 立即扣料入库，「原料→存货」记账到部门账务 */}
-      {confirm ? (
-        <ProductionConfirmSheet g={g} planned={plannedTotal} onDone={() => setConfirm(false)} />
-      ) : null}
+      {/* 确认生产安排：按 BOM 立即扣料入库，「原料→存货」记账到部门账务（仅完整模式） */}
+      {gs.mode === 'full' && confirm ? <ProductionConfirmSheet g={g} planned={plannedTotal} onDone={() => setConfirm(false)} /> : null}
       {equip ? <EquipmentSheet g={g} onClose={() => setEquip(false)} /> : null}
     </>
   )
@@ -931,7 +981,7 @@ function MakePage({ g }: { g: Game }) {
 function ProductionConfirmSheet({ g, planned, onDone }: { g: Game; planned: number; onDone: () => void }) {
   const gs = g.s
   const lines = TIER_ORDER
-    .map((t) => ({ t, qty: gs.plan.tier === t ? gs.plan.qty : 0, max: E.maxProducible(gs, t) }))
+    .map((t) => ({ t, qty: gs.plan.quantities[t], max: gs.plan.quantities[t] + E.maxProducible(gs, t) }))
     .filter((l) => l.qty > 0)
   const willBonus = gs.depts.make.staff >= 5
   const confirm = () => {
@@ -1008,11 +1058,11 @@ function EquipmentSheet({ g, onClose }: { g: Game; onClose: () => void }) {
 
 /* ══════════════ 销售部 ══════════════ */
 
-/* 市场需求表的一行（类型 / 需求数 / 市价 / 可用库存） */
+/* 市场需求表的一行（类型 / 需求数 / 上限 / 市价 / 单件毛利 / 可用库存），与六列网格对齐 */
 function TierRowCells({
   t, p,
   push = 0, over = 0, demand, demandBase, cap, price, avail,
-  orderTaken = 0,
+  orderTaken = 0, grossProfit = 0,
 }: {
   t: Tier
   p: { built: boolean; qty: number }
@@ -1024,6 +1074,7 @@ function TierRowCells({
   price: number
   avail: number
   orderTaken?: number
+  grossProfit?: number
 }) {
   return (
     <>
@@ -1031,12 +1082,13 @@ function TierRowCells({
         <b>{TIER_LABEL[t]}</b>
         {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
       </span>
-      <span />
       <span className={`mono sm${push > 0 ? ' gold' : ''}`}>
-        {demand}<span className="faint">（上限 {demandBase + cap}）</span>
+        {demand}
         {over > 0 ? <span className="faint" style={{ color: 'var(--red, #c0392b)' }}> · 超 {over}</span> : null}
       </span>
+      <span className="mono xs faint">{demandBase + cap}</span>
       <span className="mono xs">{wan(price)}</span>
+      <span className={`mono xs${grossProfit < 0 ? ' bad' : grossProfit > 0 ? ' gold' : ''}`}>{wan(grossProfit)}</span>
       <span>
         <span className="mono sm">{avail}</span>
         {orderTaken > 0 ? <span className="faint xs">（总 {p.qty}）</span> : null}
@@ -1045,14 +1097,15 @@ function TierRowCells({
   )
 }
 
-/* 订单需求表的一行（类型 / 需求数 / 订单价 / 状态 / 来源） */
+/* 订单需求表的一行（类型 / 需求数 / 来源 / 订单价 / 单件毛利 / 状态） */
 function TierOrderRow({
-  t, p, qty, price, from, forced, isAccepted, isDeclined, canAccept, onToggle, onShortClick,
+  t, p, qty, price, grossProfit, from, forced, isAccepted, isDeclined, canAccept, onToggle, onShortClick,
 }: {
   t: Tier
   p: { built: boolean; qty: number }
   qty: number
   price: number
+  grossProfit: number
   from?: string
   forced?: boolean
   isAccepted?: boolean
@@ -1067,11 +1120,12 @@ function TierOrderRow({
         <b>{TIER_LABEL[t]}</b>
         {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
       </span>
-      <span className="xs faint">{from}</span>
       <span className={`mono sm${forced ? '' : isAccepted ? ' gold' : ''}`}>
         {qty} 件
       </span>
+      <span className="xs faint">{from}</span>
       <span className="mono xs">{wan(price)}</span>
+      <span className={`mono xs${grossProfit < 0 ? ' bad' : grossProfit > 0 ? ' gold' : ''}`}>{wan(grossProfit)}</span>
       {forced ? (
         <span className="xs faint">强制必交</span>
       ) : isAccepted ? (
@@ -1086,7 +1140,8 @@ function TierOrderRow({
         <button
           className="btn btn-nav"
           style={{ width: 'auto', padding: '2px var(--s3)', fontSize: 'var(--fs-xs)', opacity: 0.6 }}
-          onClick={onToggle}
+          disabled={!canAccept}
+          onClick={canAccept ? onToggle : onShortClick}
         >
           已放弃（点接）
         </button>
@@ -1114,6 +1169,14 @@ function TierOrderRow({
 function SellPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
+  const plannedTotal = TIER_ORDER.reduce((sum, tier) => sum + Math.max(0, gs.plan.quantities[tier]), 0)
+  const depreciation = gs.equipment.reduce((sum, e) => sum + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0)
+  const fixedProductionCost = d.salaryPer.make * gs.depts.make.staff + depreciation
+  /** 预估单件毛利（万元）= 单价 − 变动单位成本 − 固定成本分摊；市价与订单价按单件同口径对比。 */
+  const estimatedGrossProfit = (tier: Tier, price: number) => {
+    const allocatedFixed = plannedTotal > 0 ? fixedProductionCost / plannedTotal : 0
+    return Math.round(price - E.unitCost(gs, tier, d) - allocatedFixed)
+  }
   const used = E.allocUsed(gs)
   /** 各层强制订单量（事件/卡牌产生，必交）。 */
   const forcedQtyBy: Record<string, number> = { low: 0, mid: 0, high: 0, special: 0 }
@@ -1147,13 +1210,14 @@ function SellPage({ g }: { g: Game }) {
       <div className="card">
         <h3>本月需求与售价</h3>
         <div className="title-rule" />
-        {/* 市场需求表：四列（类型 / 需求 / 售价 / 库存），库存已扣除订单占用量 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 1fr 1fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+        {/* 市场需求表：六列（类型 / 需求数 / 上限 / 市价 / 单件毛利 / 可承诺量），库存已扣除订单占用量，列宽与下方订单表对齐 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 0.9fr 1fr 1.2fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
           <span className="xs" style={{ color: 'var(--gold)' }}>市场需求</span>
-          <span />
           <span className="xs faint">需求数</span>
+          <span className="xs faint">上限</span>
           <span className="xs faint">市价</span>
-          <span className="xs faint">可用库存</span>
+          <span className="xs faint">单件毛利</span>
+          <span className="xs faint">{gs.mode === 'core' ? '可承诺量' : '可用库存'}</span>
           {TIER_ORDER.map((t) => {
             const p = gs.products[t]
             const cost = d.salesPushCost[t]
@@ -1161,7 +1225,7 @@ function SellPage({ g }: { g: Game }) {
             const push = d.salesPush[t]
             const over = Math.max(0, gs.salesAlloc[t] - cap * cost)
             const orderTaken = forcedQtyBy[t] + acceptedQtyBy[t]
-            const avail = Math.max(0, p.qty - orderTaken)
+            const avail = Math.max(0, E.committableProductQty(gs, t) - orderTaken)
             return (
               <TierRowCells
                 key={t}
@@ -1173,6 +1237,7 @@ function SellPage({ g }: { g: Game }) {
                 demandBase={d.demandBase[t]}
                 cap={cap}
                 price={d.price[t]}
+                grossProfit={estimatedGrossProfit(t, d.price[t])}
                 avail={avail}
                 orderTaken={orderTaken}
               />
@@ -1180,19 +1245,20 @@ function SellPage({ g }: { g: Game }) {
           })}
         </div>
 
-        {/* 订单需求表：五列（类型 / 来源 / 需求数 / 订单价 / 状态），列宽与上方对齐 */}
+        {/* 订单需求表：六列（类型 / 需求数 / 来源 / 订单价 / 单件毛利 / 状态），列宽与上方对齐 */}
         <div className="title-rule" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 1fr 1fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 0.9fr 1fr 1.2fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
           <span className="xs" style={{ color: 'var(--gold)' }}>订单需求</span>
-          <span className="xs faint">来源</span>
           <span className="xs faint">需求数</span>
+          <span className="xs faint">来源</span>
           <span className="xs faint">订单价</span>
+          <span className="xs faint">单件毛利</span>
           <span className="xs faint">状态</span>
           {gs.orders.map((o) => {
             const orderPrice = E.priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
             const isAccepted = gs.acceptedOrders.includes(o.id)
             const isDeclined = gs.declinedOrders.includes(o.id)
-            const canAccept = gs.products[o.tier].qty >= o.qty
+            const canAccept = E.canAcceptOrder(gs, o.id)
             return (
               <TierOrderRow
                 key={o.id}
@@ -1200,19 +1266,22 @@ function SellPage({ g }: { g: Game }) {
                 p={gs.products[o.tier]}
                 qty={o.qty}
                 price={orderPrice}
+                grossProfit={estimatedGrossProfit(o.tier, orderPrice)}
                 from={o.from}
                 forced={o.forced}
                 isAccepted={isAccepted}
                 isDeclined={isDeclined}
                 canAccept={canAccept}
                 onToggle={() => g.mutate((st) => E.toggleOrder(st, o.id))}
-                onShortClick={() => g.setToast('库存不足，先生产再接单')}
+                onShortClick={() => g.setToast(gs.mode === 'core' ? '可承诺产品不足，请先增加该产品排产' : '库存不足，先生产再接单')}
               />
             )
           })}
         </div>
         <div className="hint">
-          可用库存 = 总库存 − 强制订单占用 − 已接自然订单占用。强制订单到月必交；自然订单点接后锁定库存，再点取消。
+          {gs.mode === 'core'
+            ? '可承诺量 = 现有库存 + 本月排产 − 强制订单占用 − 已接自然订单占用。排产减少时，无法足额履约的订单会自动取消。'
+            : '可用库存 = 总库存 − 强制订单占用 − 已接自然订单占用。强制订单到月必交；自然订单点接后锁定库存，再点取消。'}
         </div>
       </div>
 

@@ -513,6 +513,7 @@ function priceAtShift(materialId: string, shift: number): Money {
 }
 
 export function buyMaterial(state: GameState, materialId: string, lot: LotSize): ActionResult {
+  if (state.mode === 'core') return setPurchasePlan(state, materialId, lot)
   const d = derive(state)
   const mat = state.materials[materialId]
   if (!mat) return fail('未知原料')
@@ -548,6 +549,136 @@ export function buyMaterial(state: GameState, materialId: string, lot: LotSize):
     `${added} 单位 × ${unit / 10}w = ${((added * unit) / 10).toFixed(1)}w`,
   ])
   return { ok: true, msg: `入库 ${added} 单位` }
+}
+
+/** 核心模式普通采购只形成计划，不立即扣款或入库。 */
+export function setPurchasePlan(state: GameState, materialId: string, lot: LotSize | null): ActionResult {
+  if (state.mode !== 'core') return fail('仅核心模式可调整采购计划')
+  const mat = state.materials[materialId]
+  if (!mat) return fail('未知原料')
+  const previous = mat.chosenLot
+  const usedWithoutThis = state.lotsUsed - (previous ? 1 : 0)
+  if (lot && usedWithoutThis >= derive(state).buyLots) return fail('本月可选档数已用完')
+
+  const nextQty = lot ? plannedLotQty(state, materialId, lot) : 0
+  const needed = plannedMaterialNeed(state, materialId)
+  const clearsPlan = plannedTotal(state) > 0 && mat.qty + nextQty < needed
+  if (clearsPlan && !lot) return fail('该采购计划已被生产占用，请先调整生产安排')
+
+  const nextCost = lot ? nextQty * lotPrice(state, materialId, lot) : 0
+  const costWithoutThis = plannedPurchaseCost(state) - plannedPurchaseLine(state, materialId).cost
+  if (costWithoutThis + nextCost > state.cash) return fail('可用现金不足')
+
+  mat.chosenLot = lot
+  state.lotsUsed = usedWithoutThis + (lot ? 1 : 0)
+  if (clearsPlan) {
+    clearProductionPlan(state)
+    reconcileAcceptedOrders(state)
+    pushLog(state, 'action', '采购调整：原生产计划已清空', [
+      '该原料新采购量低于原生产需求，请重新安排生产计划',
+    ])
+  }
+  return {
+    ok: true,
+    msg: lot
+      ? clearsPlan
+        ? `${nameOf(materialId)}已计划${lotLabel(lot)}，生产计划已清空`
+        : `${nameOf(materialId)}已计划${lotLabel(lot)}`
+      : `${nameOf(materialId)}采购计划已取消`,
+  }
+}
+
+export function canSetPurchasePlan(state: GameState, materialId: string, lot: LotSize | null): ActionResult {
+  if (state.mode !== 'core') return OK
+  const copy = JSON.parse(JSON.stringify(state)) as GameState
+  return setPurchasePlan(copy, materialId, lot)
+}
+
+/** 计划采购实际可入库数量，受市场供给和仓容共同限制。 */
+export function plannedLotQty(state: GameState, materialId: string, lot: LotSize): number {
+  const mat = state.materials[materialId]
+  if (!mat) return 0
+  const cap = derive(state).materials[materialId]?.cap ?? mat.cap
+  return Math.max(0, Math.min(lotQty(state, materialId, lot), cap - mat.qty))
+}
+
+export function plannedPurchaseLine(state: GameState, materialId: string) {
+  const lot = state.materials[materialId]?.chosenLot ?? null
+  if (!lot || state.mode !== 'core') return { lot: null, qty: 0, unit: 0, cost: 0 }
+  const qty = plannedLotQty(state, materialId, lot)
+  const unit = lotPrice(state, materialId, lot)
+  return { lot, qty, unit, cost: qty * unit }
+}
+
+export function plannedPurchaseCost(state: GameState): Money {
+  if (state.mode !== 'core') return 0
+  return Object.keys(state.materials).reduce((sum, id) => sum + plannedPurchaseLine(state, id).cost, 0)
+}
+
+export function availableCashAfterPurchasePlan(state: GameState): Money {
+  return state.cash - plannedPurchaseCost(state)
+}
+
+/** 生产可用原料：核心模式包含计划采购到货，完整模式只读实际库存。 */
+export function materialAvailableForProduction(state: GameState, materialId: string): number {
+  const current = state.materials[materialId]?.qty ?? 0
+  return current + (state.mode === 'core' ? plannedPurchaseLine(state, materialId).qty : 0)
+}
+
+/** 正式结算时执行核心模式采购计划。 */
+export function executePlannedPurchases(state: GameState) {
+  if (state.mode !== 'core') return
+  for (const id of Object.keys(state.materials)) {
+    const line = plannedPurchaseLine(state, id)
+    if (!line.lot || line.qty <= 0) continue
+    const added = addMaterial(state, id, line.qty, line.unit, false, true)
+    if (added <= 0) continue
+    const name = nameOf(id)
+    state.monthLedger.push({
+      dept: 'buy',
+      item: `采购 ${name} ${lotLabel(line.lot)} ×${added}`,
+      debit: `库存 ${name}`,
+      credit: '现金',
+      debitAmt: added * line.unit,
+      creditAmt: added * line.unit,
+      detail: [
+        `${added} 件 × ${line.unit / 10}w = ${((added * line.unit) / 10).toFixed(1)}w`,
+        '结算时按采购计划入库并付款',
+      ],
+    })
+  }
+  // 生产计划非空时取消采购会被拒绝，因此这里清空 chosenLot 不会破坏生产 BOM 约束。
+  // 计划已入实体库存：清空档位与档数，避免后续“计划量 = 库存 + 计划到货”重叠加计划量。
+  // 月末推进的 advanceMonthCore 也会再清一次，这里是防御性的提前清理。
+  for (const id of Object.keys(state.materials)) state.materials[id].chosenLot = null
+  state.lotsUsed = 0
+}
+
+function plannedMaterialNeed(state: GameState, materialId: string): number {
+  const d = derive(state)
+  return TIERS.reduce((sum, tier) => {
+    const need = BOMS[tier].recipe[materialId] ?? 0
+    return sum + Math.max(0, need - d.matSave) * state.plan.quantities[tier]
+  }, 0)
+}
+
+/**
+ * 修改采购计划时的生产联动规则：
+ * 该原料已被生产占用（库存 + 新计划量不够 BOM 需求）时，
+ * 原生产计划（含加班标志）会被整体清空，让玩家以新采购重新排产。
+ * 生产计划为空时不触发任何联动。
+ */
+export function purchasePlanClearsProduction(state: GameState, materialId: string, lot: LotSize | null): boolean {
+  if (state.mode !== 'core') return false
+  const mat = state.materials[materialId]
+  if (!mat) return false
+  const nextQty = lot ? plannedLotQty(state, materialId, lot) : 0
+  return plannedTotal(state) > 0 && mat.qty + nextQty < plannedMaterialNeed(state, materialId)
+}
+
+export function clearProductionPlan(state: GameState): void {
+  for (const tier of TIERS) state.plan.quantities[tier] = 0
+  state.plan.overtime = false
 }
 
 /**
@@ -742,8 +873,17 @@ export function buyEquipment(state: GameState, shopId: string): ActionResult {
   return { ok: true, msg: `产能 +${shop.capacity}` }
 }
 
-export function setPlan(state: GameState, patch: Partial<GameState['plan']>) {
-  state.plan = { ...state.plan, ...patch }
+/** 设置单条产品线的排产量；所有产品线共享同一个产能池。 */
+export function setPlan(state: GameState, tier: Tier, qty: number) {
+  if (!state.products[tier].built) return
+  const other = TIERS.reduce((sum, t) => sum + (t === tier ? 0 : state.plan.quantities[t]), 0)
+  const cap = Math.max(0, planCapacity(state) - other)
+  state.plan.quantities[tier] = Math.max(0, Math.min(Math.floor(qty), cap))
+  reconcileAcceptedOrders(state)
+}
+
+export function plannedTotal(state: GameState): number {
+  return TIERS.reduce((sum, t) => sum + state.plan.quantities[t], 0)
 }
 
 export function planCapacity(state: GameState): number {
@@ -757,10 +897,16 @@ export function planCapacity(state: GameState): number {
 export function maxProducible(state: GameState, tier: Tier): number {
   const d = derive(state)
   const bom = BOMS[tier]
-  let max = planCapacity(state)
+  const otherCapacity = TIERS.reduce((sum, t) => sum + (t === tier ? 0 : state.plan.quantities[t]), 0)
+  let max = Math.max(0, planCapacity(state) - otherCapacity)
   for (const [id, need] of Object.entries(bom.recipe)) {
     const per = Math.max(1, need - d.matSave)
-    const avail = state.materials[id]?.qty ?? 0
+    const reserved = TIERS.reduce((sum, t) => {
+      if (t === tier) return sum
+      const otherNeed = BOMS[t].recipe[id] ?? 0
+      return sum + Math.max(0, otherNeed - d.matSave) * state.plan.quantities[t]
+    }, 0)
+    const avail = Math.max(0, materialAvailableForProduction(state, id) - reserved)
     max = Math.min(max, Math.floor(avail / per))
   }
   return Math.max(0, max)
@@ -860,31 +1006,40 @@ export function postProductionInbound(
 /**
  * 确认生产安排：立即按 BOM 扣料、成品入库，并把「原料→存货」记账到本月生产账务。
  * 与月末结算（§1 生产段）同口径：账面价等比例结转 + costFactor 折价入账，
- * 因此之后无论再结算几次，同一批货的成本都不会重复进利润表（结算时 plan.qty 已清零）。
+ * 因此之后无论再结算几次，同一批货的成本都不会重复进利润表（确认后各线计划已清零）。
  */
 export function confirmProduction(state: GameState): ActionResult {
-  const tier = state.plan.tier
-  const want = state.plan.qty
-  if (!tier || want <= 0) return fail('尚未安排产量')
-  if (!state.products[tier].built) return fail('该层级未解锁')
-  const qty = Math.min(want, maxProducible(state, tier))
-  if (qty <= 0) return fail('原料不足，先采购')
+  if (state.mode === 'core') {
+    // 核心模式采用「采购计划 → 生产计划 → 销售计划 → 统一结算」，生产在结算时一次执行。
+    return fail('核心模式生产在结算时统一执行')
+  }
+  if (plannedTotal(state) <= 0) return fail('尚未安排产量')
   const d = derive(state)
-  const bom = BOMS[tier]
-  const materialCost = issueMaterials(state, tier, qty, d.matSave)
-  /** 【流水线】成就（生产 5 人）：每 5 件额外入库 1 件，按本批单位成本计价入账。 */
-  const bonus = state.depts.make.staff >= 5 ? Math.floor(qty / 5) : 0
-  const batchCost = Math.round(materialCost * d.costFactor)
-  const unitCostIn = qty > 0 ? batchCost / qty : 0
-  const p = state.products[tier]
-  p.value += batchCost + bonus * unitCostIn
-  p.qty += qty + bonus
-  p.avgCost = p.qty > 0 ? Math.round(p.value / p.qty) : 0
-  postProductionInbound(state, tier, qty, bonus, batchCost, unitCostIn)
-  if (bonus > 0) pushLog(state, 'action', `流水线效应：${bom.name} 额外入库 ${bonus} 件`)
-  /** 已生产完的部分从计划中扣除，月末结算不再重复生产。 */
-  state.plan.qty = Math.max(0, want - qty)
-  return { ok: true, msg: `${bom.name} ${qty + bonus} 件已入库` }
+  const completed: string[] = []
+  for (const tier of TIERS) {
+    const want = state.plan.quantities[tier]
+    if (want <= 0 || !state.products[tier].built) continue
+    // 其他产品线仍占用产能与原料，本线清零后计算自身可执行量。
+    state.plan.quantities[tier] = 0
+    const qty = Math.min(want, maxProducible(state, tier))
+    if (qty <= 0) continue
+    const bom = BOMS[tier]
+    const materialCost = issueMaterials(state, tier, qty, d.matSave)
+    const bonus = state.depts.make.staff >= 5 ? Math.floor(qty / 5) : 0
+    const batchCost = Math.round(materialCost * d.costFactor)
+    const unitCostIn = qty > 0 ? batchCost / qty : 0
+    const p = state.products[tier]
+    p.value += batchCost + bonus * unitCostIn
+    p.qty += qty + bonus
+    p.avgCost = p.qty > 0 ? Math.round(p.value / p.qty) : 0
+    postProductionInbound(state, tier, qty, bonus, batchCost, unitCostIn)
+    if (bonus > 0) pushLog(state, 'action', `流水线效应：${bom.name} 额外入库 ${bonus} 件`)
+    completed.push(`${bom.name} ${qty + bonus} 件`)
+  }
+  for (const tier of TIERS) state.plan.quantities[tier] = 0
+  return completed.length
+    ? { ok: true, msg: `${completed.join('、')}已入库` }
+    : fail('原料不足，先采购')
 }
 
 export function toggleOvertime(state: GameState): ActionResult {
@@ -913,6 +1068,47 @@ export function allocUsed(state: GameState): number {
   return TIERS.reduce((a, t) => a + state.salesAlloc[t], 0)
 }
 
+/** 当前可用于履约的产品量：核心模式包含本月排产，完整模式沿用已入库成品。 */
+export function committableProductQty(state: GameState, tier: Tier): number {
+  return state.products[tier].qty + (state.mode === 'core' ? state.plan.quantities[tier] : 0)
+}
+
+/** 指定订单尚可使用的履约数量，扣除强制订单和其他已接订单。 */
+export function availableForOrder(state: GameState, orderId: string): number {
+  const order = state.orders.find((o) => o.id === orderId)
+  if (!order) return 0
+  const reserved = state.orders.reduce((sum, other) => {
+    if (other.id === orderId || other.tier !== order.tier) return sum
+    if (other.forced || state.acceptedOrders.includes(other.id)) return sum + other.qty
+    return sum
+  }, 0)
+  return Math.max(0, committableProductQty(state, order.tier) - reserved)
+}
+
+export function canAcceptOrder(state: GameState, orderId: string): boolean {
+  const order = state.orders.find((o) => o.id === orderId)
+  return !!order && !order.forced && availableForOrder(state, orderId) >= order.qty
+}
+
+/**
+ * 排产减少时，按接单先后保留仍可足额履约的订单；超出可承诺量的订单恢复为未选择状态。
+ * 不标记为“已放弃”，以便玩家增加排产后重新选择。
+ */
+export function reconcileAcceptedOrders(state: GameState) {
+  const reserved: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  for (const order of state.orders) if (order.forced) reserved[order.tier] += order.qty
+  const kept: string[] = []
+  for (const id of state.acceptedOrders) {
+    const order = state.orders.find((o) => o.id === id)
+    if (!order || order.forced) continue
+    if (reserved[order.tier] + order.qty <= committableProductQty(state, order.tier)) {
+      reserved[order.tier] += order.qty
+      kept.push(id)
+    }
+  }
+  state.acceptedOrders = kept
+}
+
 /** 接取 / 放弃自然订单（当月决策，不接的当月失效，不跨月）。 */
 export function toggleOrder(state: GameState, orderId: string): ActionResult {
   const o = state.orders.find((x) => x.id === orderId)
@@ -926,6 +1122,7 @@ export function toggleOrder(state: GameState, orderId: string): ActionResult {
     state.declinedOrders.push(orderId)
     return { ok: true, msg: '已取消订单' }
   }
+  if (!canAcceptOrder(state, orderId)) return fail('可承诺产品不足，请先增加该产品排产')
   if (declineIdx >= 0) {
     // 已放弃 → 接取
     state.declinedOrders.splice(declineIdx, 1)

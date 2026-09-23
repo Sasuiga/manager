@@ -87,7 +87,7 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
 
     // ── 生产 ──
     const maxQ = E.maxProducible(s, 'low')
-    E.setPlan(s, { tier: 'low', qty: Math.min(maxQ, planQty) })
+    E.setPlan(s, 'low', Math.min(maxQ, planQty))
 
     // ── 销售资源分配 ──
     const d = E.derive(s)
@@ -326,7 +326,7 @@ describe('引擎', () => {
     }
   })
 
-  it('销售资源加点直接增加该层需求：1 点 1 需求，每层上限 3 倍基础需求', () => {
+  it('销售资源加点直接增加该层需求：高端产品需要更多资源，每层上限 3 倍基础需求', () => {
     const s = E.newGame(7)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
@@ -336,12 +336,12 @@ describe('引擎', () => {
     E.enterOperate(s)
     const d0 = E.derive(s)
     expect(d0.demand).toEqual(d0.demandBase) // 未加点时两者相等
-    // 成本梯度：低 1 / 中 2 / 高 3 / 特 4 点每需求；push = min(floor(分配/成本), 上限)
+    // 成本梯度：低 1 / 中 2 / 高 4 / 特 6 点每需求；push = min(floor(分配/成本), 上限)
     const cases: [E.Tier, number, number][] = [
       ['low', 5, 5], // 5 点 ÷ 1 = 5（未超上限 15）
       ['mid', 10, 5], // 10 点 ÷ 2 = 5（未超上限 12）
       ['mid', 3, 1], // 零头：3 点 ÷ 2 = 1 需求，余 1 点不计
-      ['high', 99, 3], // 资源池 10 点封顶 → 10 ÷ 3 = 3（未超上限 6）
+      ['high', 99, 2], // 资源池 10 点封顶 → 10 ÷ 4 = 2（未超上限 6）
     ]
     for (const [tier, want, expectPush] of cases) {
       s.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
@@ -413,12 +413,12 @@ describe('引擎', () => {
     const before = s.products.low
     const qtyBefore = before.qty
     const valBefore = before.value
-    E.setPlan(s, { tier: 'low', qty: 5 })
+    E.setPlan(s, 'low', 5)
     const r = E.confirmProduction(s)
     expect(r.ok).toBe(true)
     expect(s.materials.pkg.qty).toBe(0)
     expect(s.materials.resin.qty).toBe(0)
-    expect(s.plan.qty).toBe(0)
+    expect(s.plan.quantities.low).toBe(0)
     // 原料账面 10×10 + 5×20 = 200，costFactor 1 时成品入库同额
     expect(before.qty).toBe(qtyBefore + 5)
     expect(before.value - valBefore).toBe(200)
@@ -430,6 +430,30 @@ describe('引擎', () => {
     // 已全部生产完：再确认提示无剩余量
     const r2 = E.confirmProduction(s)
     expect(r2.ok).toBe(false)
+  })
+
+  it('多产品排产：共享产能与原料，并一次确认多条产品线', () => {
+    const s = E.newGame(11, 'core')
+    E.startGame(s)
+    s.materials.pkg.qty = 4
+    s.materials.pkg.value = 40
+    s.materials.resin.qty = 6
+    s.materials.resin.value = 120
+    s.materials.alloy.qty = 2
+    s.materials.alloy.value = 80
+
+    E.setPlan(s, 'low', 2)
+    E.setPlan(s, 'mid', 2)
+    expect(E.plannedTotal(s)).toBe(4)
+    expect(s.plan.quantities).toEqual({ low: 2, mid: 2, high: 0, special: 0 })
+
+    const r = E.settleMonth(s)
+    expect(r.production.produced).toBe(4)
+    // 结算后成品库存可能因自然销售而减少；只断言原料已全额领用、排产已清零
+    expect(s.materials.pkg.qty).toBe(0)
+    expect(s.materials.resin.qty).toBe(0)
+    expect(s.materials.alloy.qty).toBe(0)
+    expect(E.plannedTotal(s)).toBe(0)
   })
 
   it('采购记账：借库存贷现金，金额与现金扣减、库存账面勾稽', () => {
@@ -476,7 +500,7 @@ describe('引擎', () => {
     s.products.low.qty = 5
     s.products.low.value = 5 * 40
     // 不点确认，产量留给月末结算路径
-    E.setPlan(s, { tier: 'low', qty: 4 })
+    E.setPlan(s, 'low', 4)
     const rep = E.settleMonth(s)
     const r2 = (n: number) => Math.round(n * 10000) / 10000
     // 生产记账：月末生产路径同样记 出库/入库，且方向为 借 制造费用 / 贷 库存
@@ -549,7 +573,7 @@ describe('引擎', () => {
       return Math.round((b.totalAssets - b.debt - b.equity) * 10000) / 10000
     }
     const gapBefore = gapOf()
-    E.setPlan(s, { tier: 'low', qty: 5 })
+    E.setPlan(s, 'low', 5)
     expect(E.confirmProduction(s).ok).toBe(true) // 5 件 → bonus 1 件
     // bonus 按本批单位成本计入存货（资产 +40），必须同步贷记营业外收入
     // （miscIncome 在结算 §4 才确认为留存收益，故先验状态、再结算后验恒等式）

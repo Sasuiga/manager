@@ -8,6 +8,9 @@
 /** 资金，单位：0.1w（角）。整数运算。 */
 export type Money = number
 
+/** 运行模式：full 为完整游戏，core 用于验证采购—生产—销售核心循环。 */
+export type GameMode = 'full' | 'core'
+
 /** 产品层次。 */
 export type Tier = 'low' | 'mid' | 'high' | 'special'
 
@@ -540,6 +543,7 @@ export interface LogEntry {
 }
 
 export interface GameState {
+  mode: GameMode
   seed: number
   /** 确定性随机的当前状态，序列化后仍可精确续接 */
   rngState: number
@@ -591,8 +595,8 @@ export interface GameState {
   extraBuys: { kind: string; materialId: string; qty: number; price: Money; used: boolean }[]
   /** 本月已采购档数 */
   lotsUsed: number
-  /** 本月生产计划 */
-  plan: { tier: Tier | null; qty: number; overtime: boolean }
+  /** 本月生产计划：各产品线共享同一产能池。 */
+  plan: { quantities: Record<Tier, number>; overtime: boolean }
   /**
    * 本月部门账务（手工记账：采购入库、生产领料/成品入库、销售收入与成本结转）。
    * 各行只作展示，不参与损益计算（采购与领料是资产内部转换），

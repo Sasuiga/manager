@@ -17,10 +17,14 @@ import type { SettleReport } from './settle'
 import type { Climate, GameEventDef, GameState, GoalDef, GoalTrack, Ledger, Money } from './types'
 
 export * from './types'
-export { derive, mergeMods } from './derive'
+export { derive, mergeMods, unitCost } from './derive'
 export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityOf, buildDeck } from './game'
 export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct } from './settle'
 export type { SettleReport } from './settle'
+export { previewOperations } from './preview'
+export type { OperatingPreview, ProductPreview, ValueRange } from './preview'
+export { CORE_SCENARIOS, applyCoreScenario } from './scenarios'
+export type { CoreScenarioDef, CoreScenarioId } from './scenarios'
 export {
   hire,
   hireCost,
@@ -35,6 +39,14 @@ export {
   cardPlayCost,
   drawToHand,
   buyMaterial,
+  setPurchasePlan,
+  canSetPurchasePlan,
+  plannedLotQty,
+  plannedPurchaseLine,
+  plannedPurchaseCost,
+  availableCashAfterPurchasePlan,
+  materialAvailableForProduction,
+  executePlannedPurchases,
   lotQty,
   lotPrice,
   lotLabel,
@@ -47,12 +59,19 @@ export {
   buyEquipment,
   setPlan,
   planCapacity,
+  plannedTotal,
   maxProducible,
   maxProducibleByTier,
+  purchasePlanClearsProduction,
+  clearProductionPlan,
   confirmProduction,
   toggleOvertime,
   setAlloc,
   allocUsed,
+  committableProductQty,
+  availableForOrder,
+  canAcceptOrder,
+  reconcileAcceptedOrders,
   toggleOrder,
   startResearch,
   activeResearch,
@@ -88,6 +107,12 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
 
 /** 开局：进入第 1 个月的事件阶段（第 1 月即季度首月，召开董事会）。 */
 export function startGame(state: GameState) {
+  if (state.mode === 'core') {
+    state.phase = 'operate'
+    state.boardPrompted = false
+    generateMonthlyOrders(state)
+    return
+  }
   state.phase = 'board'
   state.boardPrompted = false
   maybeDrawBoardGoals(state, new Rng(state.seed * 31 + 7))
@@ -272,6 +297,12 @@ export function nextMonth(state: GameState) {
   const rng = Rng.fromState(state.rngState)
   advanceMonthCore(state, rng)
   state.rngState = rng.state
+  if (state.mode === 'core') {
+    state.phase = 'operate'
+    state.boardPrompted = false
+    generateMonthlyOrders(state)
+    return
+  }
   state.phase = 'board'
   state.boardPrompted = false
   maybeDrawBoardGoals(state, new Rng(state.rngState + state.month * 7919))

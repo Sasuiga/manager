@@ -4,8 +4,8 @@ import { Corners } from '../ornaments'
 import type { Game } from '../useGame'
 
 /** 标题页：hero 全配（角饰 + 大衬线标题 + T1 主按钮）。 */
-export function TitleScreen({ onStart }: { onStart: (seed: number) => void }) {
-  const start = () => onStart(Math.floor(Math.random() * 1e9))
+export function TitleScreen({ onStart }: { onStart: (seed: number, mode: E.GameMode, scenario?: E.CoreScenarioId) => void }) {
+  const start = (mode: E.GameMode) => onStart(Math.floor(Math.random() * 1e9), mode)
 
   return (
     <div className="title-wrap">
@@ -25,8 +25,26 @@ export function TitleScreen({ onStart }: { onStart: (seed: number) => void }) {
         </p>
 
         <div style={{ marginTop: 'var(--s6)' }} className="stack">
-          <button className="btn btn-primary" onClick={start}>
+          <button className="btn btn-primary" onClick={() => start('core')}>
+            <span className="btn-main">自由核心实验</span>
+            <span className="btn-sub">随机市场 · 仅采购、生产与销售</span>
+          </button>
+          <div className="section-label" style={{ marginTop: 'var(--s3)' }}>固定经营场景</div>
+          <div className="grid-2">
+            {E.CORE_SCENARIOS.map((scenario) => (
+              <button
+                key={scenario.id}
+                className="btn btn-mini"
+                onClick={() => onStart(scenario.seed, 'core', scenario.id)}
+              >
+                <span className="btn-main">{scenario.name}</span>
+                <span className="btn-sub">{scenario.desc}</span>
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-mini" onClick={() => start('full')}>
             <span className="btn-main">开始新的一局</span>
+            <span className="btn-sub">完整模式</span>
           </button>
         </div>
       </div>
