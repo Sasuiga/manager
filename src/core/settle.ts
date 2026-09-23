@@ -67,7 +67,12 @@ export interface SettleReport {
   warnings: string[]
 }
 
-export function settle(state: GameState): SettleReport {
+export interface SettleOptions {
+  /** 核心模式现货需求倍率；预演用固定上下界，正式结算留空后按月随机。 */
+  spotDemandFactor?: Partial<Record<Tier, number>>
+}
+
+export function settle(state: GameState, options: SettleOptions = {}): SettleReport {
   const d = derive(state)
   const warnings: string[] = []
 
@@ -192,8 +197,24 @@ export function settle(state: GameState): SettleReport {
   const orders: SaleRecord[] = []
   const spots: SaleRecord[] = []
   const filled: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
-  /** lost 以含加点的总需求为起点，订单交付会占用本层需求。 */
-  const lost: Record<Tier, number> = { ...d.demand }
+  /**
+   * 核心模式的现货成交具有不确定性：每层实际市场需求为公开上限的 50%～100%。
+   * 预演会分别传入 0.5 / 1 得到区间；正式结算按 seed、月份和产品层确定性抽取。
+   * 完整模式保持原有确定需求规则。
+   */
+  const spotRng = new Rng(state.seed + state.month * 65537 + 1709)
+  const spotFactor: Record<Tier, number> = { low: 1, mid: 1, high: 1, special: 1 }
+  for (const t of TIERS) {
+    spotFactor[t] = options.spotDemandFactor?.[t]
+      ?? (state.mode === 'core' ? 0.5 + spotRng.next() * 0.5 : 1)
+  }
+  /** lost 以本月实际现货需求为起点，订单交付会占用本层需求。 */
+  const lost: Record<Tier, number> = {
+    low: Math.floor(d.demand.low * spotFactor.low),
+    mid: Math.floor(d.demand.mid * spotFactor.mid),
+    high: Math.floor(d.demand.high * spotFactor.high),
+    special: Math.floor(d.demand.special * spotFactor.special),
+  }
   /** 满足率分母用自然需求（不含加点）：玩家自己推大的盘子不应拉低自己的达标率。 */
   const demandTotal = TIERS.reduce((a, t) => a + d.demandBase[t], 0)
 

@@ -21,6 +21,8 @@ export { derive, mergeMods } from './derive'
 export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityOf, buildDeck } from './game'
 export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct } from './settle'
 export type { SettleReport } from './settle'
+export { previewOperations } from './preview'
+export type { OperatingPreview, ProductPreview, ValueRange } from './preview'
 export {
   hire,
   hireCost,

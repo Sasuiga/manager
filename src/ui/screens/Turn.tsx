@@ -8,8 +8,10 @@ import { Medallion } from '../ornaments'
 import { Row, Sheet } from '../Sheet'
 import { wan, tierClass, tierName, TIER_ORDER, clamp } from '../format'
 import type { Game } from '../useGame'
+import { PreviewPage } from './Preview'
 
 const DEPTS: E.Dept[] = ['ops', 'buy', 'make', 'sell', 'rnd']
+export type TurnView = E.Dept | 'preview'
 
 function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
   const d = E.derive(g.s)
@@ -157,8 +159,8 @@ export function TurnScreen({
   onSettle,
 }: {
   g: Game
-  dept: E.Dept
-  onDept: (d: E.Dept) => void
+  dept: TurnView
+  onDept: (d: TurnView) => void
   onSettle: () => void
 }) {
   const s = g.s
@@ -182,8 +184,9 @@ export function TurnScreen({
         {dept === 'make' ? <MakePage g={g} /> : null}
         {dept === 'sell' ? <SellPage g={g} /> : null}
         {dept === 'rnd' ? <RndPage g={g} /> : null}
+        {dept === 'preview' ? <PreviewPage g={g} onSettle={onSettle} /> : null}
 
-        {s.mode === 'full' ? <HireBlock g={g} dept={dept} /> : null}
+        {s.mode === 'full' && dept !== 'preview' ? <HireBlock g={g} dept={dept} /> : null}
       </div>
 
       <nav className="track">
@@ -194,9 +197,12 @@ export function TurnScreen({
             <span>{DEPT_SHORT[k]}</span>
           </button>
         ))}
-        <button className="track-btn track-settle" onClick={onSettle}>
+        <button
+          className={`track-btn track-settle${dept === 'preview' ? ' on' : ''}`}
+          onClick={() => s.mode === 'core' ? onDept('preview') : onSettle()}
+        >
           <Icon name="settle" size={19} />
-          <span>结算</span>
+          <span>{s.mode === 'core' ? '预演' : '结算'}</span>
         </button>
       </nav>
     </>
@@ -863,7 +869,7 @@ function MakePage({ g }: { g: Game }) {
         <div className="hint">
           1 点产能生产 1 件；可在已解锁产品线间自由分配，各线受产能与原料双重限制。剩余 {remainingCap} 点未分配。
         </div>
-        <div style={{ marginTop: 'var(--s3)' }}>
+        {gs.mode === 'full' ? <div style={{ marginTop: 'var(--s3)' }}>
           <button
             className="btn btn-primary"
             style={{ width: '100%' }}
@@ -873,10 +879,10 @@ function MakePage({ g }: { g: Game }) {
             <span className="btn-main">确认生产安排</span>
             <span className="btn-sub">{plannedTotal > 0 ? `共 ${plannedTotal} 件，确认后立即扣料入库` : '先分配产量'}</span>
           </button>
-        </div>
+        </div> : null}
       </div>
 
-      <div className="card">
+      {gs.mode === 'full' ? <div className="card">
         <h3>加班与设备</h3>
         <div className="title-rule" />
         <div className="stack">
@@ -895,7 +901,7 @@ function MakePage({ g }: { g: Game }) {
             <span className="btn-sub">扩充产能与借款额度</span>
           </button>
         </div>
-      </div>
+      </div> : null}
 
       {gs.equipment.length ? (
         <div className="card">
@@ -916,7 +922,7 @@ function MakePage({ g }: { g: Game }) {
       ) : null}
 
       {/* 确认生产安排：按 BOM 立即扣料入库，「原料→存货」记账到部门账务 */}
-      {confirm ? (
+      {gs.mode === 'full' && confirm ? (
         <ProductionConfirmSheet g={g} planned={plannedTotal} onDone={() => setConfirm(false)} />
       ) : null}
       {equip ? <EquipmentSheet g={g} onClose={() => setEquip(false)} /> : null}

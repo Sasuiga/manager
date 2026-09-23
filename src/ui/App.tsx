@@ -7,7 +7,7 @@ import { TitleScreen, EndScreen } from './screens/Title'
 import { EventScreen } from './screens/Event'
 import { DrawScreen } from './screens/Draw'
 import { BoardScreen } from './screens/Board'
-import { TurnScreen } from './screens/Turn'
+import { TurnScreen, type TurnView } from './screens/Turn'
 import { ReportSheet } from './screens/Report'
 import { GoalsSheet } from './screens/Goals'
 import { Panel } from './screens/Panel'
@@ -27,7 +27,7 @@ export function App() {
 function GameRoot({ g, onRestart }: { g: Game; onRestart: () => void }) {
   const s = g.s
   const [tab, setTab] = useState<Tab>('run')
-  const [dept, setDept] = useState<E.Dept>(s.mode === 'core' ? 'buy' : 'ops')
+  const [dept, setDept] = useState<TurnView>(s.mode === 'core' ? 'buy' : 'ops')
   const [goalsOpen, setGoalsOpen] = useState(false)
   const [settling, setSettling] = useState(false)
 
@@ -72,7 +72,15 @@ function GameRoot({ g, onRestart }: { g: Game; onRestart: () => void }) {
         </div>
 
         {tab === 'run' ? (
-          <TurnScreen g={g} dept={dept} onDept={setDept} onSettle={() => setSettling(true)} />
+          <TurnScreen
+            g={g}
+            dept={dept}
+            onDept={setDept}
+            onSettle={() => {
+              if (s.mode === 'core') g.setReport(E.settleMonth(g.s))
+              setSettling(true)
+            }}
+          />
         ) : tab === 'report' ? (
           <Panel g={g} mode="report" />
         ) : (
@@ -89,7 +97,7 @@ function GameRoot({ g, onRestart }: { g: Game; onRestart: () => void }) {
 
 /** 结算 → 报表 → 进入下月。 */
 function SettleFlow({ g, onDone }: { g: Game; onDone: () => void }) {
-  const [step, setStep] = useState<'confirm' | 'report'>('confirm')
+  const [step, setStep] = useState<'confirm' | 'report'>(g.s.mode === 'core' ? 'report' : 'confirm')
   const s = g.s
   const hud = E.hudView(s)
 
