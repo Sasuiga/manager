@@ -14,7 +14,7 @@ import {
 } from '../data/game'
 import { derive, mergeMods } from './derive'
 import { balanceSheet, equipmentNet, equityOf, inventoryValue } from './game'
-import { issueMaterials, postProductionInbound } from './actions'
+import { executePlannedPurchases, issueMaterials, postProductionInbound } from './actions'
 import { Rng } from './rng'
 import type {
   BalanceSheet,
@@ -75,6 +75,9 @@ export interface SettleOptions {
 export function settle(state: GameState, options: SettleOptions = {}): SettleReport {
   const d = derive(state)
   const warnings: string[] = []
+
+  // 核心模式：普通采购在经营阶段只是计划，正式结算时先付款入库。
+  executePlannedPurchases(state)
 
   // ══════════ 0. 长期协议自动采购 ══════════
   const autoPurchase: SettleReport['autoPurchase'] = []

@@ -382,7 +382,9 @@ function BuyPage({ g }: { g: Game }) {
         </p>
         <LedgerSection g={g} dept="buy" />
         <p className="hint" style={{ marginTop: 'var(--s2)' }}>
-          采购实付现金自动入账「借 库存 / 贷 现金」，金额与库存账面、生产领料出库严格勾稽。
+          {gs.mode === 'core'
+            ? '普通采购先形成计划，结算时按“采购入库 → 生产 → 销售”统一执行；结算前可调整。'
+            : '采购实付现金自动入账「借 库存 / 贷 现金」，金额与库存账面、生产领料出库严格勾稽。'}
         </p>
       </div>
 
@@ -392,7 +394,7 @@ function BuyPage({ g }: { g: Game }) {
           <thead>
             <tr style={{ borderBottom: '1px solid var(--line)' }}>
               <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>材料</th>
-              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>库存</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>{gs.mode === 'core' ? '库存 + 计划' : '库存'}</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>供给</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>价格水平</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>操作</th>
@@ -406,7 +408,9 @@ function BuyPage({ g }: { g: Game }) {
                   {m.isNew ? <span className="tag" style={{ marginLeft: 4, fontSize: '0.75em' }}>新</span> : null}
                 </td>
                 <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
-                  {m.qty}/{m.cap}
+                  {gs.mode === 'core' && m.chosenLot
+                    ? `${m.qty} + ${E.plannedPurchaseLine(gs, m.id).qty}`
+                    : `${m.qty}/${m.cap}`}
                 </td>
                 <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
                   {m.supply}
@@ -416,7 +420,15 @@ function BuyPage({ g }: { g: Game }) {
                 </td>
                 <td style={{ textAlign: 'right', padding: '6px 8px' }}>
                   {m.chosenLot ? (
-                    <span className="xs faint">已选 {E.lotLabel(m.chosenLot)}</span>
+                    gs.mode === 'core' ? (
+                      <button
+                        className="btn btn-mini"
+                        style={{ padding: '2px 8px', fontSize: '0.8em' }}
+                        onClick={() => setPickLot(m.id)}
+                      >
+                        调整
+                      </button>
+                    ) : <span className="xs faint">已选 {E.lotLabel(m.chosenLot)}</span>
                   ) : (
                     <button
                       className="btn btn-mini"
@@ -434,7 +446,16 @@ function BuyPage({ g }: { g: Game }) {
         </table>
       </div>
 
-      <div className="card">
+      {gs.mode === 'core' ? (
+        <div className="card">
+          <div className="section-label">采购计划汇总</div>
+          <Row k="计划支出" v={wan(E.plannedPurchaseCost(gs))} />
+          <Row k="计划后可用现金" v={wan(E.availableCashAfterPurchasePlan(gs))} />
+          <Row k="已选采购档" v={`${gs.lotsUsed} / ${d.buyLots}`} />
+        </div>
+      ) : null}
+
+      {gs.mode === 'full' ? <div className="card">
         <h3>其他采购手段</h3>
         <div className="title-rule" />
         <div className="stack">
@@ -453,21 +474,20 @@ function BuyPage({ g }: { g: Game }) {
             </span>
           </button>
         </div>
-      </div>
+      </div> : null}
 
       {pickLot ? (
         <Sheet title="选择采购档位" sub={mats.find((x) => x.id === pickLot)?.name} onClose={() => setPickLot(null)}>
           <div className="stack">
             {(['small', 'mid', 'large'] as E.LotSize[]).map((lot) => {
-              const qty = E.lotQty(gs, pickLot, lot)
+              const qty = gs.mode === 'core' ? E.plannedLotQty(gs, pickLot, lot) : E.lotQty(gs, pickLot, lot)
               const price = E.lotPrice(gs, pickLot, lot)
               const total = qty * price
               const chosen = mats.find((x) => x.id === pickLot)?.chosenLot === lot
-              const disabled =
-                mats.find((x) => x.id === pickLot)?.chosenLot !== null ||
-                qty <= 0 ||
-                gs.lotsUsed >= d.buyLots ||
-                total > gs.cash
+              const disabled = gs.mode === 'core'
+                ? !E.canSetPurchasePlan(gs, pickLot, lot).ok
+                : mats.find((x) => x.id === pickLot)?.chosenLot !== null ||
+                  qty <= 0 || gs.lotsUsed >= d.buyLots || total > gs.cash
               return (
                 <button
                   key={lot}
@@ -483,6 +503,19 @@ function BuyPage({ g }: { g: Game }) {
                 </button>
               )
             })}
+            {gs.mode === 'core' && mats.find((x) => x.id === pickLot)?.chosenLot ? (
+              <button
+                className="btn btn-mini"
+                disabled={!E.canSetPurchasePlan(gs, pickLot, null).ok}
+                onClick={() => {
+                  g.act((st) => E.setPurchasePlan(st, pickLot, null))
+                  setPickLot(null)
+                }}
+              >
+                <span className="btn-main xs">不采购</span>
+                <span className="btn-sub xs">取消本月采购计划</span>
+              </button>
+            ) : null}
           </div>
         </Sheet>
       ) : null}
@@ -511,9 +544,12 @@ function BuyConfirmSheet({
 }) {
   const gs = g.s
   const m = E.materialViews(gs).find((x) => x.id === data.id)!
-  const qty = E.lotQty(gs, data.id, data.lot)
+  const qty = gs.mode === 'core' ? E.plannedLotQty(gs, data.id, data.lot) : E.lotQty(gs, data.id, data.lot)
   const price = E.lotPrice(gs, data.id, data.lot)
   const total = qty * price
+  const canConfirm = gs.mode === 'core'
+    ? E.canSetPurchasePlan(gs, data.id, data.lot).ok
+    : qty > 0 && total <= gs.cash
   const [showPriceSrc, setShowPriceSrc] = useState(false)
 
   return (
@@ -523,14 +559,14 @@ function BuyConfirmSheet({
       footer={
         <button
           className="btn btn-nav"
-          disabled={qty <= 0 || total > gs.cash}
+          disabled={!canConfirm}
           onClick={() => {
             g.act((st) => E.buyMaterial(st, data.id, data.lot))
             onClose()
           }}
         >
           <span className="btn-main">
-            {qty <= 0 ? '无供给' : total > gs.cash ? '现金不足' : '确认采购'}
+            {qty <= 0 ? '无供给' : !canConfirm ? '无法安排' : gs.mode === 'core' ? '确认采购计划' : '确认采购'}
           </span>
         </button>
       }
@@ -545,6 +581,7 @@ function BuyConfirmSheet({
           </button>
         </div>
         <Row k="总价" v={wan(total)} bold />
+        {gs.mode === 'core' ? <Row k="计划后可用现金" v={wan(E.availableCashAfterPurchasePlan(gs) - total + E.plannedPurchaseLine(gs, data.id).cost)} /> : null}
       </div>
 
       <div className="card">

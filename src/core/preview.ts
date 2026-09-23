@@ -1,5 +1,6 @@
 import { TIERS } from '../data/game'
 import { derive } from './derive'
+import { plannedPurchaseCost } from './actions'
 import { settle, type SettleReport } from './settle'
 import type { GameState, Money, Tier } from './types'
 
@@ -48,9 +49,11 @@ export function previewOperations(state: GameState): OperatingPreview {
   const low = settle(cloneState(state), { spotDemandFactor: state.mode === 'core' ? LOW_FACTORS : HIGH_FACTORS })
   const high = settle(cloneState(state), { spotDemandFactor: HIGH_FACTORS })
   const d = derive(state)
-  const purchaseSpend = state.monthLedger
-    .filter((row) => row.dept === 'buy' && row.credit === '现金')
-    .reduce((sum, row) => sum + row.creditAmt, 0)
+  const purchaseSpend = state.mode === 'core'
+    ? plannedPurchaseCost(state)
+    : state.monthLedger
+      .filter((row) => row.dept === 'buy' && row.credit === '现金')
+      .reduce((sum, row) => sum + row.creditAmt, 0)
 
   const products = TIERS.map((tier) => productPreview(state, tier, low, high))
     .filter((p) => p.planned > 0 || p.orderQty > 0 || p.spotQty.max > 0)
@@ -71,8 +74,8 @@ export function previewOperations(state: GameState): OperatingPreview {
     cogs: range(low.ledger.cogs, high.ledger.cogs),
     currentCash: state.cash,
     monthEndPayments: range(
-      state.cash + low.ledger.revenue - low.ledger.cashEnd,
-      state.cash + high.ledger.revenue - high.ledger.cashEnd,
+      state.cash - purchaseSpend + low.ledger.revenue - low.ledger.cashEnd,
+      state.cash - purchaseSpend + high.ledger.revenue - high.ledger.cashEnd,
     ),
     purchaseSpend,
     plannedProduction: TIERS.reduce((sum, t) => sum + state.plan.quantities[t], 0),

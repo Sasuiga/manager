@@ -30,6 +30,7 @@ export function PreviewPage({ g, onSettle }: { g: Game; onSettle: () => void }) 
         </PreviewMetric>
         <PreviewMetric title="预计期末现金" value={moneyRange(preview.cashEnd)}>
           <Row k="当前现金" v={wan(preview.currentCash)} />
+          <Row k="采购付款" v={wan(preview.purchaseSpend)} />
           <Row k="订单回款" v={wan(preview.orderRevenue)} />
           <Row k="现货回款" v={moneyRange(preview.spotRevenue)} />
           <Row k="月末支付" v={moneyRange(preview.monthEndPayments)} />

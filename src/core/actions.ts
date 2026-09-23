@@ -513,6 +513,7 @@ function priceAtShift(materialId: string, shift: number): Money {
 }
 
 export function buyMaterial(state: GameState, materialId: string, lot: LotSize): ActionResult {
+  if (state.mode === 'core') return setPurchasePlan(state, materialId, lot)
   const d = derive(state)
   const mat = state.materials[materialId]
   if (!mat) return fail('未知原料')
@@ -548,6 +549,100 @@ export function buyMaterial(state: GameState, materialId: string, lot: LotSize):
     `${added} 单位 × ${unit / 10}w = ${((added * unit) / 10).toFixed(1)}w`,
   ])
   return { ok: true, msg: `入库 ${added} 单位` }
+}
+
+/** 核心模式普通采购只形成计划，不立即扣款或入库。 */
+export function setPurchasePlan(state: GameState, materialId: string, lot: LotSize | null): ActionResult {
+  if (state.mode !== 'core') return fail('仅核心模式可调整采购计划')
+  const mat = state.materials[materialId]
+  if (!mat) return fail('未知原料')
+  const previous = mat.chosenLot
+  const usedWithoutThis = state.lotsUsed - (previous ? 1 : 0)
+  if (lot && usedWithoutThis >= derive(state).buyLots) return fail('本月可选档数已用完')
+
+  const nextQty = lot ? plannedLotQty(state, materialId, lot) : 0
+  const needed = plannedMaterialNeed(state, materialId)
+  if (mat.qty + nextQty < needed) return fail('该采购计划已被生产占用，请先调整生产安排')
+
+  const nextCost = lot ? nextQty * lotPrice(state, materialId, lot) : 0
+  const costWithoutThis = plannedPurchaseCost(state) - plannedPurchaseLine(state, materialId).cost
+  if (costWithoutThis + nextCost > state.cash) return fail('可用现金不足')
+
+  mat.chosenLot = lot
+  state.lotsUsed = usedWithoutThis + (lot ? 1 : 0)
+  return {
+    ok: true,
+    msg: lot ? `${nameOf(materialId)}已计划${lotLabel(lot)}` : `${nameOf(materialId)}采购计划已取消`,
+  }
+}
+
+export function canSetPurchasePlan(state: GameState, materialId: string, lot: LotSize | null): ActionResult {
+  if (state.mode !== 'core') return OK
+  const copy = JSON.parse(JSON.stringify(state)) as GameState
+  return setPurchasePlan(copy, materialId, lot)
+}
+
+/** 计划采购实际可入库数量，受市场供给和仓容共同限制。 */
+export function plannedLotQty(state: GameState, materialId: string, lot: LotSize): number {
+  const mat = state.materials[materialId]
+  if (!mat) return 0
+  const cap = derive(state).materials[materialId]?.cap ?? mat.cap
+  return Math.max(0, Math.min(lotQty(state, materialId, lot), cap - mat.qty))
+}
+
+export function plannedPurchaseLine(state: GameState, materialId: string) {
+  const lot = state.materials[materialId]?.chosenLot ?? null
+  if (!lot || state.mode !== 'core') return { lot: null, qty: 0, unit: 0, cost: 0 }
+  const qty = plannedLotQty(state, materialId, lot)
+  const unit = lotPrice(state, materialId, lot)
+  return { lot, qty, unit, cost: qty * unit }
+}
+
+export function plannedPurchaseCost(state: GameState): Money {
+  if (state.mode !== 'core') return 0
+  return Object.keys(state.materials).reduce((sum, id) => sum + plannedPurchaseLine(state, id).cost, 0)
+}
+
+export function availableCashAfterPurchasePlan(state: GameState): Money {
+  return state.cash - plannedPurchaseCost(state)
+}
+
+/** 生产可用原料：核心模式包含计划采购到货，完整模式只读实际库存。 */
+export function materialAvailableForProduction(state: GameState, materialId: string): number {
+  const current = state.materials[materialId]?.qty ?? 0
+  return current + (state.mode === 'core' ? plannedPurchaseLine(state, materialId).qty : 0)
+}
+
+/** 正式结算时执行核心模式采购计划。 */
+export function executePlannedPurchases(state: GameState) {
+  if (state.mode !== 'core') return
+  for (const id of Object.keys(state.materials)) {
+    const line = plannedPurchaseLine(state, id)
+    if (!line.lot || line.qty <= 0) continue
+    const added = addMaterial(state, id, line.qty, line.unit, false, true)
+    if (added <= 0) continue
+    const name = nameOf(id)
+    state.monthLedger.push({
+      dept: 'buy',
+      item: `采购 ${name} ${lotLabel(line.lot)} ×${added}`,
+      debit: `库存 ${name}`,
+      credit: '现金',
+      debitAmt: added * line.unit,
+      creditAmt: added * line.unit,
+      detail: [
+        `${added} 件 × ${line.unit / 10}w = ${((added * line.unit) / 10).toFixed(1)}w`,
+        '结算时按采购计划入库并付款',
+      ],
+    })
+  }
+}
+
+function plannedMaterialNeed(state: GameState, materialId: string): number {
+  const d = derive(state)
+  return TIERS.reduce((sum, tier) => {
+    const need = BOMS[tier].recipe[materialId] ?? 0
+    return sum + Math.max(0, need - d.matSave) * state.plan.quantities[tier]
+  }, 0)
 }
 
 /**
@@ -775,7 +870,7 @@ export function maxProducible(state: GameState, tier: Tier): number {
       const otherNeed = BOMS[t].recipe[id] ?? 0
       return sum + Math.max(0, otherNeed - d.matSave) * state.plan.quantities[t]
     }, 0)
-    const avail = Math.max(0, (state.materials[id]?.qty ?? 0) - reserved)
+    const avail = Math.max(0, materialAvailableForProduction(state, id) - reserved)
     max = Math.min(max, Math.floor(avail / per))
   }
   return Math.max(0, max)

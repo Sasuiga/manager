@@ -154,3 +154,62 @@ describe('订单与排产联动', () => {
     expect(E.canAcceptOrder(s, 'o1')).toBe(true)
   })
 })
+
+describe('核心模式采购计划', () => {
+  it('选择采购档位只预留现金与到货量，不立即扣款入库', () => {
+    const s = E.newGame(91, 'core')
+    E.startGame(s)
+    const cash = s.cash
+    const qty = E.plannedLotQty(s, 'pkg', 'mid')
+    const cost = qty * E.lotPrice(s, 'pkg', 'mid')
+
+    expect(E.buyMaterial(s, 'pkg', 'mid').ok).toBe(true)
+    expect(s.cash).toBe(cash)
+    expect(s.materials.pkg.qty).toBe(0)
+    expect(s.materials.pkg.chosenLot).toBe('mid')
+    expect(E.plannedPurchaseCost(s)).toBe(cost)
+    expect(E.availableCashAfterPurchasePlan(s)).toBe(cash - cost)
+  })
+
+  it('生产可以使用计划到货，已被排产占用的采购不能直接减少或取消', () => {
+    const s = E.newGame(92, 'core')
+    E.startGame(s)
+    expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
+    expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
+
+    const producible = E.maxProducible(s, 'low')
+    expect(producible).toBeGreaterThan(0)
+    E.setPlan(s, 'low', producible)
+    expect(E.canSetPurchasePlan(s, 'pkg', null).ok).toBe(false)
+    expect(E.setPurchasePlan(s, 'resin', 'small').ok).toBe(false)
+
+    E.setPlan(s, 'low', 0)
+    expect(E.setPurchasePlan(s, 'pkg', null).ok).toBe(true)
+    expect(s.materials.pkg.chosenLot).toBe(null)
+  })
+
+  it('正式结算按采购计划先入库，再执行生产与销售', () => {
+    const s = E.newGame(93, 'core')
+    E.startGame(s)
+    s.orders = []
+    expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
+    expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
+    E.setPlan(s, 'low', Math.min(5, E.maxProducible(s, 'low')))
+    const purchaseCost = E.plannedPurchaseCost(s)
+    const report = E.settleMonth(s)
+
+    expect(report.production.produced).toBeGreaterThan(0)
+    expect(s.monthLedger.filter((row) => row.dept === 'buy' && row.item.startsWith('采购'))).toHaveLength(2)
+    expect(report.ledger.cashBegin).toBe(1000 - purchaseCost)
+  })
+
+  it('预演读取采购计划，但不实际执行采购', () => {
+    const s = E.newGame(94, 'core')
+    E.startGame(s)
+    E.buyMaterial(s, 'pkg', 'mid')
+    const before = JSON.stringify(s)
+    const preview = E.previewOperations(s)
+    expect(preview.purchaseSpend).toBe(E.plannedPurchaseCost(s))
+    expect(JSON.stringify(s)).toBe(before)
+  })
+})
