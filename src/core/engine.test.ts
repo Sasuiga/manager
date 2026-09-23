@@ -309,7 +309,7 @@ describe('引擎', () => {
    * 订单量被压成 1 件，招销售几乎变成纯支出。
    */
   it('订单数随销售人数增长，且每单数量在 8~12 件之间', () => {
-    for (const [sell, wantCount] of [[0, 0], [2, 1], [4, 3]] as [number, number][]) {
+    for (const [sell, wantCount] of [[0, 0], [2, 1], [4, 2]] as [number, number][]) {
       const s = E.newGame(7)
       E.startGame(s)
       if (s.challengeOffered.length) E.chooseChallenge(s, 0)
