@@ -379,41 +379,53 @@ function BuyPage({ g }: { g: Game }) {
         </p>
       </div>
 
-      {mats.map((m) => (
-        <div key={m.id} className="card">
-          <div className="mat-head">
-            <span className="mat-name">
-              {m.name}
-              {m.isNew ? <span className="tag" style={{ marginLeft: 6 }}>新材料</span> : null}
-            </span>
-            <span className="mat-meta">
-              库存 {m.qty}/{m.cap}
-            </span>
-          </div>
-          <div className="title-rule" />
-          <div className="hstack-between" style={{ marginBottom: 'var(--s2)' }}>
-            <span className="xs">
-              <span className="faint">供给 </span>
-              <span className="mono">{m.supply}</span>
-            </span>
-            <span className={`xs mono ${tierClass(m.tierShift)}`}>
-              价格水平 {tierName(m.tierShift)}
-            </span>
-          </div>
-
-          <button
-            className="btn btn-nav"
-            style={{ width: '100%', alignItems: 'center' }}
-            disabled={m.supply <= 0 || m.chosenLot !== null || gs.lotsUsed >= d.buyLots}
-            onClick={() => setPickLot(m.id)}
-          >
-            <span className="btn-main xs">
-              {m.chosenLot ? `已选 ${E.lotLabel(m.chosenLot)}` : '采购'}
-            </span>
-            <Icon name="chevron" size={13} />
-          </button>
-        </div>
-      ))}
+      <div className="card">
+        <div className="section-label">原料</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85em' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--line)' }}>
+              <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>材料</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>库存</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>供给</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>价格水平</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {mats.map((m) => (
+              <tr key={m.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                <td style={{ padding: '6px 8px' }}>
+                  {m.name}
+                  {m.isNew ? <span className="tag" style={{ marginLeft: 4, fontSize: '0.75em' }}>新</span> : null}
+                </td>
+                <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
+                  {m.qty}/{m.cap}
+                </td>
+                <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
+                  {m.supply}
+                </td>
+                <td style={{ textAlign: 'right', padding: '6px 8px' }}>
+                  <span className={tierClass(m.tierShift)}>{tierName(m.tierShift)}</span>
+                </td>
+                <td style={{ textAlign: 'right', padding: '6px 8px' }}>
+                  {m.chosenLot ? (
+                    <span className="xs faint">已选 {E.lotLabel(m.chosenLot)}</span>
+                  ) : (
+                    <button
+                      className="btn btn-mini"
+                      style={{ padding: '2px 8px', fontSize: '0.8em' }}
+                      disabled={m.supply <= 0 || gs.lotsUsed >= d.buyLots}
+                      onClick={() => setPickLot(m.id)}
+                    >
+                      采购
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <div className="card">
         <h3>其他采购手段</h3>
