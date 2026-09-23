@@ -249,7 +249,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     unlocks: [
       { at: 2, text: '每月获得 1 个确定性订单' },
       { at: 3, text: '每人销售资源 +4 → +6' },
-      { at: 4, text: '每月获得 3 个确定性订单' },
+      { at: 4, text: '每月获得 2 个确定性订单' },
       { at: 5, text: '每人 +6 → +8，并实现成本转移', achievement: '品牌' },
     ],
   },
@@ -270,8 +270,8 @@ export const STAFF: Record<Dept, StaffDef> = {
 
 /** 销售人员每人的销售资源贡献（§7.2.4）。 */
 export const SALES_RESOURCE_STEPS = [0, 4, 4, 6, 6, 8]
-/** 每月确定性订单数（§7.2.6）。 */
-export const SALES_ORDER_COUNT = [0, 0, 1, 1, 3, 3]
+/** 每月确定性订单数（§7.2.6）：2 人解锁第 1 个订单槽，4 人解锁第 2 个。 */
+export const SALES_ORDER_COUNT = [0, 0, 1, 1, 2, 2]
 export const BASE_SALES_RESOURCE = 10
 export const BASE_HAND = 5
 export const BASE_PLAYS = 2

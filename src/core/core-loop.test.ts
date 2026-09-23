@@ -203,7 +203,7 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(E.derive(s).materials.pkg.tierShift).toBeLessThan(0) // 4 人降价 1 档
   })
 
-  it('销售 2 人：当月立即补发 1 个订单，销售资源按阶梯增长', () => {
+  it('销售 2 人解锁第 1 个订单槽、4 人解锁第 2 个：达标当月立即补发', () => {
     const s = fresh()
     expect(E.hire(s, 'sell').ok).toBe(true)
     expect(s.orders.length).toBe(0) // 1 人未达订单阈值
@@ -211,6 +211,11 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(s.orders.length).toBe(1) // 2 人解锁 1 单，当月立即补发
     expect(E.derive(s).orderCount).toBe(1)
     expect(E.derive(s).salesResource).toBe(18) // 基础 10 + 2 人 × 4
+    s.ap = 5
+    expect(E.hire(s, 'sell').ok).toBe(true)
+    expect(E.hire(s, 'sell').ok).toBe(true)
+    expect(E.derive(s).orderCount).toBe(2) // 4 人解锁第 2 个订单槽
+    expect(s.orders.length).toBe(2) // 第 2 单当月立即补发
   })
 
   it('3 名生产解锁加班：产能计划含 +10', () => {
