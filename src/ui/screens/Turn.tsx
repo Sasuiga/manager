@@ -397,6 +397,7 @@ function BuyPage({ g }: { g: Game }) {
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>{gs.mode === 'core' ? '库存 + 计划' : '库存'}</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>供给</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>价格水平</th>
+              {gs.mode === 'core' ? <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>资金占用</th> : null}
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>操作</th>
             </tr>
           </thead>
@@ -418,6 +419,11 @@ function BuyPage({ g }: { g: Game }) {
                 <td style={{ textAlign: 'right', padding: '6px 8px' }}>
                   <span className={tierClass(m.tierShift)}>{tierName(m.tierShift)}</span>
                 </td>
+                {gs.mode === 'core' ? (
+                  <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
+                    {m.chosenLot ? wan(E.plannedPurchaseLine(gs, m.id).cost) : <span className="faint">—</span>}
+                  </td>
+                ) : null}
                 <td style={{ textAlign: 'right', padding: '6px 8px' }}>
                   {m.chosenLot ? (
                     gs.mode === 'core' ? (
@@ -442,6 +448,18 @@ function BuyPage({ g }: { g: Game }) {
                 </td>
               </tr>
             ))}
+            {gs.mode === 'core' ? (
+              <tr style={{ borderTop: '1px solid var(--line)', fontWeight: 600 }}>
+                <td style={{ padding: '6px 8px' }}>合计</td>
+                <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
+                  {mats.reduce((a, m) => a + (m.chosenLot ? E.plannedPurchaseLine(gs, m.id).qty : 0), 0)}
+                </td>
+                <td style={{ textAlign: 'right', padding: '6px 8px' }} />
+                <td style={{ textAlign: 'right', padding: '6px 8px' }} />
+                <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>{wan(E.plannedPurchaseCost(gs))}</td>
+                <td style={{ textAlign: 'right', padding: '6px 8px' }} />
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
@@ -550,6 +568,7 @@ function BuyConfirmSheet({
   const canConfirm = gs.mode === 'core'
     ? E.canSetPurchasePlan(gs, data.id, data.lot).ok
     : qty > 0 && total <= gs.cash
+  const clearsPlan = gs.mode === 'core' && E.purchasePlanClearsProduction(gs, data.id, data.lot)
   const [showPriceSrc, setShowPriceSrc] = useState(false)
 
   return (
@@ -582,6 +601,11 @@ function BuyConfirmSheet({
         </div>
         <Row k="总价" v={wan(total)} bold />
         {gs.mode === 'core' ? <Row k="计划后可用现金" v={wan(E.availableCashAfterPurchasePlan(gs) - total + E.plannedPurchaseLine(gs, data.id).cost)} /> : null}
+        {clearsPlan ? (
+          <div className="info" style={{ marginTop: 'var(--s2)' }}>
+            该原料采购量低于原生产需求，确认后生产计划将清空，请重新安排生产。
+          </div>
+        ) : null}
       </div>
 
       <div className="card">

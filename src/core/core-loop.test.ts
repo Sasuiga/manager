@@ -171,7 +171,7 @@ describe('核心模式采购计划', () => {
     expect(E.availableCashAfterPurchasePlan(s)).toBe(cash - cost)
   })
 
-  it('生产可以使用计划到货，已被排产占用的采购不能直接减少或取消', () => {
+  it('生产可以使用计划到货；减少采购会保留生产计划，取消采购则清空生产计划', () => {
     const s = E.newGame(92, 'core')
     E.startGame(s)
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
@@ -180,12 +180,30 @@ describe('核心模式采购计划', () => {
     const producible = E.maxProducible(s, 'low')
     expect(producible).toBeGreaterThan(0)
     E.setPlan(s, 'low', producible)
-    expect(E.canSetPurchasePlan(s, 'pkg', null).ok).toBe(false)
-    expect(E.setPurchasePlan(s, 'resin', 'small').ok).toBe(false)
 
-    E.setPlan(s, 'low', 0)
+    // 减少采购：新采购量低于生产需求 → 允许，但生产计划被清空
+    expect(E.setPurchasePlan(s, 'resin', 'small').ok).toBe(true)
+    expect(E.plannedTotal(s)).toBe(0)
+    expect(s.materials.resin.chosenLot).toBe('small')
+    expect(s.materials.pkg.chosenLot).toBe('large')
+
+    // 取消采购：生产计划已清空，直接允许
     expect(E.setPurchasePlan(s, 'pkg', null).ok).toBe(true)
     expect(s.materials.pkg.chosenLot).toBe(null)
+  })
+
+  it('清空生产计划会一并取消加班并同步已接订单', () => {
+    const s = E.newGame(95, 'core')
+    E.startGame(s)
+    expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
+    expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
+    E.setPlan(s, 'low', E.maxProducible(s, 'low'))
+    s.plan.overtime = true
+
+    const r = E.setPurchasePlan(s, 'resin', 'small')
+    expect(r.ok).toBe(true)
+    expect(E.plannedTotal(s)).toBe(0)
+    expect(s.plan.overtime).toBe(false)
   })
 
   it('正式结算按采购计划先入库，再执行生产与销售', () => {

@@ -562,7 +562,8 @@ export function setPurchasePlan(state: GameState, materialId: string, lot: LotSi
 
   const nextQty = lot ? plannedLotQty(state, materialId, lot) : 0
   const needed = plannedMaterialNeed(state, materialId)
-  if (mat.qty + nextQty < needed) return fail('该采购计划已被生产占用，请先调整生产安排')
+  const clearsPlan = plannedTotal(state) > 0 && mat.qty + nextQty < needed
+  if (clearsPlan && !lot) return fail('该采购计划已被生产占用，请先调整生产安排')
 
   const nextCost = lot ? nextQty * lotPrice(state, materialId, lot) : 0
   const costWithoutThis = plannedPurchaseCost(state) - plannedPurchaseLine(state, materialId).cost
@@ -570,9 +571,20 @@ export function setPurchasePlan(state: GameState, materialId: string, lot: LotSi
 
   mat.chosenLot = lot
   state.lotsUsed = usedWithoutThis + (lot ? 1 : 0)
+  if (clearsPlan) {
+    clearProductionPlan(state)
+    reconcileAcceptedOrders(state)
+    pushLog(state, 'action', '采购调整：原生产计划已清空', [
+      '该原料新采购量低于原生产需求，请重新安排生产计划',
+    ])
+  }
   return {
     ok: true,
-    msg: lot ? `${nameOf(materialId)}已计划${lotLabel(lot)}` : `${nameOf(materialId)}采购计划已取消`,
+    msg: lot
+      ? clearsPlan
+        ? `${nameOf(materialId)}已计划${lotLabel(lot)}，生产计划已清空`
+        : `${nameOf(materialId)}已计划${lotLabel(lot)}`
+      : `${nameOf(materialId)}采购计划已取消`,
   }
 }
 
@@ -643,6 +655,25 @@ function plannedMaterialNeed(state: GameState, materialId: string): number {
     const need = BOMS[tier].recipe[materialId] ?? 0
     return sum + Math.max(0, need - d.matSave) * state.plan.quantities[tier]
   }, 0)
+}
+
+/**
+ * 修改采购计划时的生产联动规则：
+ * 该原料已被生产占用（库存 + 新计划量不够 BOM 需求）时，
+ * 原生产计划（含加班标志）会被整体清空，让玩家以新采购重新排产。
+ * 生产计划为空时不触发任何联动。
+ */
+export function purchasePlanClearsProduction(state: GameState, materialId: string, lot: LotSize | null): boolean {
+  if (state.mode !== 'core') return false
+  const mat = state.materials[materialId]
+  if (!mat) return false
+  const nextQty = lot ? plannedLotQty(state, materialId, lot) : 0
+  return plannedTotal(state) > 0 && mat.qty + nextQty < plannedMaterialNeed(state, materialId)
+}
+
+export function clearProductionPlan(state: GameState): void {
+  for (const tier of TIERS) state.plan.quantities[tier] = 0
+  state.plan.overtime = false
 }
 
 /**

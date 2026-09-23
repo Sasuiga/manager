@@ -62,6 +62,8 @@ export {
   plannedTotal,
   maxProducible,
   maxProducibleByTier,
+  purchasePlanClearsProduction,
+  clearProductionPlan,
   confirmProduction,
   toggleOvertime,
   setAlloc,
