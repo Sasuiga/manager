@@ -448,18 +448,6 @@ function BuyPage({ g }: { g: Game }) {
                 </td>
               </tr>
             ))}
-            {gs.mode === 'core' ? (
-              <tr style={{ borderTop: '1px solid var(--line)', fontWeight: 600 }}>
-                <td style={{ padding: '6px 8px' }}>合计</td>
-                <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
-                  {mats.reduce((a, m) => a + (m.chosenLot ? E.plannedPurchaseLine(gs, m.id).qty : 0), 0)}
-                </td>
-                <td style={{ textAlign: 'right', padding: '6px 8px' }} />
-                <td style={{ textAlign: 'right', padding: '6px 8px' }} />
-                <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>{wan(E.plannedPurchaseCost(gs))}</td>
-                <td style={{ textAlign: 'right', padding: '6px 8px' }} />
-              </tr>
-            ) : null}
           </tbody>
         </table>
       </div>
