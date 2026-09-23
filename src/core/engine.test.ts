@@ -326,7 +326,7 @@ describe('引擎', () => {
     }
   })
 
-  it('销售资源加点直接增加该层需求：1 点 1 需求，每层上限 3 倍基础需求', () => {
+  it('销售资源加点直接增加该层需求：高端产品需要更多资源，每层上限 3 倍基础需求', () => {
     const s = E.newGame(7)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
@@ -336,12 +336,12 @@ describe('引擎', () => {
     E.enterOperate(s)
     const d0 = E.derive(s)
     expect(d0.demand).toEqual(d0.demandBase) // 未加点时两者相等
-    // 成本梯度：低 1 / 中 2 / 高 3 / 特 4 点每需求；push = min(floor(分配/成本), 上限)
+    // 成本梯度：低 1 / 中 2 / 高 4 / 特 6 点每需求；push = min(floor(分配/成本), 上限)
     const cases: [E.Tier, number, number][] = [
       ['low', 5, 5], // 5 点 ÷ 1 = 5（未超上限 15）
       ['mid', 10, 5], // 10 点 ÷ 2 = 5（未超上限 12）
       ['mid', 3, 1], // 零头：3 点 ÷ 2 = 1 需求，余 1 点不计
-      ['high', 99, 3], // 资源池 10 点封顶 → 10 ÷ 3 = 3（未超上限 6）
+      ['high', 99, 2], // 资源池 10 点封顶 → 10 ÷ 4 = 2（未超上限 6）
     ]
     for (const [tier, want, expectPush] of cases) {
       s.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }

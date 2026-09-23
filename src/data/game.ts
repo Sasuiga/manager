@@ -149,12 +149,10 @@ export const SALES_PUSH_CAP: Record<Tier, number> = {
 }
 
 /**
- * 每层「1 点需求」的销售资源成本（v1.2）：层级越高，多一个客户越难。
- * 低端 1 点/需求 是中端的 1/2、高端的 1/3、特殊的 1/4，
- * 把「全灌高端」的每点性价比从 6 倍差距压到约 2 倍；
- * 且 1 点成本的低端天然是零头吸收器：任何剩点总能换成低端需求（除非低端已顶满 15）。
+ * 每层「1 点需求」的销售资源成本：越高端的产品，渠道覆盖越昂贵。
+ * 销售流派可以通过员工、卡牌和事件获得更多资源，承担高端市场覆盖成本。
  */
-export const SALES_PUSH_COST: Record<Tier, number> = { low: 1, mid: 2, high: 3, special: 4 }
+export const SALES_PUSH_COST: Record<Tier, number> = { low: 1, mid: 2, high: 4, special: 6 }
 
 export const BOMS: Record<Tier, BomDef> = {
   low: { tier: 'low', name: '标准品', recipe: { pkg: 2, resin: 1 }, basePrice: 60, stdCost: 40 },
