@@ -1009,6 +1009,10 @@ export function postProductionInbound(
  * 因此之后无论再结算几次，同一批货的成本都不会重复进利润表（确认后各线计划已清零）。
  */
 export function confirmProduction(state: GameState): ActionResult {
+  if (state.mode === 'core') {
+    // 核心模式采用「采购计划 → 生产计划 → 销售计划 → 统一结算」，生产在结算时一次执行。
+    return fail('核心模式生产在结算时统一执行')
+  }
   if (plannedTotal(state) <= 0) return fail('尚未安排产量')
   const d = derive(state)
   const completed: string[] = []

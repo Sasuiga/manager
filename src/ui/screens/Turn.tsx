@@ -926,7 +926,7 @@ function MakePage({ g }: { g: Game }) {
             onClick={() => setConfirm(true)}
           >
             <span className="btn-main">确认生产安排</span>
-            <span className="btn-sub">{plannedTotal > 0 ? `共 ${plannedTotal} 件，确认后立即扣料入库` : '先分配产量'}</span>
+            <span className="btn-sub">{plannedTotal > 0 ? `共 ${plannedTotal} 件，于预演结算时统一入库` : '先分配产量'}</span>
           </button>
         </div> : null}
       </div>
@@ -970,10 +970,8 @@ function MakePage({ g }: { g: Game }) {
         </div>
       ) : null}
 
-      {/* 确认生产安排：按 BOM 立即扣料入库，「原料→存货」记账到部门账务 */}
-      {gs.mode === 'full' && confirm ? (
-        <ProductionConfirmSheet g={g} planned={plannedTotal} onDone={() => setConfirm(false)} />
-      ) : null}
+      {/* 确认生产安排：按 BOM 立即扣料入库，「原料→存货」记账到部门账务（仅完整模式） */}
+      {gs.mode === 'full' && confirm ? <ProductionConfirmSheet g={g} planned={plannedTotal} onDone={() => setConfirm(false)} /> : null}
       {equip ? <EquipmentSheet g={g} onClose={() => setEquip(false)} /> : null}
     </>
   )

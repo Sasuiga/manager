@@ -224,6 +224,25 @@ describe('核心模式采购计划', () => {
     expect(s.lotsUsed).toBe(0)
   })
 
+  it('核心模式生产不在确认时立即执行，结算时统一过账', () => {
+    const s = E.newGame(96, 'core')
+    E.startGame(s)
+    expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
+    expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
+    E.setPlan(s, 'low', 3)
+
+    const before = s.materials.resin.qty
+    const r = E.confirmProduction(s)
+    expect(r.ok).toBe(false)
+    expect(r.msg).toBe('核心模式生产在结算时统一执行')
+    expect(s.materials.resin.qty).toBe(before) // 未扣料
+    expect(s.products.low.qty).toBe(0) // 未入库
+    expect(E.plannedTotal(s)).toBe(3) // 计划保留，结算时执行
+
+    E.settleMonth(s)
+    expect(s.products.low.qty).toBeGreaterThan(0)
+  })
+
   it('预演读取采购计划，但不实际执行采购', () => {
     const s = E.newGame(94, 'core')
     E.startGame(s)

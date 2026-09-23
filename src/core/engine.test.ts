@@ -447,8 +447,8 @@ describe('引擎', () => {
     expect(E.plannedTotal(s)).toBe(4)
     expect(s.plan.quantities).toEqual({ low: 2, mid: 2, high: 0, special: 0 })
 
-    const r = E.confirmProduction(s)
-    expect(r.ok).toBe(true)
+    const r = E.settleMonth(s)
+    expect(r.production.produced).toBe(4)
     expect(s.products.low.qty).toBe(2)
     expect(s.products.mid.qty).toBe(2)
     expect(s.materials.pkg.qty).toBe(0)
