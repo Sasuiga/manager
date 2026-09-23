@@ -647,6 +647,11 @@ export function executePlannedPurchases(state: GameState) {
       ],
     })
   }
+  // 生产计划非空时取消采购会被拒绝，因此这里清空 chosenLot 不会破坏生产 BOM 约束。
+  // 计划已入实体库存：清空档位与档数，避免后续“计划量 = 库存 + 计划到货”重叠加计划量。
+  // 月末推进的 advanceMonthCore 也会再清一次，这里是防御性的提前清理。
+  for (const id of Object.keys(state.materials)) state.materials[id].chosenLot = null
+  state.lotsUsed = 0
 }
 
 function plannedMaterialNeed(state: GameState, materialId: string): number {

@@ -219,6 +219,9 @@ describe('核心模式采购计划', () => {
     expect(report.production.produced).toBeGreaterThan(0)
     expect(s.monthLedger.filter((row) => row.dept === 'buy' && row.item.startsWith('采购'))).toHaveLength(2)
     expect(report.ledger.cashBegin).toBe(1000 - purchaseCost)
+    // 计划已执行：档位与档数清空，后续“库存 + 计划到货”不会重叠加计划量
+    expect(Object.values(s.materials).every((m) => m.chosenLot === null)).toBe(true)
+    expect(s.lotsUsed).toBe(0)
   })
 
   it('预演读取采购计划，但不实际执行采购', () => {
