@@ -1058,11 +1058,11 @@ function EquipmentSheet({ g, onClose }: { g: Game; onClose: () => void }) {
 
 /* ══════════════ 销售部 ══════════════ */
 
-/* 市场需求表的一行（类型 / 需求数 / 市价 / 可用库存） */
+/* 市场需求表的一行（类型 / 需求数 / 上限 / 市价 / 单件毛利 / 可用库存），与六列网格对齐 */
 function TierRowCells({
   t, p,
   push = 0, over = 0, demand, demandBase, cap, price, avail,
-  orderTaken = 0,
+  orderTaken = 0, grossProfit = 0,
 }: {
   t: Tier
   p: { built: boolean; qty: number }
@@ -1074,6 +1074,7 @@ function TierRowCells({
   price: number
   avail: number
   orderTaken?: number
+  grossProfit?: number
 }) {
   return (
     <>
@@ -1081,12 +1082,13 @@ function TierRowCells({
         <b>{TIER_LABEL[t]}</b>
         {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
       </span>
-      <span />
       <span className={`mono sm${push > 0 ? ' gold' : ''}`}>
-        {demand}<span className="faint">（上限 {demandBase + cap}）</span>
+        {demand}
         {over > 0 ? <span className="faint" style={{ color: 'var(--red, #c0392b)' }}> · 超 {over}</span> : null}
       </span>
+      <span className="mono xs faint">{demandBase + cap}</span>
       <span className="mono xs">{wan(price)}</span>
+      <span className={`mono xs${grossProfit < 0 ? ' bad' : grossProfit > 0 ? ' gold' : ''}`}>{wan(grossProfit)}</span>
       <span>
         <span className="mono sm">{avail}</span>
         {orderTaken > 0 ? <span className="faint xs">（总 {p.qty}）</span> : null}
@@ -1095,14 +1097,15 @@ function TierRowCells({
   )
 }
 
-/* 订单需求表的一行（类型 / 需求数 / 订单价 / 状态 / 来源） */
+/* 订单需求表的一行（类型 / 需求数 / 来源 / 订单价 / 单件毛利 / 状态） */
 function TierOrderRow({
-  t, p, qty, price, from, forced, isAccepted, isDeclined, canAccept, onToggle, onShortClick,
+  t, p, qty, price, grossProfit, from, forced, isAccepted, isDeclined, canAccept, onToggle, onShortClick,
 }: {
   t: Tier
   p: { built: boolean; qty: number }
   qty: number
   price: number
+  grossProfit: number
   from?: string
   forced?: boolean
   isAccepted?: boolean
@@ -1117,11 +1120,12 @@ function TierOrderRow({
         <b>{TIER_LABEL[t]}</b>
         {!p.built ? <span className="faint xs"> · 未解锁</span> : null}
       </span>
-      <span className="xs faint">{from}</span>
       <span className={`mono sm${forced ? '' : isAccepted ? ' gold' : ''}`}>
         {qty} 件
       </span>
+      <span className="xs faint">{from}</span>
       <span className="mono xs">{wan(price)}</span>
+      <span className={`mono xs${grossProfit < 0 ? ' bad' : grossProfit > 0 ? ' gold' : ''}`}>{wan(grossProfit)}</span>
       {forced ? (
         <span className="xs faint">强制必交</span>
       ) : isAccepted ? (
@@ -1165,6 +1169,14 @@ function TierOrderRow({
 function SellPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
+  const plannedTotal = TIER_ORDER.reduce((sum, tier) => sum + Math.max(0, gs.plan.quantities[tier]), 0)
+  const depreciation = gs.equipment.reduce((sum, e) => sum + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0)
+  const fixedProductionCost = d.salaryPer.make * gs.depts.make.staff + depreciation
+  /** 预估单件毛利（万元）= 单价 − 变动单位成本 − 固定成本分摊；市价与订单价按单件同口径对比。 */
+  const estimatedGrossProfit = (tier: Tier, price: number) => {
+    const allocatedFixed = plannedTotal > 0 ? fixedProductionCost / plannedTotal : 0
+    return Math.round(price - E.unitCost(gs, tier, d) - allocatedFixed)
+  }
   const used = E.allocUsed(gs)
   /** 各层强制订单量（事件/卡牌产生，必交）。 */
   const forcedQtyBy: Record<string, number> = { low: 0, mid: 0, high: 0, special: 0 }
@@ -1198,12 +1210,13 @@ function SellPage({ g }: { g: Game }) {
       <div className="card">
         <h3>本月需求与售价</h3>
         <div className="title-rule" />
-        {/* 市场需求表：四列（类型 / 需求 / 售价 / 库存），库存已扣除订单占用量 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 1fr 1fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+        {/* 市场需求表：六列（类型 / 需求数 / 上限 / 市价 / 单件毛利 / 可承诺量），库存已扣除订单占用量，列宽与下方订单表对齐 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 0.9fr 1fr 1.2fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
           <span className="xs" style={{ color: 'var(--gold)' }}>市场需求</span>
-          <span />
           <span className="xs faint">需求数</span>
+          <span className="xs faint">上限</span>
           <span className="xs faint">市价</span>
+          <span className="xs faint">单件毛利</span>
           <span className="xs faint">{gs.mode === 'core' ? '可承诺量' : '可用库存'}</span>
           {TIER_ORDER.map((t) => {
             const p = gs.products[t]
@@ -1224,6 +1237,7 @@ function SellPage({ g }: { g: Game }) {
                 demandBase={d.demandBase[t]}
                 cap={cap}
                 price={d.price[t]}
+                grossProfit={estimatedGrossProfit(t, d.price[t])}
                 avail={avail}
                 orderTaken={orderTaken}
               />
@@ -1231,13 +1245,14 @@ function SellPage({ g }: { g: Game }) {
           })}
         </div>
 
-        {/* 订单需求表：五列（类型 / 来源 / 需求数 / 订单价 / 状态），列宽与上方对齐 */}
+        {/* 订单需求表：六列（类型 / 需求数 / 来源 / 订单价 / 单件毛利 / 状态），列宽与上方对齐 */}
         <div className="title-rule" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 1fr 1fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 0.9fr 1fr 1.2fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
           <span className="xs" style={{ color: 'var(--gold)' }}>订单需求</span>
-          <span className="xs faint">来源</span>
           <span className="xs faint">需求数</span>
+          <span className="xs faint">来源</span>
           <span className="xs faint">订单价</span>
+          <span className="xs faint">单件毛利</span>
           <span className="xs faint">状态</span>
           {gs.orders.map((o) => {
             const orderPrice = E.priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
@@ -1251,6 +1266,7 @@ function SellPage({ g }: { g: Game }) {
                 p={gs.products[o.tier]}
                 qty={o.qty}
                 price={orderPrice}
+                grossProfit={estimatedGrossProfit(o.tier, orderPrice)}
                 from={o.from}
                 forced={o.forced}
                 isAccepted={isAccepted}
