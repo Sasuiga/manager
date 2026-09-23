@@ -69,14 +69,12 @@ const SCENARIO_SETUP: Record<CoreScenarioId, ScenarioSetup> = {
   cheap_low_demand: {
     climate: 'depression',
     cash: 600,
-    orders: [{ tier: 'low', qty: 3 }],
-    sellStaff: 2,
+    orders: [],
   },
   expensive_high_demand: {
     climate: 'overheat',
     cash: 600,
-    orders: [{ tier: 'high', qty: 2 }],
-    sellStaff: 2,
+    orders: [],
   },
   order_heavy: {
     climate: 'boom',
@@ -103,17 +101,12 @@ const SCENARIO_SETUP: Record<CoreScenarioId, ScenarioSetup> = {
         alloy: { supply: -6, tierShift: 0 },
       },
     },
-    orders: [
-      { tier: 'mid', qty: 3 },
-      { tier: 'high', qty: 2 },
-    ],
-    sellStaff: 4,
+    orders: [],
   },
   cash_constrained: {
     climate: 'recovery',
     cash: 250,
-    orders: [{ tier: 'mid', qty: 2 }],
-    sellStaff: 2,
+    orders: [],
   },
 }
 
