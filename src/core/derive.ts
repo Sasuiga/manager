@@ -276,15 +276,12 @@ export function derive(state: GameState): DerivedTotals {
   }
   const mods = mergeMods(climateMods, state.monthMods, state.cardMods)
 
-  // ── 原料 ──
-  const buyStaffSupplyMax = staffCount.buy * 2
+  // ── 原料（采购人员不再提供供应加成：增量供给走供应商开发/气候/事件）──
   const materials: DerivedTotals['materials'] = {}
   for (const m of MATERIALS) {
     const mm = mods.materials?.[m.id] ?? { supply: 0, tierShift: 0 }
     const developed = state.materialsDeveloped[m.id] ?? 0
-    /** 采购人员供应加成封顶基础供应：稀有原料不被买爆，新原料（基础 0）留给供应商开发。 */
-    const staffSupply = Math.min(buyStaffSupplyMax, m.baseSupply)
-    const supply = Math.max(0, m.baseSupply + developed + mm.supply + (mods.allSupply ?? 0) + staffSupply + ip.matSupply)
+    const supply = Math.max(0, m.baseSupply + developed + mm.supply + (mods.allSupply ?? 0) + ip.matSupply)
     let shift = mm.tierShift + (mods.allTierShift ?? 0)
     if (staffCount.buy >= 4) shift -= 1 // 采购 4 人：所有原料价格降 1 档
     shift -= ip.priceShift > 0 && state.ipOwned.includes('I8') ? 0 : 0 // 质量认证作用于售价，不作用于原料

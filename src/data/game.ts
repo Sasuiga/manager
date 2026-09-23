@@ -219,7 +219,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '采购人员',
     hireFees: [50, 40, 30, 20, 10],
     salary: 10,
-    base: ['每类原料供给 +2/人（加成封顶该原料基础供应）', '每月可选采购档数 +1'],
+    base: ['每月可选采购档数 +1'],
     unlocks: [
       { at: 2, text: '贸易商每月随机供应品种 +1' },
       { at: 3, text: '解锁长期供货协议' },

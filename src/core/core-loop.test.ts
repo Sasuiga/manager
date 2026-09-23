@@ -201,12 +201,11 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(E.hire(s, 'buy').ok).toBe(true)
     expect(E.derive(s).buyLots).toBe(6)
     expect(E.derive(s).materials.pkg.tierShift).toBeLessThan(0) // 4 人降价 1 档
-    // 供应加成封顶基础供应：稀有原料不被买爆（4 人上限 8）
+    // 采购人员不再提供供应加成：供应增量为 0（增量供给走供应商开发等途径）
     const d0 = E.derive(fresh())
     const d4 = E.derive(s)
-    expect(d4.materials.chip.supply - d0.materials.chip.supply).toBe(3) // min(8, 3)
-    expect(d4.materials.alloy.supply - d0.materials.alloy.supply).toBe(7) // min(8, 7)
-    expect(d4.materials.pkg.supply - d0.materials.pkg.supply).toBe(8) // min(8, 24)
+    expect(d4.materials.chip.supply - d0.materials.chip.supply).toBe(0)
+    expect(d4.materials.pkg.supply - d0.materials.pkg.supply).toBe(0)
   })
 
   it('销售 2 人解锁第 1 个订单槽、4 人解锁第 2 个：达标当月立即补发', () => {
