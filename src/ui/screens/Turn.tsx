@@ -397,7 +397,7 @@ function BuyPage({ g }: { g: Game }) {
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>{gs.mode === 'core' ? '库存 + 计划' : '库存'}</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>供给</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>价格水平</th>
-              {gs.mode === 'core' ? <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>资金占用</th> : null}
+              {gs.mode === 'core' ? <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>库存占用</th> : null}
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>操作</th>
             </tr>
           </thead>
@@ -421,7 +421,7 @@ function BuyPage({ g }: { g: Game }) {
                 </td>
                 {gs.mode === 'core' ? (
                   <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
-                    {m.chosenLot ? wan(E.plannedPurchaseLine(gs, m.id).cost) : <span className="faint">—</span>}
+                    {m.qty}/{m.cap}
                   </td>
                 ) : null}
                 <td style={{ textAlign: 'right', padding: '6px 8px' }}>
