@@ -44,7 +44,7 @@ describe('audit', () => {
         const d = E.derive(s)
         E.setPlan(s, 'low', Math.min(E.maxProducible(s, 'low'), 12))
         E.setAlloc(s, 'low', d.salesResource)
-        if (s.depts.rnd.staff >= 1) { const t = s.products.mid.built ? 'ip-normal' : 'bom-mid'; if (!s.rnd[t].done) E.startResearch(s, t) }
+        if (s.depts.rnd.staff >= 1) { const t = s.products.mid.built ? 'ip-supply-1' : 'bom-mid'; if (!s.rnd[t].done) E.setRndAssign(s, t, s.depts.rnd.staff) }
         if (s.cash < 300) { const d2 = E.derive(s); const amt = Math.min(d2.creditAvailable, 200); if (amt >= 10) E.borrow(s, amt - (amt % 10)) }
 
         const rep = E.settleMonth(s)

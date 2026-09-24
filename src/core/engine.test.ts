@@ -95,8 +95,8 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
 
     // ── 研发 ──
     if (s.depts.rnd.staff >= 1) {
-      const target = s.products.mid.built ? 'ip-normal' : 'bom-mid'
-      if (!s.rnd[target].done) E.startResearch(s, target)
+      const target = s.products.mid.built ? 'ip-supply-1' : 'bom-mid'
+      if (!s.rnd[target].done) E.setRndAssign(s, target, s.depts.rnd.staff)
     }
 
     // ── 借款：现金不够时借一点 ──
@@ -233,12 +233,13 @@ describe('引擎', () => {
     E.enterDraw(s)
     E.enterOperate(s)
     void Rng
-    // 给出 4 名研发人员
+    // 给出 4 名研发人员，全部放置到中端项目
     s.depts.rnd.staff = 4
-    E.startResearch(s, 'bom-mid')
+    E.setRndAssign(s, 'bom-mid', 4)
     const r1 = E.settleMonth(s)
-    expect(r1.rnd).not.toBeNull()
-    expect(s.rnd['bom-mid'].progress).toBeGreaterThan(0)
+    expect(r1.rnd).toHaveLength(1)
+    expect(r1.rnd[0].success).toBe(true)
+    expect(s.products.mid.built).toBe(true)
   })
   /**
    * 会计恒等式回归：资产 = 负债 + 所有者权益。
@@ -435,6 +436,8 @@ describe('引擎', () => {
   it('多产品排产：共享产能与原料，并一次确认多条产品线', () => {
     const s = E.newGame(11, 'core')
     E.startGame(s)
+    // 本测试验证共享产能/原料，手动解锁中端（研发解锁由「研发放置」测试覆盖）
+    s.products.mid.built = true
     s.materials.pkg.qty = 4
     s.materials.pkg.value = 40
     s.materials.resin.qty = 6

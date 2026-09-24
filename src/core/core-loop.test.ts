@@ -345,3 +345,157 @@ describe('核心模式采购计划', () => {
     expect(JSON.stringify(s)).toBe(before)
   })
 })
+
+describe('研发放置与 IP 技能树', () => {
+  function rndState(seed = 210) {
+    const s = E.newGame(seed, 'core')
+    E.startGame(s)
+    s.orders = []
+    s.acceptedOrders = []
+    return s
+  }
+
+  it('开局仅低端产线解锁，放置研发人员自动立项', () => {
+    const s = rndState()
+    expect(s.products.low.built).toBe(true)
+    expect(s.products.mid.built).toBe(false)
+    expect(s.products.high.built).toBe(false)
+    expect(s.products.special.built).toBe(false)
+
+    s.depts.rnd.staff = 1
+    expect(E.setRndAssign(s, 'bom-mid', 1).ok).toBe(true)
+    expect(s.rnd['bom-mid'].projectId).toBe('bom-mid')
+    expect(s.rnd['bom-mid'].assigned).toBe(1)
+    expect(s.rndStartsThisMonth).toContain('bom-mid')
+    expect(s.flags['rndStartsQ']).toBe(1)
+  })
+
+  it('放置池受研发人数约束（上限 5 人）', () => {
+    const s = rndState()
+    s.depts.rnd.staff = 5
+    expect(E.setRndAssign(s, 'bom-mid', 3).ok).toBe(true)
+    expect(E.setRndAssign(s, 'bom-high', 3).ok).toBe(false)
+    expect(E.setRndAssign(s, 'bom-high', 2).ok).toBe(true)
+    expect(E.setRndAssign(s, 'ip-supply-1', 1).ok).toBe(false)
+    expect(E.rndAssignedTotal(s)).toBe(5)
+    expect(E.rndActiveThisMonth(s)).toBe(2)
+  })
+
+  it('进度与成功率由放置人数决定（5 人上限下的封顶值）', () => {
+    const s = rndState()
+    s.depts.rnd.staff = 5
+    const d = E.derive(s)
+    const mid = E.RND_PROJECTS.find((p) => p.id === 'bom-mid')!
+    const high = E.RND_PROJECTS.find((p) => p.id === 'bom-high')!
+    const special = E.RND_PROJECTS.find((p) => p.id === 'bom-special')!
+    expect(E.rndProjectOutcome(d, mid, 1).rate).toBe(1)
+    expect(E.rndProjectOutcome(d, mid, 1).gain).toBe(5)
+    expect(E.rndProjectOutcome(d, high, 5).rate).toBeCloseTo(0.85)
+    expect(E.rndProjectOutcome(d, special, 5).rate).toBeCloseTo(0.7)
+  })
+
+  it('1 人 3 个月解锁中端（教学路径），进度不足不判定', () => {
+    const s = rndState(211)
+    s.depts.rnd.staff = 1
+    E.setRndAssign(s, 'bom-mid', 1)
+    let rep = E.settleMonth(s)
+    expect(rep.rnd[0].success).toBeNull()
+    expect(s.rnd['bom-mid'].progress).toBe(5)
+    E.nextMonth(s)
+    E.setRndAssign(s, 'bom-mid', 1)
+    rep = E.settleMonth(s)
+    expect(rep.rnd[0].success).toBeNull()
+    expect(s.rnd['bom-mid'].progress).toBe(10)
+    E.nextMonth(s)
+    E.setRndAssign(s, 'bom-mid', 1)
+    rep = E.settleMonth(s)
+    expect(rep.rnd[0].success).toBe(true)
+    expect(s.products.mid.built).toBe(true)
+  })
+
+  it('3 人当月解锁中端：结算层解锁先于生产，当月可生产中端', () => {
+    const s = rndState()
+    s.materials.resin.qty = 10
+    s.materials.resin.value = 200
+    s.materials.alloy.qty = 5
+    s.materials.alloy.value = 200
+    s.depts.rnd.staff = 3
+    E.setRndAssign(s, 'bom-mid', 3)
+    s.plan.quantities.mid = 5
+    const rep = E.settleMonth(s)
+    expect(rep.rnd[0].success).toBe(true)
+    expect(s.products.mid.built).toBe(true)
+    // 解锁当月的生产段已执行中端排产；成品可能被当月现货售出一部
+    const line = rep.production.lines.find((l) => l.tier === 'mid')!
+    expect(line.planned).toBe(5)
+    expect(line.produced).toBe(5)
+    const midSpot = rep.sales.spots.filter((x) => x.tier === 'mid').reduce((a, x) => a + x.qty, 0)
+    expect(s.products.mid.qty + midSpot).toBe(5)
+  })
+
+  it('失败保留进度，下月可继续推进', () => {
+    const s = rndState(212)
+    s.depts.rnd.staff = 5
+    E.setRndAssign(s, 'bom-high', 5)
+    let rep = E.settleMonth(s)
+    expect(rep.rnd[0].success).toBeNull()
+    expect(s.rnd['bom-high'].progress).toBe(25)
+    E.nextMonth(s)
+    expect(s.rnd['bom-high'].assigned).toBe(0)
+    E.setRndAssign(s, 'bom-high', 5)
+    rep = E.settleMonth(s)
+    if (rep.rnd[0].success) {
+      // 判定成功：进度清零、高端解锁
+      expect(s.rnd['bom-high'].progress).toBe(0)
+      expect(s.products.high.built).toBe(true)
+    } else {
+      // 判定失败：进度保留，下月可继续
+      expect(s.rnd['bom-high'].progress).toBe(50)
+      expect(rep.rnd[0].rate).toBeGreaterThan(0)
+    }
+  })
+
+  it('在研项目数驱动研发费用（3w × 在研数）', () => {
+    const s = rndState()
+    s.depts.rnd.staff = 5
+    expect(E.derive(s).rndCostTotal).toBe(0)
+    E.setRndAssign(s, 'bom-mid', 1)
+    expect(E.derive(s).rndCostTotal).toBe(30)
+    E.setRndAssign(s, 'bom-high', 2)
+    expect(E.derive(s).rndCostTotal).toBe(60)
+    E.setRndAssign(s, 'bom-mid', 0)
+    expect(E.rndActiveThisMonth(s)).toBe(1)
+    expect(E.derive(s).rndCostTotal).toBe(30)
+  })
+
+  it('IP 技能树：前置未解锁不可放置，成功授予固定知产', () => {
+    const s = rndState(213)
+    s.depts.rnd.staff = 5
+    expect(E.setRndAssign(s, 'ip-supply-2', 1).ok).toBe(false)
+    s.rnd['ip-supply-1'].done = true
+    expect(E.setRndAssign(s, 'ip-supply-2', 1).ok).toBe(true)
+    // 核心模式：解锁即生效（无激活槽位），I3 供给 +2
+    const before = E.derive(s).materials.resin.supply
+    s.ipOwned.push('I3')
+    expect(E.derive(s).materials.resin.supply).toBe(before + 2)
+  })
+})
+
+describe('场景预置研发', () => {
+  it('各场景开局预置 1 名研发、仅低端解锁、知产树为空', () => {
+    for (const def of E.CORE_SCENARIOS) {
+      const s = E.newGame(def.seed, 'core')
+      E.startGame(s)
+      E.applyCoreScenario(s, def.id)
+      expect(s.depts.rnd.staff, def.id).toBe(1)
+      expect(s.products.low.built, def.id).toBe(true)
+      expect(s.products.mid.built, def.id).toBe(false)
+      expect(s.ipOwned, def.id).toEqual([])
+      for (const slot of Object.values(s.rnd)) {
+        expect(slot.projectId, def.id).toBeNull()
+        expect(slot.progress, def.id).toBe(0)
+        expect(slot.assigned, def.id).toBe(0)
+      }
+    }
+  })
+})
