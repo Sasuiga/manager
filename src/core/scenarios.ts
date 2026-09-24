@@ -44,6 +44,17 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false }
   state.monthLedger = []
   state.lotsUsed = 0
+  // 研发：各场景预置 1 名研发（教学：前 2~3 个月可解锁中端），清空项目/放置/知产
+  state.depts.rnd.staff = setup.rndStaff ?? 1
+  state.depts.rnd.hired = state.depts.rnd.staff
+  state.ipOwned = []
+  state.rndStartsThisMonth = []
+  for (const s of Object.values(state.rnd)) {
+    s.projectId = null
+    s.progress = 0
+    s.done = false
+    s.assigned = 0
+  }
   for (const mat of Object.values(state.materials)) {
     mat.qty = 0
     mat.value = 0
@@ -63,6 +74,8 @@ interface ScenarioSetup {
   orders: { tier: Tier; qty: number; priceShift?: number }[]
   /** 开局销售人数：为场景预设订单提供「来源」，与人员模型自洽。 */
   sellStaff?: number
+  /** 开局研发人数：默认 1（中端解锁教学）；现金受限等场景可覆写。 */
+  rndStaff?: number
 }
 
 const SCENARIO_SETUP: Record<CoreScenarioId, ScenarioSetup> = {
