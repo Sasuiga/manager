@@ -388,6 +388,38 @@ function BuyPage({ g }: { g: Game }) {
         </p>
       </div>
 
+      {/* 产品 BOM 看板（从生产页挪来）：采购时对照配方估算「买多少原料 ≈ 产多少货」 */}
+      <div className="card">
+        <h3>产品 BOM</h3>
+        <div className="title-rule" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+          <span className="xs" style={{ color: 'var(--gold)' }}>产品</span>
+          <span className="xs faint">配方（每件）</span>
+          <span className="xs faint">库存 / 成本</span>
+          {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
+            const bom = BOMS[t]
+            const p = gs.products[t]
+            const recipeText = Object.entries(bom.recipe)
+              .map(([id, n]) => `${MATERIAL_BY_ID[id]?.name ?? id}×${n}`)
+              .join(' + ')
+            return (
+              <Fragment key={t}>
+                <span className="sm">
+                  <b>{bom.name}</b>
+                  <span className="faint xs"> · {TIER_LABEL[t]}</span>
+                </span>
+                <span className="xs faint">{recipeText}</span>
+                <span>
+                  <span className="mono sm">{p.qty}</span>
+                  <span className="faint xs"> 件 · {wan(p.avgCost)}/件</span>
+                </span>
+              </Fragment>
+            )
+          })}
+        </div>
+        <div className="hint">配方按 BOM 扣料；库存为成品总件数，单位成本为最近批次入账均价。对照配方与原料库存，估算本次采购能支撑的产量。</div>
+      </div>
+
       <div className="card">
         <div className="section-label">原料</div>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85em' }}>
@@ -813,38 +845,6 @@ function MakePage({ g }: { g: Game }) {
           将产能分配到各产品线，确认后按 BOM 立即扣料入库；设备与加班可提升产能上限，人员越多单月产量越高。
         </p>
         <LedgerSection g={g} dept="make" />
-      </div>
-
-      {/* 产品 BOM 看板：与销售部「市场需求表」同款布局，仅展示已解锁产品线 */}
-      <div className="card">
-        <h3>产品 BOM</h3>
-        <div className="title-rule" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
-          <span className="xs" style={{ color: 'var(--gold)' }}>产品</span>
-          <span className="xs faint">配方（每件）</span>
-          <span className="xs faint">库存 / 成本</span>
-          {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
-            const bom = BOMS[t]
-            const p = gs.products[t]
-            const recipeText = Object.entries(bom.recipe)
-              .map(([id, n]) => `${MATERIAL_BY_ID[id]?.name ?? id}×${n}`)
-              .join(' + ')
-            return (
-              <Fragment key={t}>
-                <span className="sm">
-                  <b>{bom.name}</b>
-                  <span className="faint xs"> · {TIER_LABEL[t]}</span>
-                </span>
-                <span className="xs faint">{recipeText}</span>
-                <span>
-                  <span className="mono sm">{p.qty}</span>
-                  <span className="faint xs"> 件 · {wan(p.avgCost)}/件</span>
-                </span>
-              </Fragment>
-            )
-          })}
-        </div>
-        <div className="hint">配方按 BOM 扣料；库存为成品总件数，单位成本为最近批次入账均价。</div>
       </div>
 
       {/* 产能分配：与销售资源分配面板同款，已分配产能可在已解锁产品线间自由腾挪 */}
