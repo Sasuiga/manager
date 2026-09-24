@@ -67,17 +67,25 @@ export function ReportSheet({ g, onAdvance }: { g: Game; onAdvance: () => void }
         </div>
       ) : null}
 
-      {rep.rnd ? (
+      {rep.rnd.length ? (
         <div className="card">
           <div className="section-label">研发</div>
-          <Row k={rep.rnd.name} v={`${rep.rnd.progress}/${rep.rnd.need}`} />
-          <Row
-            k="本月判定"
-            v={rep.rnd.success === null ? '进度未满' : rep.rnd.success ? '成功' : '失败（保留进度）'}
-            cls={rep.rnd.success ? 'green' : rep.rnd.success === false ? 'red' : ''}
-          />
-          <div style={{ marginTop: 'var(--s2)' }}>
-            <Bar value={rep.rnd.progress} max={rep.rnd.need} kind="emerald" />
+          <div className="stack-sm">
+            {rep.rnd.map((r) => (
+              <div key={r.projectId}>
+                <Row k={r.name} v={`${r.progress}/${r.need}`} />
+                <Row
+                  k="本月判定"
+                  v={r.success === null ? '进度未满' : r.success ? '成功' : '失败（保留进度）'}
+                  cls={r.success ? 'green' : r.success === false ? 'red' : ''}
+                />
+                {r.success === null ? (
+                  <div style={{ marginTop: 'var(--s2)' }}>
+                    <Bar value={r.progress} max={r.need} kind="emerald" />
+                  </div>
+                ) : null}
+              </div>
+            ))}
           </div>
         </div>
       ) : null}

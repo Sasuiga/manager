@@ -5,7 +5,7 @@ import type { CardCtx } from '../../data/game'
 import type { Tier } from '../../core/types'
 import { Icon, type IconName } from '../icons'
 import { Medallion } from '../ornaments'
-import { Row, Sheet } from '../Sheet'
+import { Row, Sheet, Bar } from '../Sheet'
 import { wan, tierClass, tierName, TIER_ORDER, clamp } from '../format'
 import type { Game } from '../useGame'
 import { PreviewPage } from './Preview'
@@ -165,7 +165,7 @@ export function TurnScreen({
 }) {
   const s = g.s
   const d = E.derive(s)
-  const visibleDepts: E.Dept[] = s.mode === 'core' ? ['buy', 'make', 'sell'] : DEPTS
+  const visibleDepts: E.Dept[] = s.mode === 'core' ? ['buy', 'make', 'sell', 'rnd'] : DEPTS
 
   /** 轨道红点：有未处理事项时亮起。 */
   const dots: Record<E.Dept, boolean> = {
@@ -1353,102 +1353,204 @@ function SellPage({ g }: { g: Game }) {
 function RndPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
-  const active = E.activeResearch(gs)
+  const staff = gs.depts.rnd.staff
+  const assigned = E.rndAssignedTotal(gs)
   const slots = E.ipSlots(gs)
   const [ips, setIps] = useState(false)
+  const [theme, setTheme] = useState<'prod' | 'ip' | null>(null)
+
+  const themeStats = (kind: E.ResearchKind) => {
+    const list = E.RND_PROJECTS.filter((p) => p.kind === kind)
+    const active = list.filter((p) => { const s = gs.rnd[p.id]; return !!s?.projectId && !s.done && s.assigned > 0 }).length
+    return { active, total: list.length }
+  }
+  const bom = themeStats('bom')
+  const ip = themeStats('ip')
 
   return (
     <>
       <div className="card">
         <h3>研发部</h3>
         <div className="title-rule" />
-        <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          推进研发项目，解锁新产品与知识产权；人员越多每月进度越快、成功率越高。
-        </p>
+        <Row k="研发人员" v={`${staff}/5 人`} />
+        <Row k="人员放置" v={`${assigned} 人已放置 · ${Math.max(0, staff - assigned)} 人空闲`} />
+        <Row k="本月研发费用" v={`${d.rndActiveCount} 个在研 × ${wan(d.rndCost)} / 项目`} />
+        {staff - assigned > 0 ? <p className="hint">空闲人员照发工资但不产出进度，请放置到研发项目上。</p> : null}
         <LedgerSection g={g} dept="rnd" />
       </div>
 
       <div className="card">
-        <h3>研发项目</h3>
+        <h3>研发主题</h3>
         <div className="title-rule" />
-        <div className="stack">
-          {E.RND_PROJECTS.map((p) => {
-            const slot = gs.rnd[p.id]
-            const isActive = active === p.id
-            const rate = Math.min(100, Math.round((p.rate + d.rndRate / 100) * 100))
-            return (
-              <div key={p.id} className={`card-item d-rnd${isActive ? ' on' : ''}`}>
-                <span className="spine" />
-                <span className="card-body">
-                  <span className="hstack-between">
-                    <span className="card-name">{p.name}</span>
-                    <span className="tag">
-                      {slot.done ? '已完成' : `${slot.progress}/${p.need}`}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--s2)' }}>
+          <button className="card-item d-rnd" onClick={() => setTheme('prod')}>
+            <span className="spine" />
+            <span className="card-body">
+              <span className="card-name">新产品</span>
+              <span className="card-desc">产品配方 BOM · 解锁当月即可排产</span>
+              <span className="tag">在研 {bom.active}/{bom.total}</span>
+            </span>
+          </button>
+          <button className="card-item d-rnd" onClick={() => setTheme('ip')}>
+            <span className="spine" />
+            <span className="card-body">
+              <span className="card-name">知识产权</span>
+              <span className="card-desc">技能树 · 三分支 × 三阶段</span>
+              <span className="tag">在研 {ip.active}/{ip.total}</span>
+            </span>
+          </button>
+        </div>
+        <p className="hint">
+          每名研发人员 +5 进度/月、+5% 成功率（封顶 90%，中端教学 100%）；每个在研项目每月 {wan(d.rndCost)}；结算前可反复调整。
+        </p>
+      </div>
+
+      {gs.mode === 'full' ? (
+        <div className="card">
+          <div className="hstack-between">
+            <h3>知识产权</h3>
+            <span className="xs faint mono">
+              槽位 {gs.ipActive.filter(Boolean).length}/{slots}
+            </span>
+          </div>
+          <div className="title-rule" />
+          {gs.ipOwned.length === 0 ? (
+            <p className="muted sm">尚未拥有知识产权。完成「知识产权」类研发项目后可获得。</p>
+          ) : (
+            <div className="stack-sm">
+              {gs.ipOwned.map((id) => {
+                const on = gs.ipActive.includes(id)
+                const def = IP_BY_ID[id]
+                return (
+                  <div key={id} className="hstack-between">
+                    <span className="sm">
+                      {def?.name ?? id}
+                      {on ? <span className="tag gold" style={{ marginLeft: 6 }}>已激活</span> : null}
                     </span>
-                  </span>
-                  <span className="card-desc">{p.desc}</span>
-                  <span className="card-cond">
-                    基础成功率 {Math.round(p.rate * 100)}% · 当前 {rate}%
-                  </span>
-                  <div style={{ marginTop: 'var(--s2)' }}>
                     <button
                       className="btn btn-mini"
-                      disabled={slot.done || gs.depts.rnd.staff < 1 || isActive}
-                      onClick={() => g.act((st) => E.startResearch(st, p.id))}
+                      style={{ width: 'auto' }}
+                      onClick={() => setIps(true)}
                     >
-                      <span className="btn-main">
-                        {slot.done ? '已完成' : isActive ? '推进中' : '推进研发'}
-                      </span>
-                      <span className="btn-sub">
-                        {gs.depts.rnd.staff < 1 ? '需 1 名研发人员' : `立项后每月 ${wan(d.rndCost)}`}
-                      </span>
+                      <span className="btn-main xs">管理</span>
                     </button>
                   </div>
-                </span>
-              </div>
-            )
-          })}
+                )
+              })}
+            </div>
+          )}
         </div>
-        <div className="hint">研发失败会保留进度，下月可继续推进。</div>
-      </div>
+      ) : null}
 
-      <div className="card">
-        <div className="hstack-between">
-          <h3>知识产权</h3>
-          <span className="xs faint mono">
-            槽位 {gs.ipActive.filter(Boolean).length}/{slots}
-          </span>
-        </div>
-        <div className="title-rule" />
-        {gs.ipOwned.length === 0 ? (
-          <p className="muted sm">尚未拥有知识产权。完成「知识产权」类研发项目后可获得。</p>
-        ) : (
-          <div className="stack-sm">
-            {gs.ipOwned.map((id) => {
-              const on = gs.ipActive.includes(id)
-              const def = IP_BY_ID[id]
-              return (
-                <div key={id} className="hstack-between">
-                  <span className="sm">
-                    {def?.name ?? id}
-                    {on ? <span className="tag gold" style={{ marginLeft: 6 }}>已激活</span> : null}
-                  </span>
-                  <button
-                    className="btn btn-mini"
-                    style={{ width: 'auto' }}
-                    onClick={() => setIps(true)}
-                  >
-                    <span className="btn-main xs">管理</span>
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
+      {theme === 'prod' ? <RndBomSheet g={g} onClose={() => setTheme(null)} /> : null}
+      {theme === 'ip' ? <RndIpSheet g={g} onClose={() => setTheme(null)} /> : null}
       {ips ? <IpSheet g={g} onClose={() => setIps(false)} /> : null}
     </>
+  )
+}
+
+/** 主题弹框：新产品（BOM 配方） */
+function RndBomSheet({ g, onClose }: { g: Game; onClose: () => void }) {
+  const projects = E.RND_PROJECTS.filter((p) => p.kind === 'bom')
+  return (
+    <Sheet title="新产品研发" sub="BOM 配方 · 解锁后当月排产计划即可生产该层次" onClose={onClose}>
+      <div className="stack">
+        {projects.map((p) => (
+          <RndProjectRow key={p.id} g={g} p={p} />
+        ))}
+      </div>
+    </Sheet>
+  )
+}
+
+const RND_BRANCH_META: { id: E.RndBranch; name: string; sub: string }[] = [
+  { id: 'supply', name: '供应线', sub: '采购网络 → 供应链联盟 → 成本转移' },
+  { id: 'channel', name: '渠道线', sub: '订单网络 → 渠道垄断 → 品牌壁垒' },
+  { id: 'equip', name: '装备线', sub: '设备专利 → 自动化产线 → 研发突破' },
+]
+
+/** 主题弹框：知识产权技能树（三分支） */
+function RndIpSheet({ g, onClose }: { g: Game; onClose: () => void }) {
+  const gs = g.s
+  return (
+    <Sheet title="知识产权技能树" sub="解锁上游节点后方可研究下游；解锁后效果立即生效" onClose={onClose}>
+      <div className="stack">
+        {RND_BRANCH_META.map((b) => {
+          const projects = E.RND_PROJECTS.filter((p) => p.branch === b.id)
+          const active = projects.filter((p) => { const s = gs.rnd[p.id]; return !!s?.projectId && !s.done && s.assigned > 0 }).length
+          return (
+            <div key={b.id}>
+              <div className="section-label">
+                {b.name} · {b.sub} — 在研 {active}/{projects.length}
+              </div>
+              <div className="stack-sm">
+                {projects.map((p) => (
+                  <RndProjectRow key={p.id} g={g} p={p} />
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Sheet>
+  )
+}
+
+/** 单个研发项目行：状态 / 进度 / 成功率 / 人员放置。 */
+function RndProjectRow({ g, p }: { g: Game; p: E.ResearchProjectDef }) {
+  const gs = g.s
+  const d = E.derive(gs)
+  const slot = gs.rnd[p.id]
+  const n = slot?.assigned ?? 0
+  const done = !!slot?.done
+  const started = !!slot?.projectId && !done
+  const preqDef = p.preq ? E.RND_PROJECTS.find((x) => x.id === p.preq) : undefined
+  const locked = !!p.preq && !gs.rnd[p.preq]?.done
+  const free = gs.depts.rnd.staff - (E.rndAssignedTotal(gs) - n)
+  const { gain, rate } = E.rndProjectOutcome(d, p, n)
+  const statusText = done ? '已完成' : started ? `推进中 ${slot.progress}/${p.need}` : locked ? `需先解锁 ${preqDef?.name ?? '上游'}` : '未开始'
+
+  return (
+    <div className={`card-item d-rnd${started && n > 0 ? ' on' : ''}`}>
+      <span className="spine" />
+      <span className="card-body" style={{ flex: 1 }}>
+        <span className="hstack-between">
+          <span className="card-name">{p.name}{p.stage ? ` · 阶段 ${p.stage}` : ''}</span>
+          <span className="tag">{statusText}</span>
+        </span>
+        <span className="card-desc">{p.desc}</span>
+        {!done ? (
+          <>
+            <div style={{ margin: 'var(--s2) 0' }}>
+              <Bar value={slot.progress} max={p.need} kind="emerald" />
+            </div>
+            <span className="card-cond">
+              基础成功率 {Math.round(p.rate * 100)}% · 本月放置 {n} 人：进度 +{gain} · 成功率 {Math.round(rate * 100)}%
+            </span>
+            <div style={{ marginTop: 'var(--s2)', display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
+              <button
+                className="btn btn-mini"
+                style={{ width: 'auto' }}
+                disabled={locked || n <= 0}
+                onClick={() => g.act((st) => E.setRndAssign(st, p.id, n - 1))}
+              >
+                <span className="btn-main">−1</span>
+              </button>
+              <span className="xs mono">{n} 人</span>
+              <button
+                className="btn btn-mini"
+                style={{ width: 'auto' }}
+                disabled={locked || free <= 0}
+                onClick={() => g.act((st) => E.setRndAssign(st, p.id, n + 1))}
+              >
+                <span className="btn-main">+1</span>
+                <span className="btn-sub">{locked ? '先解锁上游' : free <= 0 ? '人员已放完' : '进度 +5，成功率 +5%'}</span>
+              </button>
+            </div>
+          </>
+        ) : null}
+      </span>
+    </div>
   )
 }
 

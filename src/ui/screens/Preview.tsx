@@ -49,6 +49,30 @@ export function PreviewPage({ g, onSettle }: { g: Game; onSettle: () => void }) 
         <Row k="销售资源分配" v={`${preview.salesResourceUsed} / ${preview.salesResourceTotal}`} />
       </div>
 
+      {preview.rnd.length ? (
+        <div className="card">
+          <h3>研发进度</h3>
+          <div className="title-rule" />
+          <p className="card-desc" style={{ color: 'var(--muted)' }}>
+            结算时按 seed 判定成败，与现货区间无关。
+          </p>
+          {preview.rnd.map((r) => (
+            <Row
+              key={r.projectId}
+              k={r.name}
+              v={
+                r.success === null
+                  ? `${r.progress}/${r.need} 进度未满`
+                  : r.success
+                    ? '成功，下月生效'
+                    : '失败，进度保留可重投'
+              }
+              cls={r.success ? 'green' : r.success === false ? 'red' : ''}
+            />
+          ))}
+        </div>
+      ) : null}
+
       {preview.products.length ? (
         <div className="stack-sm">
           <div className="section-label">分产品结果</div>
