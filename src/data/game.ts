@@ -258,7 +258,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '研发人员',
     hireFees: [50, 40, 30, 20, 10],
     salary: 20,
-    base: ['研发进度 +2/月，成功率 +5%'],
+    base: ['每人 +5 研发进度/月，+5% 成功率（封顶 90%）'],
     unlocks: [
       { at: 2, text: '（无新增解锁）' },
       { at: 3, text: '可同时激活 2 个知识产权' },
@@ -311,12 +311,31 @@ export const OVERTIME_COST: Money = 5
 // ════════════════════════════════════════════════════════════
 
 export const RND_PROJECTS: ResearchProjectDef[] = [
-  { id: 'bom-mid', name: '中端 BOM', kind: 'bom', tier: 'mid', need: 30, rate: 0.7, desc: '解锁中端产品配方' },
-  { id: 'bom-high', name: '高端 BOM', kind: 'bom', tier: 'high', need: 50, rate: 0.55, desc: '解锁高端产品配方' },
-  { id: 'bom-special', name: '特殊 BOM', kind: 'bom', tier: 'special', need: 70, rate: 0.4, desc: '解锁特殊产品配方，并揭示新材料' },
-  { id: 'ip-normal', name: '普通知识产权', kind: 'ip', ipPool: 'normal', need: 30, rate: 0.7, desc: '从普通池随机获得 1 项' },
-  { id: 'ip-strong', name: '强力知识产权', kind: 'ip', ipPool: 'strong', need: 50, rate: 0.5, desc: '从强力池随机获得 1 项' },
+  { id: 'bom-mid', name: '中端 BOM', kind: 'bom', tier: 'mid', need: 15, rate: 0.95, rateCap: 1, desc: '解锁中端产品配方（教学：1 人即可 100% 成功）' },
+  { id: 'bom-high', name: '高端 BOM', kind: 'bom', tier: 'high', need: 50, rate: 0.6, desc: '解锁高端产品配方' },
+  { id: 'bom-special', name: '特殊 BOM', kind: 'bom', tier: 'special', need: 50, rate: 0.45, desc: '解锁特殊产品配方，并揭示新材料' },
+
+  // IP 技能树：三条分支 × 三阶段，解锁上游节点后方可研究下游。
+  // 阶段进度 15/30/50，基础成功率 80%/70%/60%；放置 N 人 = N×5 进度、成功率 +N×5%（封顶 90%）。
+  { id: 'ip-supply-1', name: '采购网络', kind: 'ip', branch: 'supply', stage: 1, ipId: 'I3', need: 15, rate: 0.8, desc: '每类原料供给 +2' },
+  { id: 'ip-supply-2', name: '供应链联盟', kind: 'ip', branch: 'supply', stage: 2, preq: 'ip-supply-1', ipId: 'J2', need: 30, rate: 0.7, desc: '每类原料供给 +4，且可多签 1 份长期协议' },
+  { id: 'ip-supply-3', name: '成本转移', kind: 'ip', branch: 'supply', stage: 3, preq: 'ip-supply-2', ipId: 'J4', need: 50, rate: 0.6, desc: '原料涨价时，产品售价同步升 1 档' },
+
+  { id: 'ip-channel-1', name: '订单网络', kind: 'ip', branch: 'channel', stage: 1, ipId: 'I9', need: 15, rate: 0.8, desc: '每月订单 +1' },
+  { id: 'ip-channel-2', name: '渠道垄断', kind: 'ip', branch: 'channel', stage: 2, preq: 'ip-channel-1', ipId: 'J8', need: 30, rate: 0.7, desc: '每月订单 +2，订单价格升 1 档' },
+  { id: 'ip-channel-3', name: '品牌壁垒', kind: 'ip', branch: 'channel', stage: 3, preq: 'ip-channel-2', ipId: 'J3', need: 50, rate: 0.6, desc: '销售资源 +8，且品牌加成 +3' },
+
+  { id: 'ip-equip-1', name: '设备专利', kind: 'ip', branch: 'equip', stage: 1, ipId: 'I2', need: 15, rate: 0.8, desc: '每台设备产能 +2' },
+  { id: 'ip-equip-2', name: '自动化产线', kind: 'ip', branch: 'equip', stage: 2, preq: 'ip-equip-1', ipId: 'J1', need: 30, rate: 0.7, desc: '每台设备产能 +4' },
+  { id: 'ip-equip-3', name: '研发突破', kind: 'ip', branch: 'equip', stage: 3, preq: 'ip-equip-2', ipId: 'J6', need: 50, rate: 0.6, desc: '研发进度 +4/月，成功率 +10%' },
 ]
+
+/** 每名放置的研发人员每月研发进度 */
+export const RND_PROGRESS_PER_WORKER = 5
+/** 每名放置的研发人员带来的成功率提升（百分点） */
+export const RND_RATE_PER_WORKER = 5
+/** 默认成功率封顶（百分点）；单项目可用 rateCap 覆盖（中端教学 100） */
+export const RND_RATE_CAP = 90
 
 export const IP_DEFS: IpDef[] = [
   { id: 'I1', name: '工艺优化', pool: 'normal', desc: '所有产品原料消耗 -1（最低 1）', effect: { matSave: 1 } },
