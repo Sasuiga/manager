@@ -733,6 +733,58 @@ button {
   transform: translateY(-1px);
 }
 
+/* ── 研发人员放置槽位 ─────────────────────── */
+
+.rnd-slot {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: all var(--dur) var(--ease-settle);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.rnd-slot.lit {
+  background: var(--gold);
+  box-shadow: inset 0 0 0 1px var(--gold-hi), var(--glow-gold);
+}
+
+/** 已招员但尚未放置的槽位 */
+.rnd-slot.open {
+  box-shadow: inset 0 0 0 1px var(--line-gold-hi);
+}
+
+/** 未招聘的槽位（虚化占位） */
+.rnd-slot.unhired {
+  opacity: 0.3;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.rnd-slot.locked { opacity: 0.4; }
+
+.slot-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: var(--fs-md);
+  line-height: 1;
+  color: var(--muted);
+  transition: all var(--dur) var(--ease-settle);
+  flex-shrink: 0;
+}
+
+.slot-btn:not(:disabled):hover { color: var(--gold-hi); box-shadow: inset 0 0 0 1px var(--line-gold-hi); }
+.slot-btn:not(:disabled):active { transform: translateY(1px); }
+.slot-btn:disabled { opacity: 0.35; }
+
 .card-item.dim {
   opacity: 0.45;
   transform: scale(0.985);

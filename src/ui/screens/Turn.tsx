@@ -5,7 +5,7 @@ import type { CardCtx } from '../../data/game'
 import type { Tier } from '../../core/types'
 import { Icon, type IconName } from '../icons'
 import { Medallion } from '../ornaments'
-import { Row, Sheet, Bar } from '../Sheet'
+import { Row, Sheet } from '../Sheet'
 import { wan, tierClass, tierName, TIER_ORDER, clamp } from '../format'
 import type { Game } from '../useGame'
 import { PreviewPage } from './Preview'
@@ -1496,18 +1496,23 @@ function RndIpSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   )
 }
 
-/** 单个研发项目行：状态 / 进度 / 成功率 / 人员放置。 */
+/** 单个研发项目行：状态 / 进度（紫条 = 当前进度，金色标记 = 本月结算后位置）/ 人员放置槽位。 */
 function RndProjectRow({ g, p }: { g: Game; p: E.ResearchProjectDef }) {
   const gs = g.s
   const d = E.derive(gs)
+  const staff = gs.depts.rnd.staff
   const slot = gs.rnd[p.id]
   const n = slot?.assigned ?? 0
   const done = !!slot?.done
   const started = !!slot?.projectId && !done
   const preqDef = p.preq ? E.RND_PROJECTS.find((x) => x.id === p.preq) : undefined
   const locked = !!p.preq && !gs.rnd[p.preq]?.done
-  const free = gs.depts.rnd.staff - (E.rndAssignedTotal(gs) - n)
+  /** 本行最多可放置人数 = 研发池剩余 + 已放（绝对值口径） */
+  const cap = staff - (E.rndAssignedTotal(gs) - n)
   const { gain, rate } = E.rndProjectOutcome(d, p, n)
+  const willRoll = gain > 0 && slot.progress + gain >= p.need
+  const pct = Math.min(100, (slot.progress / p.need) * 100)
+  const projPct = Math.min(100, ((slot.progress + gain) / p.need) * 100)
   const statusText = done ? '已完成' : started ? `推进中 ${slot.progress}/${p.need}` : locked ? `需先解锁 ${preqDef?.name ?? '上游'}` : '未开始'
 
   return (
@@ -1521,32 +1526,75 @@ function RndProjectRow({ g, p }: { g: Game; p: E.ResearchProjectDef }) {
         <span className="card-desc">{p.desc}</span>
         {!done ? (
           <>
-            <div style={{ margin: 'var(--s2) 0' }}>
-              <Bar value={slot.progress} max={p.need} kind="emerald" />
+            <div style={{ margin: 'var(--s2) 0 var(--s1)' }}>
+              <div className="bar" style={{ position: 'relative' }}>
+                <i style={{ width: `${pct}%`, background: 'var(--grape)' }} />
+                {gain > 0 ? (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      bottom: 0,
+                      left: `${projPct}%`,
+                      width: 2,
+                      background: 'var(--gold-hi)',
+                      boxShadow: '0 0 6px rgba(201, 162, 74, 0.8)',
+                    }}
+                  />
+                ) : null}
+              </div>
+              <div className="hstack-between" style={{ marginTop: 4 }}>
+                <span className="xs faint">{willRoll ? '本月结算判定成败' : gain > 0 ? '金色标记 = 结算后进度位置' : ''}</span>
+                <span className="xs mono">{slot.progress}/{p.need}{gain > 0 ? `（+${gain}）` : ''}</span>
+              </div>
             </div>
             <span className="card-cond">
-              基础成功率 {Math.round(p.rate * 100)}% · 本月放置 {n} 人：进度 +{gain} · 成功率 {Math.round(rate * 100)}%
+              基础成功率 {Math.round(p.rate * 100)}% · 放置 {n} 人：成功率 {Math.round(rate * 100)}%
             </span>
+            {/* 人员放置槽位：5 格（每部门上限 5 人），加 1 人点亮 1 格；未招的槽位虚化占位 */}
             <div style={{ marginTop: 'var(--s2)', display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
               <button
-                className="btn btn-mini"
-                style={{ width: 'auto' }}
+                className="slot-btn"
                 disabled={locked || n <= 0}
+                title="减少 1 人"
                 onClick={() => g.act((st) => E.setRndAssign(st, p.id, n - 1))}
               >
-                <span className="btn-main">−1</span>
+                −
               </button>
-              <span className="xs mono">{n} 人</span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[0, 1, 2, 3, 4].map((k) => {
+                  const count = k + 1
+                  const lit = count <= n
+                  const hired = count <= staff
+                  const usable = !locked && count <= cap
+                  return (
+                    <button
+                      key={k}
+                      className={`rnd-slot${lit ? ' lit' : ''}${hired ? '' : ' unhired'}${locked ? ' locked' : ''}`}
+                      title={
+                        !hired
+                          ? '需再招聘研发人员'
+                          : count === n
+                            ? '点击收回此人'
+                            : '点击放置到此格'
+                      }
+                      disabled={!usable}
+                      onClick={() => g.act((st) => E.setRndAssign(st, p.id, count === n ? Math.max(0, n - 1) : count))}
+                    />
+                  )
+                })}
+              </div>
               <button
-                className="btn btn-mini"
-                style={{ width: 'auto' }}
-                disabled={locked || free <= 0}
+                className="slot-btn"
+                disabled={locked || n + 1 > cap}
+                title={locked ? '先解锁上游节点' : n + 1 > cap ? '可放置人员已用完' : '多放置 1 人'}
                 onClick={() => g.act((st) => E.setRndAssign(st, p.id, n + 1))}
               >
-                <span className="btn-main">+1</span>
-                <span className="btn-sub">{locked ? '先解锁上游' : free <= 0 ? '人员已放完' : '进度 +5，成功率 +5%'}</span>
+                +
               </button>
+              <span className="xs mono faint">{n}/{staff} 人</span>
             </div>
+            {locked ? <span className="xs faint" style={{ display: 'block', marginTop: 4 }}>解锁上游节点后方可放置人员</span> : null}
           </>
         ) : null}
       </span>
