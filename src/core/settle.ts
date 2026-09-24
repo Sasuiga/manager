@@ -816,6 +816,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.futures = {}
   state.ipChangedThisMonth = false
   state.rndStartsThisMonth = []
+  state.flags['rndConfirmed'] = 0
   state.eventResolved = false
   state.eventChosen = null
   state.eventSkipped = false

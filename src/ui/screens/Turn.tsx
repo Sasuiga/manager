@@ -1375,7 +1375,7 @@ function RndPage({ g }: { g: Game }) {
         <Row k="研发人员" v={`${staff}/5 人`} />
         <Row k="人员放置" v={`${assigned} 人已放置 · ${Math.max(0, staff - assigned)} 人空闲`} />
         <Row k="本月研发费用" v={`${d.rndActiveCount} 个在研 × ${wan(d.rndCost)} / 项目`} />
-        {staff - assigned > 0 ? <p className="hint">空闲人员照发工资但不产出进度，请放置到研发项目上（放入后项目完成前不可收回）。</p> : null}
+        {staff - assigned > 0 ? <p className="hint">空闲人员照发工资但不产出进度，请放到研发项目上（主题弹框内可增减，确定后锁定至月初）。</p> : null}
         <LedgerSection g={g} dept="rnd" />
       </div>
 
@@ -1401,7 +1401,7 @@ function RndPage({ g }: { g: Game }) {
           </button>
         </div>
         <p className="hint">
-          每名研发人员 +5 进度/月、+5% 成功率（封顶 90%，中端教学 100%）；承诺制：人员放入即锁定至项目完成，可增不可减；每个在研项目每月 {wan(d.rndCost)}。
+          每名研发人员 +5 进度/月、+5% 成功率（封顶 90%，中端教学 100%）；主题弹框内可增减，确定后本月锁定不可再调；每个在研项目每月 {wan(d.rndCost)}。
         </p>
       </div>
 
@@ -1449,14 +1449,81 @@ function RndPage({ g }: { g: Game }) {
   )
 }
 
-/** 主题弹框：新产品（BOM 配方） */
+/** 主题弹框草稿：打开期间只在本地状态调整（不动游戏状态），「确定」时经 confirmRndAssignments 批量写回并锁定本月。 */
+function useRndSheetDraft(g: Game, projects: E.ResearchProjectDef[]) {
+  const gs = g.s
+  const [draft, setDraft] = useState<Record<string, number>>(() => {
+    const m: Record<string, number> = {}
+    for (const p of projects) m[p.id] = gs.rnd[p.id]?.assigned ?? 0
+    return m
+  })
+  const setDraftValue = (id: string, n: number) => setDraft((m) => ({ ...m, [id]: n }))
+  /** 本月确认锁：确定后到月初前不再可调（settle 的 advanceMonth 清零） */
+  const confirmed = gs.flags['rndConfirmed'] === 1
+  // 池约束（跨主题全局）：本弹框外 = 已承诺人员，本弹框内 = 草稿值
+  const committedThisSheet = projects.reduce((a, p) => {
+    const s = gs.rnd[p.id]
+    return a + (s?.projectId && !s.done ? s.assigned : 0)
+  }, 0)
+  const outsideTotal = E.rndAssignedTotal(gs) - committedThisSheet
+  const sheetEffective = projects.reduce((a, p) => {
+    const s = gs.rnd[p.id]
+    const active = (s?.projectId && !s.done) || (draft[p.id] ?? 0) > 0
+    return a + (active ? (draft[p.id] ?? 0) : 0)
+  }, 0)
+  /** 某项目最多可放置人数（绝对值口径） */
+  const capFor = (id: string) => gs.depts.rnd.staff - (outsideTotal + sheetEffective - (draft[id] ?? 0))
+  const confirm = () => g.act((st) => E.confirmRndAssignments(st, draft))
+  return { draft, setDraftValue, confirmed, capFor, confirm }
+}
+
+/** 主题弹框底部：取消（关闭并还原）/ 确定（提交并锁定本月）。 */
+function RndSheetFooter({ confirmed, onConfirm, onCancel }: { confirmed: boolean; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <>
+      <button className="btn btn-nav" onClick={onCancel}>
+        <span className="btn-main">取消</span>
+        <span className="btn-sub">关闭并还原调整</span>
+      </button>
+      <button className="btn" disabled={confirmed} onClick={onConfirm}>
+        <span className="btn-main">确定</span>
+        <span className="btn-sub">{confirmed ? '本月已锁定' : '确认后本月不可再调'}</span>
+      </button>
+    </>
+  )
+}
+
+/** 主题弹框：新产品（BOM 配方）。草稿态调整，确定后本月锁定。 */
 function RndBomSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const projects = E.RND_PROJECTS.filter((p) => p.kind === 'bom')
+  const { draft, setDraftValue, confirmed, capFor, confirm } = useRndSheetDraft(g, projects)
   return (
-    <Sheet title="新产品研发" sub="BOM 配方 · 解锁后当月排产计划即可生产该层次" onClose={onClose}>
+    <Sheet
+      title="新产品研发"
+      sub="BOM 配方 · 解锁后当月排产计划即可生产该层次"
+      onClose={onClose}
+      footer={(
+        <RndSheetFooter
+          confirmed={confirmed}
+          onCancel={onClose}
+          onConfirm={() => {
+            const r = confirm()
+            if (r.ok) onClose()
+          }}
+        />
+      )}
+    >
       <div className="stack">
         {projects.map((p) => (
-          <RndProjectRow key={p.id} g={g} p={p} />
+          <RndProjectRow
+            key={p.id}
+            g={g}
+            p={p}
+            n={draft[p.id] ?? 0}
+            cap={capFor(p.id)}
+            confirmed={confirmed}
+            onAssign={(n) => setDraftValue(p.id, n)}
+          />
         ))}
       </div>
     </Sheet>
@@ -1469,23 +1536,47 @@ const RND_BRANCH_META: { id: E.RndBranch; name: string; sub: string }[] = [
   { id: 'equip', name: '装备线', sub: '设备专利 → 自动化产线 → 研发突破' },
 ]
 
-/** 主题弹框：知识产权技能树（三分支） */
+/** 主题弹框：知识产权技能树（三分支）。草稿态调整，确定后本月锁定。 */
 function RndIpSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const gs = g.s
+  const projects = E.RND_PROJECTS.filter((p) => p.kind === 'ip')
+  const { draft, setDraftValue, confirmed, capFor, confirm } = useRndSheetDraft(g, projects)
   return (
-    <Sheet title="知识产权技能树" sub="解锁上游节点后方可研究下游；解锁后效果立即生效" onClose={onClose}>
+    <Sheet
+      title="知识产权技能树"
+      sub="解锁上游节点后方可研究下游；解锁后效果立即生效"
+      onClose={onClose}
+      footer={(
+        <RndSheetFooter
+          confirmed={confirmed}
+          onCancel={onClose}
+          onConfirm={() => {
+            const r = confirm()
+            if (r.ok) onClose()
+          }}
+        />
+      )}
+    >
       <div className="stack">
         {RND_BRANCH_META.map((b) => {
-          const projects = E.RND_PROJECTS.filter((p) => p.branch === b.id)
-          const active = projects.filter((p) => { const s = gs.rnd[p.id]; return !!s?.projectId && !s.done && s.assigned > 0 }).length
+          const branchProjects = projects.filter((p) => p.branch === b.id)
+          const active = branchProjects.filter((p) => { const s = gs.rnd[p.id]; return !!s?.projectId && !s.done }).length
           return (
             <div key={b.id}>
               <div className="section-label">
-                {b.name} · {b.sub} — 在研 {active}/{projects.length}
+                {b.name} · {b.sub} — 在研 {active}/{branchProjects.length}
               </div>
               <div className="stack-sm">
-                {projects.map((p) => (
-                  <RndProjectRow key={p.id} g={g} p={p} />
+                {branchProjects.map((p) => (
+                  <RndProjectRow
+                    key={p.id}
+                    g={g}
+                    p={p}
+                    n={draft[p.id] ?? 0}
+                    cap={capFor(p.id)}
+                    confirmed={confirmed}
+                    onAssign={(n) => setDraftValue(p.id, n)}
+                  />
                 ))}
               </div>
             </div>
@@ -1496,27 +1587,46 @@ function RndIpSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   )
 }
 
-/** 单个研发项目行：状态 / 进度（紫条 = 当前进度，金色标记 = 本月结算后位置）/ 人员放置槽位。 */
-function RndProjectRow({ g, p }: { g: Game; p: E.ResearchProjectDef }) {
+/** 单个研发项目行：状态 / 进度（紫条 = 当前进度，金色标记 = 本月结算后位置）/ 人员放置槽位（草稿态，确定前可增减）。 */
+function RndProjectRow({
+  g,
+  p,
+  n,
+  cap,
+  confirmed,
+  onAssign,
+}: {
+  g: Game
+  p: E.ResearchProjectDef
+  n: number
+  cap: number
+  confirmed: boolean
+  onAssign: (n: number) => void
+}) {
   const gs = g.s
   const d = E.derive(gs)
   const staff = gs.depts.rnd.staff
   const slot = gs.rnd[p.id]
-  const n = slot?.assigned ?? 0
   const done = !!slot?.done
   const started = !!slot?.projectId && !done
   const preqDef = p.preq ? E.RND_PROJECTS.find((x) => x.id === p.preq) : undefined
   const locked = !!p.preq && !gs.rnd[p.preq]?.done
-  /** 本行最多可放置人数 = 研发池剩余 + 已放（绝对值口径） */
-  const cap = staff - (E.rndAssignedTotal(gs) - n)
   const { gain, rate } = E.rndProjectOutcome(d, p, n)
   const willRoll = gain > 0 && slot.progress + gain >= p.need
   const pct = Math.min(100, (slot.progress / p.need) * 100)
   const projPct = Math.min(100, ((slot.progress + gain) / p.need) * 100)
-  const statusText = done ? '已完成' : started ? `推进中 ${slot.progress}/${p.need}` : locked ? `需先解锁 ${preqDef?.name ?? '上游'}` : '未开始'
+  const statusText = done
+    ? '已完成'
+    : started
+      ? `推进中 ${slot.progress}/${p.need}`
+      : locked
+        ? `需先解锁 ${preqDef?.name ?? '上游'}`
+        : n > 0
+          ? '确定后立项'
+          : '未开始'
 
   return (
-    <div className={`card-item d-rnd${started && n > 0 ? ' on' : ''}`}>
+    <div className={`card-item d-rnd${n > 0 && !done && !locked ? ' on' : ''}`}>
       <span className="spine" />
       <span className="card-body" style={{ flex: 1 }}>
         <span className="hstack-between">
@@ -1551,14 +1661,14 @@ function RndProjectRow({ g, p }: { g: Game; p: E.ResearchProjectDef }) {
             <span className="card-cond">
               基础成功率 {Math.round(p.rate * 100)}% · 放置 {n} 人：成功率 {Math.round(rate * 100)}%
             </span>
-            {/* 人员放置槽位：5 格（每部门上限 5 人），承诺制——放入即锁定到项目完成，可增不可减；未招的槽位虚化占位 */}
+            {/* 人员放置槽位：5 格（每部门上限 5 人）；草稿态可增减，「确定」后全部锁定至月初 */}
             <div style={{ marginTop: 'var(--s2)', display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
               <div style={{ display: 'flex', gap: 4 }}>
                 {[0, 1, 2, 3, 4].map((k) => {
                   const count = k + 1
                   const lit = count <= n
                   const hired = count <= staff
-                  const usable = !locked && !lit && count <= cap
+                  const usable = !locked && !confirmed && count <= cap
                   return (
                     <button
                       key={k}
@@ -1566,27 +1676,32 @@ function RndProjectRow({ g, p }: { g: Game; p: E.ResearchProjectDef }) {
                       title={
                         !hired
                           ? '需再招聘研发人员'
-                          : lit
-                            ? '已放置 · 项目完成前锁定'
-                            : '点击放置到此格'
+                          : confirmed
+                            ? '已确认锁定，下月初可再调'
+                            : lit
+                              ? count === n
+                                ? '点击收回 1 人'
+                                : '点击减少到此格'
+                              : '点击放置到此格'
                       }
                       disabled={!usable}
-                      onClick={() => g.act((st) => E.setRndAssign(st, p.id, count))}
+                      onClick={() => onAssign(lit && count === n ? Math.max(0, n - 1) : count)}
                     />
                   )
                 })}
               </div>
               <button
                 className="slot-btn"
-                disabled={locked || n + 1 > cap}
-                title={locked ? '先解锁上游节点' : n + 1 > cap ? '可放置人员已用完' : '多放置 1 人（完成前锁定）'}
-                onClick={() => g.act((st) => E.setRndAssign(st, p.id, n + 1))}
+                disabled={locked || confirmed || n + 1 > cap}
+                title={locked ? '先解锁上游节点' : confirmed ? '已确认锁定' : n + 1 > cap ? '可放置人员已用完' : '多放置 1 人'}
+                onClick={() => onAssign(n + 1)}
               >
                 +
               </button>
               <span className="xs mono faint">{n}/{staff} 人</span>
             </div>
             {locked ? <span className="xs faint" style={{ display: 'block', marginTop: 4 }}>解锁上游节点后方可放置人员</span> : null}
+            {confirmed ? <span className="xs gold" style={{ display: 'block', marginTop: 4 }}>已确认锁定：下月初可再调整</span> : null}
           </>
         ) : null}
       </span>

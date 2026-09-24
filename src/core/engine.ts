@@ -76,6 +76,7 @@ export {
   startResearch,
   activeResearch,
   setRndAssign,
+  confirmRndAssignments,
   rndAssignedTotal,
   rndActiveThisMonth,
   ipSlots,

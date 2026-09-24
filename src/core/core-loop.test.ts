@@ -483,6 +483,30 @@ describe('研发放置与 IP 技能树', () => {
     expect(E.setRndAssign(s, 'bom-high', 3).ok).toBe(true)
   })
 
+  it('确认锁：confirmRndAssignments 批量写回并锁定本月，月初解锁可再调', () => {
+    const s = rndState(216)
+    s.depts.rnd.staff = 3
+    const r = E.confirmRndAssignments(s, { 'bom-mid': 2, 'bom-high': 1 })
+    expect(r.ok).toBe(true)
+    expect(s.rnd['bom-mid'].assigned).toBe(2)
+    expect(s.rnd['bom-high'].assigned).toBe(1)
+    expect(s.rnd['bom-high'].projectId).toBe('bom-high')
+    expect(s.flags['rndConfirmed']).toBe(1)
+    E.nextMonth(s)
+    expect(s.flags['rndConfirmed']).toBe(0)
+    expect(s.rnd['bom-mid'].assigned).toBe(2)
+    E.settleMonth(s)
+    expect(s.rnd['bom-mid'].progress).toBe(10)
+  })
+
+  it('确认校验：跨项目池总量 / 前置锁定', () => {
+    const s = rndState(217)
+    s.depts.rnd.staff = 2
+    expect(E.confirmRndAssignments(s, { 'bom-mid': 2, 'bom-high': 2 }).ok).toBe(false)
+    expect(E.confirmRndAssignments(s, { 'ip-channel-2': 1 }).ok).toBe(false)
+    expect(E.confirmRndAssignments(s, { 'bom-mid': 1 }).ok).toBe(true)
+  })
+
   it('IP 技能树：前置未解锁不可放置，成功授予固定知产', () => {
     const s = rndState(213)
     s.depts.rnd.staff = 5

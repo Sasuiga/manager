@@ -1210,6 +1210,53 @@ export function setRndAssign(state: GameState, projectId: string, n: number): Ac
   return { ok: true, msg: `已为「${def.name}」放置 ${n} 人` }
 }
 
+/**
+ * 确认研发放置（承诺制，每月一次）：弹框草稿批量写回。
+ * 校验：完成项目不可再放置、前置未解锁不可放置、Σ 在研有效放置 ≤ 研发人数（跨主题池）。
+ * 确认后 `flags['rndConfirmed'] = 1`：本月不再可调，月初重置。
+ */
+export function confirmRndAssignments(state: GameState, drafts: Record<string, number>): ActionResult {
+  const defs = RND_PROJECTS.filter((p) => drafts[p.id] !== undefined)
+  if (!defs.length) return OK
+  for (const def of defs) {
+    const slot = state.rnd[def.id]
+    const n = Math.max(0, drafts[def.id] ?? 0)
+    if (slot.done && n > 0) return fail(`「${def.name}」已完成，无需再放置`)
+    if (n > 0 && def.preq && !state.rnd[def.preq].done) {
+      const preq = RND_PROJECTS.find((p) => p.id === def.preq)
+      return fail(`「${def.name}」需先解锁「${preq?.name ?? def.preq}」`)
+    }
+  }
+  // 池校验：在研项目（已立项或草稿 > 0）的有效放置总量 ≤ 研发人数
+  let total = 0
+  for (const p of RND_PROJECTS) {
+    const slot = state.rnd[p.id]
+    if (slot.done) continue
+    const active = !!slot.projectId || (drafts[p.id] ?? 0) > 0
+    if (!active) continue
+    total += drafts[p.id] ?? slot.assigned
+  }
+  if (total > state.depts.rnd.staff) {
+    return fail(`放置总量 ${total} 超过研发人数 ${state.depts.rnd.staff}`)
+  }
+  for (const def of defs) {
+    const slot = state.rnd[def.id]
+    const n = Math.max(0, drafts[def.id] ?? 0)
+    if (n === slot.assigned) continue
+    if (n > 0 && !slot.projectId) {
+      // 首次放置即立项（计入季度研发立项数）
+      slot.projectId = def.id
+      state.rndStartsThisMonth.push(def.id)
+      state.flags['rndStartsQ'] = (state.flags['rndStartsQ'] ?? 0) + 1
+      pushLog(state, 'action', `研发立项：${def.name}`, [`进度需求 ${def.need}`, `基础成功率 ${Math.round(def.rate * 100)}%`])
+    }
+    slot.assigned = n
+    pushLog(state, 'action', `研发放置：${def.name} ${n} 人`, ['承诺制：项目完成前锁定，下月初可再调'])
+  }
+  state.flags['rndConfirmed'] = 1
+  return { ok: true, msg: '研发放置已确认，本月锁定' }
+}
+
 export function ipSlots(state: GameState): number {
   const s = state.depts.rnd.staff
   let n = 1
