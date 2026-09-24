@@ -19,7 +19,8 @@ export function PreviewPage({ g, onSettle }: { g: Game; onSettle: () => void }) 
       </div>
 
       <div className="card">
-        <div className="section-label">预计结果</div>
+        <h3>预计结果</h3>
+        <div className="title-rule" />
         <PreviewMetric title="预计收入" value={moneyRange(preview.revenue)}>
           <Row k="订单收入" v={wan(preview.orderRevenue)} />
           <Row k="现货收入" v={moneyRange(preview.spotRevenue)} />
@@ -38,7 +39,8 @@ export function PreviewPage({ g, onSettle }: { g: Game; onSettle: () => void }) 
       </div>
 
       <div className="card">
-        <div className="section-label">本月安排</div>
+        <h3>本月安排</h3>
+        <div className="title-rule" />
         <Row k="采购支出" v={wan(preview.purchaseSpend)} />
         <Row k="计划生产" v={`${preview.plannedProduction} 件`} />
         <Row k="产能分配" v={`${preview.capacityUsed} / ${preview.capacityTotal}`} />

@@ -421,7 +421,8 @@ function BuyPage({ g }: { g: Game }) {
       </div>
 
       <div className="card">
-        <div className="section-label">原料</div>
+        <h3>原料采购</h3>
+        <div className="title-rule" />
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85em' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--line)' }}>
@@ -486,7 +487,8 @@ function BuyPage({ g }: { g: Game }) {
 
       {gs.mode === 'core' ? (
         <div className="card">
-          <div className="section-label">采购计划汇总</div>
+          <h3>采购计划汇总</h3>
+          <div className="title-rule" />
           <Row k="计划支出" v={wan(E.plannedPurchaseCost(gs))} />
           <Row k="计划后可用现金" v={wan(E.availableCashAfterPurchasePlan(gs))} />
           <Row k="已选采购档" v={`${gs.lotsUsed} / ${d.buyLots}`} />
