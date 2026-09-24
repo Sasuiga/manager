@@ -185,6 +185,9 @@ export interface SaleRecord {
 
 export type ResearchKind = 'bom' | 'ip'
 
+/** IP 技能树分支 */
+export type RndBranch = 'supply' | 'channel' | 'equip'
+
 export interface ResearchProjectDef {
   id: string
   name: string
@@ -193,10 +196,18 @@ export interface ResearchProjectDef {
   need: number
   /** 基础成功率 0–1 */
   rate: number
+  /** 成功率上限 0–1（默认 90%；中端教学项 100%） */
+  rateCap?: number
   /** BOM 项目对应的层次 */
   tier?: Tier
-  /** IP 项目对应的池 */
-  ipPool?: 'normal' | 'strong'
+  /** IP 技能树节点授予的具体知产 */
+  ipId?: string
+  /** IP 技能树分支 */
+  branch?: RndBranch
+  /** IP 技能树阶段 1/2/3 */
+  stage?: 1 | 2 | 3
+  /** 前置节点（完成后方可立项） */
+  preq?: string
   desc: string
 }
 
@@ -205,6 +216,8 @@ export interface ResearchSlot {
   progress: number
   /** 本局已完成次数（用于条件型目标） */
   done: boolean
+  /** 本月放置的研发人员数（计划层，结算执行，月初清零） */
+  assigned: number
 }
 
 export interface IpDef {

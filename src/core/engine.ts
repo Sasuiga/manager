@@ -17,7 +17,7 @@ import type { SettleReport } from './settle'
 import type { Climate, GameEventDef, GameState, GoalDef, GoalTrack, Ledger, Money } from './types'
 
 export * from './types'
-export { derive, mergeMods, unitCost } from './derive'
+export { derive, mergeMods, unitCost, rndProjectOutcome } from './derive'
 export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityOf, buildDeck } from './game'
 export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct } from './settle'
 export type { SettleReport } from './settle'
@@ -75,6 +75,9 @@ export {
   toggleOrder,
   startResearch,
   activeResearch,
+  setRndAssign,
+  rndAssignedTotal,
+  rndActiveThisMonth,
   ipSlots,
   activateIp,
   deactivateIp,

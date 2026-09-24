@@ -83,7 +83,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     ),
 
     products: Object.fromEntries(
-      TIERS.map((t) => [t, { tier: t, built: mode === 'core' || t === 'low', qty: 0, value: 0, avgCost: 0 }]),
+      TIERS.map((t) => [t, { tier: t, built: t === 'low', qty: 0, value: 0, avgCost: 0 }]),
     ) as GameState['products'],
 
     equipment: [],
@@ -95,7 +95,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     acceptedOrders: [],
     monthLedger: [],
 
-    rnd: Object.fromEntries(RND_PROJECTS.map((p) => [p.id, { projectId: null, progress: 0, done: false }])),
+    rnd: Object.fromEntries(RND_PROJECTS.map((p) => [p.id, { projectId: null, progress: 0, done: false, assigned: 0 }])),
     ipOwned: [],
     ipActive: [null],
     ipChangedThisMonth: false,

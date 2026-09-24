@@ -36,6 +36,8 @@ export interface OperatingPreview {
   salesResourceUsed: number
   salesResourceTotal: number
   products: ProductPreview[]
+  /** 本月研发结果（确定性，与预演区间无关） */
+  rnd: SettleReport['rnd']
 }
 
 const LOW_FACTORS: Record<Tier, number> = { low: 0.5, mid: 0.5, high: 0.5, special: 0.5 }
@@ -73,6 +75,7 @@ export function previewOperations(state: GameState): OperatingPreview {
     spotRevenue: range(lowSpotRevenue, highSpotRevenue),
     cogs: range(low.ledger.cogs, high.ledger.cogs),
     currentCash: state.cash,
+    rnd: low.rnd,
     monthEndPayments: range(
       state.cash - purchaseSpend + low.ledger.revenue - low.ledger.cashEnd,
       state.cash - purchaseSpend + high.ledger.revenue - high.ledger.cashEnd,

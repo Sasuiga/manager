@@ -18,8 +18,12 @@ import {
   OWNER_CAPACITY,
   MONTHLY_RATE,
   OVERTIME_COST,
-  PRODUCT_PRICE,
   RND_COST_PER_PROJECT,
+  RND_PROGRESS_PER_WORKER,
+  RND_RATE_PER_WORKER,
+  RND_RATE_CAP,
+  RND_PROJECTS,
+  PRODUCT_PRICE,
   SALES_ORDER_COUNT,
   SALES_PUSH_CAP,
   SALES_PUSH_COST,
@@ -28,7 +32,7 @@ import {
   TIERS,
   priceOf,
 } from '../data/game'
-import type { CardPlayEffect, Dept, GameState, MonthMods, Tier } from './types'
+import type { CardPlayEffect, Dept, GameState, MonthMods, ResearchProjectDef, Tier } from './types'
 
 /**
  * 派生层：把「气候 + 事件 + 已打出的卡 + 已激活知产 + 人员」汇总成一组
@@ -82,9 +86,11 @@ export interface DerivedTotals {
   buyLots: number
   /** 采购总价格档位修正 */
   buyTierShift: number
-  /** 研发 */
+  /** 研发：平修正（事件/卡牌/知产），作用于每个在研项目；人员放置按项目另行计算（rndProjectOutcome） */
   rndProgress: number
   rndRate: number
+  /** 本月在研项目数（已立项且放置 ≥1 人） */
+  rndActiveCount: number
   rndCost: number
   rndCostTotal: number
   /** 每月解雇 / 招聘等特殊标记 */
@@ -192,7 +198,9 @@ function mergeTier(r: Record<Tier, number>): Partial<Record<Tier, number>> {
 /** 当前已激活的知识产权列表（含事件带来的临时知产）。 */
 export function activeIps(state: GameState): string[] {
   const out: string[] = []
-  for (const id of state.ipActive) if (id) out.push(id)
+  // 核心模式无知产激活槽位：已拥有即生效；完整模式保留槽位制
+  const effective = state.mode === 'core' ? state.ipOwned : state.ipActive
+  for (const id of effective) if (id) out.push(id)
   for (const id of state.monthMods.tempIps ?? []) {
     if (id === 'normal' || id === 'strong') {
       // 事件临时知产：从对应池中挑一个尚未拥有的
@@ -353,12 +361,17 @@ export function derive(state: GameState): DerivedTotals {
   // ── 采购 ──
   const buyLots = BUY_LOT_SLOTS[Math.min(5, staffCount.buy)] + (mods.buyLots ?? 0)
 
-  // ── 研发 ──
-  const rndProgress = staffCount.rnd * 2 + (mods.rndProgress ?? 0) + ip.rndProgress
-  const rndRate = staffCount.rnd * 5 + (mods.rndRate ?? 0) + ip.rndRate
-  const hasProject = Object.values(state.rnd).some((s) => s.projectId && !s.done)
-  const rndCost = RND_COST_PER_PROJECT + (mods.rndCost ?? 0)
-  const rndCostTotal = hasProject ? Math.max(0, rndCost) : 0
+  // ── 研发：平修正（事件/卡牌/知产）+ 按项目放置人数，见 rndProjectOutcome ──
+  const rndProgress = (mods.rndProgress ?? 0) + ip.rndProgress
+  const rndRate = (mods.rndRate ?? 0) + ip.rndRate
+  let rndActiveCount = 0
+  for (const p of RND_PROJECTS) {
+    const s = state.rnd[p.id]
+    if (s?.projectId && !s.done && s.assigned > 0) rndActiveCount += 1
+  }
+  const rndCost = Math.max(0, RND_COST_PER_PROJECT + (mods.rndCost ?? 0))
+  /** 在研项目数 × 单项月费 */
+  const rndCostTotal = rndCost * rndActiveCount
 
   // ── 运营 ──
   const apMax = BASE_AP + Math.max(0, staffCount.ops - 1) + (mods.ap ?? 0)
@@ -506,6 +519,7 @@ export function derive(state: GameState): DerivedTotals {
     buyTierShift: mods.allTierShift ?? 0,
     rndProgress,
     rndRate,
+    rndActiveCount,
     rndCost,
     rndCostTotal,
     flags: collectFlags(state, mods),
@@ -574,4 +588,16 @@ export function unitCost(_state: GameState, tier: Tier, d: DerivedTotals): numbe
     cost += per * (mat?.price ?? 0)
   }
   return Math.round(cost * d.costFactor)
+}
+
+/** 单项目研发：按本月放置人数计算进度增量与成功率（平修正作用于所有在研项目）。 */
+export function rndProjectOutcome(
+  d: DerivedTotals,
+  def: ResearchProjectDef,
+  assigned: number,
+): { gain: number; rate: number } {
+  const gain = assigned * RND_PROGRESS_PER_WORKER + (d.rndProgress ?? 0)
+  const cap = def.rateCap ?? RND_RATE_CAP / 100
+  const rate = Math.max(0.05, Math.min(cap, def.rate + (assigned * RND_RATE_PER_WORKER + (d.rndRate ?? 0)) / 100))
+  return { gain, rate }
 }
