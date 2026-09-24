@@ -367,10 +367,10 @@ export function derive(state: GameState): DerivedTotals {
   let rndActiveCount = 0
   for (const p of RND_PROJECTS) {
     const s = state.rnd[p.id]
-    if (s?.projectId && !s.done && s.assigned > 0) rndActiveCount += 1
+    if (s?.projectId && !s.done) rndActiveCount += 1
   }
   const rndCost = Math.max(0, RND_COST_PER_PROJECT + (mods.rndCost ?? 0))
-  /** 在研项目数 × 单项月费 */
+  /** 在研项目数 × 单项月费（在研 = 已立项且未完成，承诺制费用） */
   const rndCostTotal = rndCost * rndActiveCount
 
   // ── 运营 ──

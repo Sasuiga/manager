@@ -1162,25 +1162,30 @@ export function activeResearch(state: GameState): string | null {
   return null
 }
 
-/** 本月已放置的研发人员总数（池上限 = 研发人数）。 */
+/** 在研项目（已立项、未完成）锁定的研发人员总数：完成前不释放。 */
 export function rndAssignedTotal(state: GameState): number {
-  return Object.values(state.rnd).reduce((a, s) => a + s.assigned, 0)
+  let n = 0
+  for (const p of RND_PROJECTS) {
+    const s = state.rnd[p.id]
+    if (s?.projectId && !s.done) n += s.assigned
+  }
+  return n
 }
 
-/** 本月在研项目数（已立项、未完成且放置 ≥1 人）。 */
+/** 本月在研项目数（已立项且未完成；费用 3w × 在研数）。 */
 export function rndActiveThisMonth(state: GameState): number {
   let n = 0
   for (const p of RND_PROJECTS) {
     const s = state.rnd[p.id]
-    if (s?.projectId && !s.done && s.assigned > 0) n += 1
+    if (s?.projectId && !s.done) n += 1
   }
   return n
 }
 
 /**
- * 研发人员放置（计划层，结算时执行，月初清零）：
+ * 研发人员放置（承诺制：放入即锁定到项目完成，完成前不可减少；结算执行，跨月保留）：
  * 每放 1 人该项目 +5 进度/月、成功率 +5%（封顶见 def.rateCap）。
- * 首次放置自动立项；放置 0 人 = 本月停摆（进度保留，下月可续）。
+ * 首次放置自动立项。0 人 = 项目留在研但本月无进度（仅 API 可达，UI 不暴露）。
  */
 export function setRndAssign(state: GameState, projectId: string, n: number): ActionResult {
   const def = RND_PROJECTS.find((p) => p.id === projectId)
@@ -1200,9 +1205,6 @@ export function setRndAssign(state: GameState, projectId: string, n: number): Ac
     state.rndStartsThisMonth.push(projectId)
     state.flags['rndStartsQ'] = (state.flags['rndStartsQ'] ?? 0) + 1
     pushLog(state, 'action', `研发立项：${def.name}`, [`进度需求 ${def.need}`, `基础成功率 ${Math.round(def.rate * 100)}%`])
-  }
-  if (n === 0 && slot.assigned > 0) {
-    pushLog(state, 'action', `「${def.name}」本月未放置人员`, ['项目留在研，进度保留，下月可继续推进'])
   }
   slot.assigned = n
   return { ok: true, msg: `已为「${def.name}」放置 ${n} 人` }

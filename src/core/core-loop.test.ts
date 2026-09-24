@@ -433,7 +433,7 @@ describe('研发放置与 IP 技能树', () => {
     expect(s.products.mid.qty + midSpot).toBe(5)
   })
 
-  it('失败保留进度，下月可继续推进', () => {
+  it('失败保留进度，下月可继续推进（放置跨月保留）', () => {
     const s = rndState(212)
     s.depts.rnd.staff = 5
     E.setRndAssign(s, 'bom-high', 5)
@@ -441,13 +441,14 @@ describe('研发放置与 IP 技能树', () => {
     expect(rep.rnd[0].success).toBeNull()
     expect(s.rnd['bom-high'].progress).toBe(25)
     E.nextMonth(s)
-    expect(s.rnd['bom-high'].assigned).toBe(0)
-    E.setRndAssign(s, 'bom-high', 5)
+    // 承诺制：放置不清零，下月自动继续推进
+    expect(s.rnd['bom-high'].assigned).toBe(5)
     rep = E.settleMonth(s)
     if (rep.rnd[0].success) {
-      // 判定成功：进度清零、高端解锁
+      // 判定成功：进度清零、高端解锁、人员释放
       expect(s.rnd['bom-high'].progress).toBe(0)
       expect(s.products.high.built).toBe(true)
+      expect(s.rnd['bom-high'].assigned).toBe(0)
     } else {
       // 判定失败：进度保留，下月可继续
       expect(s.rnd['bom-high'].progress).toBe(50)
@@ -455,17 +456,31 @@ describe('研发放置与 IP 技能树', () => {
     }
   })
 
-  it('在研项目数驱动研发费用（3w × 在研数）', () => {
+  it('在研项目数驱动研发费用（3w × 在研数，承诺制）', () => {
     const s = rndState()
     s.depts.rnd.staff = 5
     expect(E.derive(s).rndCostTotal).toBe(0)
     E.setRndAssign(s, 'bom-mid', 1)
     expect(E.derive(s).rndCostTotal).toBe(30)
     E.setRndAssign(s, 'bom-high', 2)
+    expect(E.rndActiveThisMonth(s)).toBe(2)
     expect(E.derive(s).rndCostTotal).toBe(60)
+    // 0 人仅 API 可达：项目仍在研，费用照计
     E.setRndAssign(s, 'bom-mid', 0)
-    expect(E.rndActiveThisMonth(s)).toBe(1)
-    expect(E.derive(s).rndCostTotal).toBe(30)
+    expect(E.rndActiveThisMonth(s)).toBe(2)
+    expect(E.derive(s).rndCostTotal).toBe(60)
+  })
+
+  it('完成即释放：中端完成后人员池恢复，可投其他项目', () => {
+    const s = rndState(214)
+    s.depts.rnd.staff = 3
+    E.setRndAssign(s, 'bom-mid', 3)
+    const rep = E.settleMonth(s)
+    expect(rep.rnd[0].success).toBe(true)
+    expect(s.rnd['bom-mid'].done).toBe(true)
+    expect(s.rnd['bom-mid'].assigned).toBe(0)
+    expect(E.rndAssignedTotal(s)).toBe(0)
+    expect(E.setRndAssign(s, 'bom-high', 3).ok).toBe(true)
   })
 
   it('IP 技能树：前置未解锁不可放置，成功授予固定知产', () => {

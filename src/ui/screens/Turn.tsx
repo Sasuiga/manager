@@ -1375,7 +1375,7 @@ function RndPage({ g }: { g: Game }) {
         <Row k="研发人员" v={`${staff}/5 人`} />
         <Row k="人员放置" v={`${assigned} 人已放置 · ${Math.max(0, staff - assigned)} 人空闲`} />
         <Row k="本月研发费用" v={`${d.rndActiveCount} 个在研 × ${wan(d.rndCost)} / 项目`} />
-        {staff - assigned > 0 ? <p className="hint">空闲人员照发工资但不产出进度，请放置到研发项目上。</p> : null}
+        {staff - assigned > 0 ? <p className="hint">空闲人员照发工资但不产出进度，请放置到研发项目上（放入后项目完成前不可收回）。</p> : null}
         <LedgerSection g={g} dept="rnd" />
       </div>
 
@@ -1401,7 +1401,7 @@ function RndPage({ g }: { g: Game }) {
           </button>
         </div>
         <p className="hint">
-          每名研发人员 +5 进度/月、+5% 成功率（封顶 90%，中端教学 100%）；每个在研项目每月 {wan(d.rndCost)}；结算前可反复调整。
+          每名研发人员 +5 进度/月、+5% 成功率（封顶 90%，中端教学 100%）；承诺制：人员放入即锁定至项目完成，可增不可减；每个在研项目每月 {wan(d.rndCost)}。
         </p>
       </div>
 
@@ -1551,22 +1551,14 @@ function RndProjectRow({ g, p }: { g: Game; p: E.ResearchProjectDef }) {
             <span className="card-cond">
               基础成功率 {Math.round(p.rate * 100)}% · 放置 {n} 人：成功率 {Math.round(rate * 100)}%
             </span>
-            {/* 人员放置槽位：5 格（每部门上限 5 人），加 1 人点亮 1 格；未招的槽位虚化占位 */}
+            {/* 人员放置槽位：5 格（每部门上限 5 人），承诺制——放入即锁定到项目完成，可增不可减；未招的槽位虚化占位 */}
             <div style={{ marginTop: 'var(--s2)', display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
-              <button
-                className="slot-btn"
-                disabled={locked || n <= 0}
-                title="减少 1 人"
-                onClick={() => g.act((st) => E.setRndAssign(st, p.id, n - 1))}
-              >
-                −
-              </button>
               <div style={{ display: 'flex', gap: 4 }}>
                 {[0, 1, 2, 3, 4].map((k) => {
                   const count = k + 1
                   const lit = count <= n
                   const hired = count <= staff
-                  const usable = !locked && count <= cap
+                  const usable = !locked && !lit && count <= cap
                   return (
                     <button
                       key={k}
@@ -1574,12 +1566,12 @@ function RndProjectRow({ g, p }: { g: Game; p: E.ResearchProjectDef }) {
                       title={
                         !hired
                           ? '需再招聘研发人员'
-                          : count === n
-                            ? '点击收回此人'
+                          : lit
+                            ? '已放置 · 项目完成前锁定'
                             : '点击放置到此格'
                       }
                       disabled={!usable}
-                      onClick={() => g.act((st) => E.setRndAssign(st, p.id, count === n ? Math.max(0, n - 1) : count))}
+                      onClick={() => g.act((st) => E.setRndAssign(st, p.id, count))}
                     />
                   )
                 })}
@@ -1587,7 +1579,7 @@ function RndProjectRow({ g, p }: { g: Game; p: E.ResearchProjectDef }) {
               <button
                 className="slot-btn"
                 disabled={locked || n + 1 > cap}
-                title={locked ? '先解锁上游节点' : n + 1 > cap ? '可放置人员已用完' : '多放置 1 人'}
+                title={locked ? '先解锁上游节点' : n + 1 > cap ? '可放置人员已用完' : '多放置 1 人（完成前锁定）'}
                 onClick={() => g.act((st) => E.setRndAssign(st, p.id, n + 1))}
               >
                 +

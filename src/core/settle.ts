@@ -134,7 +134,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   const rndResults: SettleReport['rnd'] = []
   for (const def of RND_PROJECTS) {
     const slot = state.rnd[def.id]
-    if (!slot?.projectId || slot.done || slot.assigned <= 0) continue
+    if (!slot?.projectId || slot.done) continue
     const { gain, rate } = rndProjectOutcome(d, def, slot.assigned)
     slot.progress += gain
     let rolledRate = 0
@@ -146,6 +146,8 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
         slot.done = true
         slot.projectId = null
         slot.progress = 0
+        // 承诺制：完成时释放本项目锁定的人员
+        slot.assigned = 0
         state.flags['rndSuccessQ'] = (state.flags['rndSuccessQ'] ?? 0) + 1
         applyResearchSuccess(state, def.id)
       }
@@ -814,8 +816,6 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.futures = {}
   state.ipChangedThisMonth = false
   state.rndStartsThisMonth = []
-  // 研发人员放置为计划层：结算已执行完毕，下月重新放置
-  for (const s of Object.values(state.rnd)) s.assigned = 0
   state.eventResolved = false
   state.eventChosen = null
   state.eventSkipped = false
