@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as E from './engine'
+import { Rng } from './rng'
+import { EVENT_BY_ID } from '../data/game'
 
 function preparedCoreState() {
   const s = E.newGame(20260923, 'core')
@@ -239,6 +241,8 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
 
   it('3 名生产解锁加班：产能计划含 +10', () => {
     const s = fresh(902)
+    s.monthMods = {} // 排除本月事件修正，只验证加班解锁本身
+    s.currentEvent = null
     s.ap = 5
     expect(E.hire(s, 'make').ok).toBe(true)
     expect(E.hire(s, 'make').ok).toBe(true)
@@ -666,5 +670,97 @@ describe('统一成本口径（采购计划 → 单位成本 → 单件毛利 �
     // 仅低端有排产：汇总等于单品
     expect(p.grossProfit.min).toBe(lo.grossProfit.min)
     expect(p.grossProfit.max).toBe(lo.grossProfit.max)
+  })
+})
+
+describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
+  it('池过滤：融资未落地剔 8 张（两模式），核心再剔卡牌参数 2 张', () => {
+    const fullPool = new Set(E.buildEventPool(E.newGame(1), Rng.fromState(1)).map((e) => e.id))
+    const corePool = new Set(E.buildEventPool(E.newGame(1, 'core'), Rng.fromState(1)).map((e) => e.id))
+    for (const id of ['R4', 'P5', 'O4', 'S3', 'D4', 'X3', 'R6', 'S9']) {
+      expect(fullPool.has(id), `${id} 依赖借款参数（debt≡0 落空）`).toBe(false)
+      expect(corePool.has(id), id).toBe(false)
+    }
+    for (const id of ['R5', 'O5']) {
+      expect(fullPool.has(id), `${id} 完整模式有卡牌，保留`).toBe(true)
+      expect(corePool.has(id), `${id} 核心无抽卡阶段，剔除`).toBe(false)
+    }
+    for (const id of ['R1', 'R2', 'R9', 'R10', 'P1', 'P2', 'P9', 'P10', 'S6', 'S7', 'X7', 'X9']) {
+      expect(corePool.has(id), `${id} 落在三环/人员/研发参数，保留`).toBe(true)
+    }
+  })
+
+  it('P10 猎头：机会事件消费端——本月可额外招聘 1 人不耗 AP', () => {
+    const s = E.newGame(1, 'core')
+    E.startGame(s)
+    s.phase = 'event'
+    s.currentEvent = EVENT_BY_ID['P10']
+    s.cash = 500
+    E.acceptChance(s)
+    expect(s.monthFlags.includes('extraHire')).toBe(true)
+    s.ap = 0
+    expect(E.hire(s, 'buy').ok).toBe(true) // extraHire 免 AP
+    expect(s.monthFlags.includes('extraHire')).toBe(false) // 一次性名额
+    s.cash = 500
+    expect(E.canHire(s, 'sell').ok).toBe(false) // 名额已耗、AP 为 0
+  })
+
+  it('核心 12 月流程：每月恰好 1 张事件（全类型），确认后直接进经营，恒等式全程成立', () => {
+    const run = (seed: number) => {
+      const s = E.newGame(seed, 'core')
+      E.startGame(s)
+      const ids: string[] = []
+      const r2 = (n: number) => Math.round(n * 100) / 100
+      for (let m = 1; m <= 12; m++) {
+        if (s.result !== 'playing') break
+        if (s.phase === 'event' && !s.eventResolved) {
+          const ev = s.currentEvent
+          if (ev) {
+            ids.push(ev.id)
+            if (ev.type === 'choice' && ev.options) {
+              let best = 0
+              for (let i = 0; i < ev.options.length; i++) {
+                const c = (ev.options[i].cost?.cash ?? 0) + (ev.options[i].cost?.ap ?? 0) * 50
+                const b = (ev.options[best].cost?.cash ?? 0) + (ev.options[best].cost?.ap ?? 0) * 50
+                if (c < b) best = i
+              }
+              if (!E.applyEventOption(s, best).ok) s.eventResolved = true
+            } else if (ev.type === 'chance' && ev.chance) {
+              const cashCost = ev.chance.cost.cash ?? 0
+              const apCost = ev.chance.cost.ap ?? 0
+              if (s.cash >= cashCost && s.ap >= apCost) E.acceptChance(s)
+              else E.skipEvent(s)
+            }
+          }
+          s.eventResolved = true
+          E.enterDraw(s) // 核心：跳过抽卡直接进经营
+          expect(s.phase, `m${m}`).toBe('operate')
+        }
+        E.enterOperate(s)
+        E.settleMonth(s)
+        const b = E.balanceSheet(s)
+        expect(r2(b.totalAssets - b.debt - b.wagePayable - b.equity), `m${m} 恒等式`).toBe(0)
+        if (s.result !== 'playing') break
+        E.nextMonth(s)
+      }
+      return ids
+    }
+    const seq = run(777)
+    expect(seq.length).toBeGreaterThanOrEqual(8)
+    expect(run(777)).toEqual(seq) // 同 seed 事件序列可复现
+  })
+
+  it('场景基线：applyCoreScenario 清空事件，预设订单不被事件确认时重复生成', () => {
+    const s = E.newGame(3303, 'core')
+    E.startGame(s)
+    E.applyCoreScenario(s, 'order_heavy')
+    expect(s.phase).toBe('event')
+    expect(s.currentEvent).toBeNull() // 事件屏显示「本月无事件」
+    const preset = s.orders.length
+    expect(preset).toBeGreaterThan(0)
+    s.eventResolved = true
+    E.enterDraw(s)
+    expect(s.orders.length).toBe(preset) // 订单已预设，不重复生成
+    expect(s.phase).toBe('operate')
   })
 })

@@ -57,7 +57,8 @@ export function hireCost(state: GameState, dept: Dept): Money {
 
 export function canHire(state: GameState, dept: Dept): ActionResult {
   if (state.depts[dept].staff >= 5) return fail('已达上限（5 人）')
-  if (state.ap < 1) return fail('AP 不足')
+  const freeHire = state.monthFlags.includes('extraHire') // P10 猎头：本月可额外招聘 1 人（不耗 AP）
+  if (!freeHire && state.ap < 1) return fail('AP 不足')
   const fee = hireCost(state, dept)
   if (state.cash < fee) return fail('现金不足')
   return OK
@@ -70,7 +71,12 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   state.cash -= fee
   /** 招聘费当期费用化（管理费用）：不能只扣现金不记费用，否则资产凭空减少、恒等式失衡 */
   state.hireFeeBy[dept] += fee
-  state.ap -= 1
+  if (state.monthFlags.includes('extraHire')) {
+    // 消耗 P10 猎头的「额外 +1 不耗 AP」名额（一次）
+    state.monthFlags = state.monthFlags.filter((f) => f !== 'extraHire')
+  } else {
+    state.ap -= 1
+  }
   state.depts[dept].staff += 1
   state.depts[dept].hired += 1
   state.flags[`hireMonth:${dept}:${state.month}`] = (state.flags[`hireMonth:${dept}:${state.month}`] ?? 0) + 1
@@ -1582,6 +1588,7 @@ function applyModSideEffects(state: GameState, mods: MonthMods, equipmentConside
       checkAchievements(state)
     }
     if (note.includes('解雇 1 人')) state.monthFlags.push('canFire')
+    if (note.includes('额外招聘 1 人')) state.monthFlags.push('extraHire')
 
     /**
      * 跨月挂账一律按权责发生制在**当月**入账，次月结算只做现金收付。

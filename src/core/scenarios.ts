@@ -35,6 +35,8 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.retained = 0
   state.monthMods = setup.mods ?? {}
   state.cardMods = {}
+  /** 事件：startGame 已抽了本月事件；场景基线不含其修正（事件屏显示「本月无事件」）。 */
+  state.currentEvent = null
   /** 场景预设订单需要销售团队作为来源：无销售则开局无订单。 */
   state.depts.sell.staff = setup.sellStaff ?? 0
   state.orders = setup.orders.map((o, i) => makeOrder(state, i, o))

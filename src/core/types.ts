@@ -342,6 +342,12 @@ export interface GameEventDef {
   scope: Scope
   /** 卡片正面的效果文案 */
   text: string
+  /**
+   * 修正效果需要哪些系统活跃才「落地」（池过滤用）：
+   * - 'finance'：依赖借款/额度/利率参数（融资层未落地前全模式剔除，debt≡0 时修正落空）；
+   * - 'cards'：依赖抽卡/打牌参数（核心模式无抽卡阶段时剔除）。
+   */
+  needs?: ('finance' | 'cards')[]
   mods?: MonthMods
   options?: EventOption[]
   /** 机会事件：参与成本与效果 */

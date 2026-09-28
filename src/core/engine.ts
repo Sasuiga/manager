@@ -102,6 +102,11 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
   const isEnd = idx === 0 || idx === 5
   const weights: { ev: GameEventDef; w: number }[] = []
   for (const ev of EVENTS) {
+    // 事件效果落地过滤：修正必须落在玩家当前能响应的参数上。
+    // 融资层未落地（无借/还入口，debt≡0）：利率/额度类事件全模式剔除；
+    // 核心模式尚无抽卡阶段：卡牌参数事件仅核心剔除（融资层落地后摘掉 needs 标记）。
+    if (ev.needs?.includes('finance')) continue
+    if (state.mode === 'core' && ev.needs?.includes('cards')) continue
     const evIdx = CLIMATE_ORDER.indexOf(ev.climate)
     const dist = Math.min((evIdx - idx + 6) % 6, (idx - evIdx + 6) % 6)
     let w = 1
@@ -112,12 +117,12 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
   return weights.flatMap(({ ev, w }) => Array<GameEventDef>(w).fill(ev))
 }
 
-/** 开局：第 1 月即季度首月，董事会先行（选定挑战后由 UI 抽事件）。 */
+/** 开局：完整模式第 1 月即季度首月，董事会先行（选定挑战后由 UI 抽事件）；核心模式直接进入事件阶段。 */
 export function startGame(state: GameState) {
   if (state.mode === 'core') {
-    state.phase = 'operate'
     state.boardPrompted = false
-    generateMonthlyOrders(state)
+    // 全类型事件（池已按模式过滤）：确认后 enterDraw 跳过抽卡直接进经营
+    beginMonthEvent(state)
     return
   }
   state.boardPrompted = false
@@ -238,9 +243,9 @@ function drawEvent(state: GameState, rng: Rng): GameEventDef {
 /**
  * 事件确认后进入抽卡阶段：每月开始独立的一次活动，先于经营布局。
  * 月度同步（AP/打牌数/手牌/抽牌参数）与渠道订单都在这里完成。
+ * 核心模式（抽卡阶段尚未引入，卡片层落地后去掉此分支）：跳过抽卡，直接进经营。
  */
 export function enterDraw(state: GameState) {
-  state.phase = 'draw'
   const d = derive(state)
   state.apMax = d.apMax
   state.playsMax = d.playsMax
@@ -251,8 +256,13 @@ export function enterDraw(state: GameState) {
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   state.declinedOrders = []
   state.acceptedOrders = []
-  // 本月订单（渠道带来）
-  generateMonthlyOrders(state)
+  // 本月订单（渠道带来）：场景预设的订单（applyCoreScenario）不重复生成
+  if (state.orders.length === 0) generateMonthlyOrders(state)
+  if (state.mode === 'core') {
+    state.phase = 'operate'
+    return
+  }
+  state.phase = 'draw'
   // 开局（第 1 月）起始手牌已由 newGame 预置，跳过再抽一次
   if (state.drawn.length > 0) return
   // 常规每月：直接抽 N 张，让玩家一次看到全部 N 张选 M 张
@@ -311,9 +321,9 @@ export function nextMonth(state: GameState) {
   advanceMonthCore(state, rng)
   state.rngState = rng.state
   if (state.mode === 'core') {
-    state.phase = 'operate'
     state.boardPrompted = false
-    generateMonthlyOrders(state)
+    // 核心模式：事件阶段全类型（池已过滤），确认后 enterDraw 跳过抽卡直接进经营
+    beginMonthEvent(state)
     return
   }
   state.boardPrompted = false

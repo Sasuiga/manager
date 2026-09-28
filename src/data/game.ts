@@ -402,10 +402,10 @@ export const EVENTS: GameEventDef[] = [
   { id: 'R1', climate: 'recovery', name: '消费回暖', type: 'instant', polarity: 'good', scope: 'sell', text: '本月低端需求 +1，中端需求 +1。', mods: { demand: T(1, 1) } },
   { id: 'R2', climate: 'recovery', name: '原料低价', type: 'instant', polarity: 'good', scope: 'buy', text: '本月所有原料供给 +2，价格降 1 档。', mods: { allSupply: 2, allTierShift: -1 } },
   { id: 'R3', climate: 'recovery', name: '招工不易', type: 'instant', polarity: 'bad', scope: 'make', text: '本月招聘成本 +1w（每名）。', mods: { notes: ['招聘费 +1w'] } },
-  { id: 'R4', climate: 'recovery', name: '现金紧张', type: 'instant', polarity: 'bad', scope: 'cash', text: '本月借款利息 +1w。', mods: { rateShift: 1 } },
-  { id: 'R5', climate: 'recovery', name: '政策观望', type: 'instant', polarity: 'neutral', scope: 'ops', text: '本月抽卡多抽 1 张，但手牌上限 -1。', mods: { drawBonus: 1, handBonus: -1, notes: ['抽卡 +1 张', '手牌上限 -1'] } },
+  { id: 'R4', climate: 'recovery', name: '现金紧张', type: 'instant', polarity: 'bad', scope: 'cash', needs: ['finance'], text: '本月借款利息 +1w。', mods: { rateShift: 1 } },
+  { id: 'R5', climate: 'recovery', name: '政策观望', type: 'instant', polarity: 'neutral', scope: 'ops', needs: ['cards'], text: '本月抽卡多抽 1 张，但手牌上限 -1。', mods: { drawBonus: 1, handBonus: -1, notes: ['抽卡 +1 张', '手牌上限 -1'] } },
   {
-    id: 'R6', climate: 'recovery', name: '低息贷款', type: 'choice', polarity: 'good', scope: 'cash', text: '银行愿意放款，代价是抬高你全部借款的利息。',
+    id: 'R6', climate: 'recovery', name: '低息贷款', type: 'choice', polarity: 'good', scope: 'cash', needs: ['finance'], text: '银行愿意放款，代价是抬高你全部借款的利息。',
     options: [
       { label: '接受贷款', detail: '借款额度 +5w，本月借款利率 +1w', mods: { notes: ['借款额度 +5w'] }, cost: {}, extra: '额度 +5w · 利率 +1w' },
       { label: '不借款', detail: '本月资金 +2w', gain: 20 },
@@ -433,7 +433,7 @@ export const EVENTS: GameEventDef[] = [
   { id: 'P2', climate: 'boom', name: '产能满载', type: 'instant', polarity: 'good', scope: 'make', text: '本月产能 +2。', mods: { capacity: 2 } },
   { id: 'P3', climate: 'boom', name: '原料跟涨', type: 'instant', polarity: 'bad', scope: 'buy', text: '本月所有原料供给 -2，价格升 1 档。', mods: { allSupply: -2, allTierShift: 1 } },
   { id: 'P4', climate: 'boom', name: '用工成本上升', type: 'instant', polarity: 'bad', scope: 'ops', text: '本月每名员工薪酬 +0.5w。', mods: { salaryPer: 5 } },
-  { id: 'P5', climate: 'boom', name: '资金充裕', type: 'instant', polarity: 'neutral', scope: 'cash', text: '本月借款利率 -1w，但现金不产生任何利息。', mods: { rateShift: -1 } },
+  { id: 'P5', climate: 'boom', name: '资金充裕', type: 'instant', polarity: 'neutral', scope: 'cash', needs: ['finance'], text: '本月借款利率 -1w，但现金不产生任何利息。', mods: { rateShift: -1 } },
   {
     id: 'P6', climate: 'boom', name: '扩产机会', type: 'choice', polarity: 'good', scope: 'make', text: '设备厂给出一步到位的报价。',
     options: [
@@ -462,8 +462,8 @@ export const EVENTS: GameEventDef[] = [
   { id: 'O1', climate: 'overheat', name: '需求爆棚', type: 'instant', polarity: 'good', scope: 'sell', text: '本月中端 +1、高端 +2、特殊 +1 需求。', mods: { demand: T(0, 1, 2, 1) } },
   { id: 'O2', climate: 'overheat', name: '加班文化', type: 'instant', polarity: 'good', scope: 'make', text: '本月产能 +3，但每名员工薪酬 +1w。', mods: { capacity: 3, salaryPer: 10 } },
   { id: 'O3', climate: 'overheat', name: '原料飞涨', type: 'instant', polarity: 'bad', scope: 'buy', text: '本月所有原料供给 -4、价格升 1 档；芯片额外供给 -1、价格再升 1 档。', mods: { allSupply: -4, allTierShift: 1, materials: { chip: { supply: -1, tierShift: 1 } } } },
-  { id: 'O4', climate: 'overheat', name: '银根收紧', type: 'instant', polarity: 'bad', scope: 'cash', text: '本月借款利率 +2w，借款额度减半。', mods: { rateShift: 2, creditFactor: 0.5 } },
-  { id: 'O5', climate: 'overheat', name: '监管检查', type: 'instant', polarity: 'neutral', scope: 'ops', text: '本月每打出一张牌需额外支付 1w。', mods: { notes: ['打牌费用 +1w/张'] } },
+  { id: 'O4', climate: 'overheat', name: '银根收紧', type: 'instant', polarity: 'bad', scope: 'cash', needs: ['finance'], text: '本月借款利率 +2w，借款额度减半。', mods: { rateShift: 2, creditFactor: 0.5 } },
+  { id: 'O5', climate: 'overheat', name: '监管检查', type: 'instant', polarity: 'neutral', scope: 'ops', needs: ['cards'], text: '本月每打出一张牌需额外支付 1w。', mods: { notes: ['打牌费用 +1w/张'] } },
   {
     id: 'O6', climate: 'overheat', name: '长期协议', type: 'choice', polarity: 'bad', scope: 'buy', text: '供应商希望你签下长约以对冲涨价。',
     options: [
@@ -491,7 +491,7 @@ export const EVENTS: GameEventDef[] = [
   // ── 滞涨 ──────────────────────────────────────────────
   { id: 'S1', climate: 'stagflation', name: '需求萎缩', type: 'instant', polarity: 'bad', scope: 'sell', text: '本月低端、中端、高端需求各 -1。', mods: { demand: T(-1, -1, -1) } },
   { id: 'S2', climate: 'stagflation', name: '成本高企', type: 'instant', polarity: 'bad', scope: 'buy', text: '本月所有原料供给 -3，价格升 1 档。', mods: { allSupply: -3, allTierShift: 1 } },
-  { id: 'S3', climate: 'stagflation', name: '现金为王', type: 'instant', polarity: 'bad', scope: 'cash', text: '本月借款利率 +2w。', mods: { rateShift: 2 } },
+  { id: 'S3', climate: 'stagflation', name: '现金为王', type: 'instant', polarity: 'bad', scope: 'cash', needs: ['finance'], text: '本月借款利率 +2w。', mods: { rateShift: 2 } },
   { id: 'S4', climate: 'stagflation', name: '裁员优化', type: 'instant', polarity: 'good', scope: 'ops', text: '本月可免费解雇 1 名员工，并返还其招聘费 50%。', mods: { notes: ['可在运营部解雇 1 人'] } },
   { id: 'S5', climate: 'stagflation', name: '库存积压', type: 'instant', polarity: 'neutral', scope: 'make', text: '本月生产入库的产品，下月售价降 1 档。', mods: { notes: ['下月售价 -1 档'] } },
   {
@@ -515,14 +515,14 @@ export const EVENTS: GameEventDef[] = [
       { label: '自己扛', detail: '本月研发进度 -2', mods: { rndProgress: -2 } },
     ],
   },
-  { id: 'S9', climate: 'stagflation', name: '债务重组', type: 'chance', polarity: 'good', scope: 'cash', text: '可以谈一次债务重组。', chance: { cost: { cash: 20 }, mods: { rateShift: -2 }, detail: '支付 2w 手续费，本月借款利率 -2w' } },
+  { id: 'S9', climate: 'stagflation', name: '债务重组', type: 'chance', polarity: 'good', scope: 'cash', needs: ['finance'], text: '可以谈一次债务重组。', chance: { cost: { cash: 20 }, mods: { rateShift: -2 }, detail: '支付 2w 手续费，本月借款利率 -2w' } },
   { id: 'S10', climate: 'stagflation', name: '精益管理', type: 'chance', polarity: 'good', scope: 'ops', text: '顾问团队能压缩一轮人力成本。', chance: { cost: { ap: 1 }, mods: { salaryPer: -5 }, detail: '消耗 1 AP，本月每名员工薪酬 -0.5w' } },
 
   // ── 衰退 ──────────────────────────────────────────────
   { id: 'D1', climate: 'recession', name: '订单取消', type: 'instant', polarity: 'bad', scope: 'sell', text: '本月低端 -2、中端 -1、高端 -1 需求。', mods: { demand: T(-2, -1, -1) } },
   { id: 'D2', climate: 'recession', name: '原料下跌', type: 'instant', polarity: 'good', scope: 'buy', text: '本月所有原料供给 +3，价格降 1 档。', mods: { allSupply: 3, allTierShift: -1 } },
   { id: 'D3', climate: 'recession', name: '设备闲置', type: 'instant', polarity: 'bad', scope: 'make', text: '本月产能 -3。', mods: { capacity: -3 } },
-  { id: 'D4', climate: 'recession', name: '降息周期', type: 'instant', polarity: 'good', scope: 'cash', text: '本月借款利率 -2w。', mods: { rateShift: -2 } },
+  { id: 'D4', climate: 'recession', name: '降息周期', type: 'instant', polarity: 'good', scope: 'cash', needs: ['finance'], text: '本月借款利率 -2w。', mods: { rateShift: -2 } },
   { id: 'D5', climate: 'recession', name: '人才回流', type: 'instant', polarity: 'neutral', scope: 'ops', text: '本月招聘费 -1w，但每名员工薪酬 +0.5w。', mods: { salaryPer: 5, notes: ['招聘费 -1w'] } },
   {
     id: 'D6', climate: 'recession', name: '清仓甩卖', type: 'choice', polarity: 'bad', scope: 'sell', text: '库存压得厉害。',
@@ -551,7 +551,7 @@ export const EVENTS: GameEventDef[] = [
   // ── 萧条 ──────────────────────────────────────────────
   { id: 'X1', climate: 'depression', name: '需求冰点', type: 'instant', polarity: 'bad', scope: 'sell', text: '本月低端 -2、中端 -2、高端 -1、特殊 -1 需求。', mods: { demand: T(-2, -2, -1, -1) } },
   { id: 'X2', climate: 'depression', name: '原料白菜价', type: 'instant', polarity: 'good', scope: 'buy', text: '本月所有原料供给 +5、价格降 1 档；芯片供给不增加、价格不变。', mods: { allSupply: 5, allTierShift: -1, materials: { chip: { supply: -5, tierShift: 1 } } } },
-  { id: 'X3', climate: 'depression', name: '信贷冻结', type: 'instant', polarity: 'bad', scope: 'cash', text: '本月无法新增借款，且已有借款利率 +1w。', mods: { noBorrow: true, rateShift: 1 } },
+  { id: 'X3', climate: 'depression', name: '信贷冻结', type: 'instant', polarity: 'bad', scope: 'cash', needs: ['finance'], text: '本月无法新增借款，且已有借款利率 +1w。', mods: { noBorrow: true, rateShift: 1 } },
   { id: 'X4', climate: 'depression', name: '停工潮', type: 'instant', polarity: 'bad', scope: 'make', text: '本月产能 -4。', mods: { capacity: -4 } },
   { id: 'X5', climate: 'depression', name: '破产潮', type: 'instant', polarity: 'neutral', scope: 'ops', text: '可以低价收购 1 名员工，需支付其原招聘费 50%。', mods: { notes: ['招聘费 -50%'] } },
   {
