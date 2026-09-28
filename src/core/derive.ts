@@ -413,12 +413,16 @@ export function derive(state: GameState): DerivedTotals {
   }
   for (const dp of DEPT_ORDER) {
     const rows: typeof deptLedger.ops = []
-    // 工资（月末结算现金支付；资产负债无「应付工资」科目，不再挂账）
+    // 工资（月末计提应付职工薪酬：费用当期确认、挂账不动现金，次月结算时实付上月工资）
     if (salaryPer[dp] > 0 && staffCount[dp] > 0) {
-      const acc = dp === 'make' ? '制造费用' : dp === 'rnd' ? '研发费用' : '管理费用'
+      const acc = dp === 'make' ? '制造费用' : dp === 'rnd' ? '研发费用' : dp === 'sell' ? '销售费用' : '管理费用'
       const per = salaryPer[dp]
       const total = per * staffCount[dp]
-      rows.push({ item: '工资支付', debit: acc, debitAmt: total, credit: '现金', creditAmt: total })
+      rows.push({ item: '工资计提', debit: acc, debitAmt: total, credit: '应付职工薪酬', creditAmt: total })
+    }
+    // 实付上月计提的工资（借 应付职工薪酬 / 贷 现金；本月现金流出，上月费用已在计提时确认）
+    if (state.wagePayableBy[dp] > 0) {
+      rows.push({ item: '工资支付（上月计提）', debit: '应付职工薪酬', debitAmt: state.wagePayableBy[dp], credit: '现金', creditAmt: state.wagePayableBy[dp] })
     }
     // 设备折旧（非现金）
     if (dp === 'make' && makeDepreciation > 0) {

@@ -44,6 +44,7 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false }
   state.monthLedger = []
   state.lotsUsed = 0
+  state.wagePayableBy = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
   // 研发：各场景预置 1 名研发（教学：前 2~3 个月可解锁中端），清空项目/放置/知产
   state.depts.rnd.staff = setup.rndStaff ?? 1
   state.depts.rnd.hired = state.depts.rnd.staff

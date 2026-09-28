@@ -538,6 +538,8 @@ export interface BalanceSheet {
   equipmentAccum: Money
   totalAssets: Money
   debt: Money
+  /** 应付职工薪酬（上月计提、次月实付，挂账负债） */
+  wagePayable: Money
   equity: Money
   retained: Money
   paidIn: Money
@@ -626,6 +628,11 @@ export interface GameState {
    */
   pendingIncome: Money
   pendingCost: Money
+  /**
+   * 应付职工薪酬（分部门挂账）：月末按当月工资计提，次月结算时实付上月工资。
+   * 计提当月费用确认进损益、负债增加（不动现金）；实付次月现金流出、负债冲销。
+   */
+  wagePayableBy: Record<Dept, Money>
   /** 下月售价修正（库存积压等） */
   nextMonthPrice: Partial<Record<Tier, number>>
   /** 本月已完成的研发立项 */

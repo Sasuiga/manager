@@ -12,7 +12,7 @@ import {
   TIERS,
 } from '../data/game'
 import { derive, mergeMods, rndProjectOutcome } from './derive'
-import { balanceSheet, equipmentNet, equityOf, inventoryValue } from './game'
+import { balanceSheet, equipmentNet, equityOf, inventoryValue, wagePayableOf } from './game'
 import { executePlannedPurchases, issueMaterials, postProductionInbound } from './actions'
 import { Rng } from './rng'
 import type {
@@ -32,7 +32,8 @@ import type {
  * 一次结算产出完整的报表与结算报告，供 UI 逐行展开。
  *
  * 现金处理原则：
- *   - 原料采购、薪酬、利息、税金、设备折旧之外的支出在发生时即扣减现金；
+ *   - 原料采购、利息、税金、设备折旧之外的支出在发生时即扣减现金；
+ *   - 工资当月计提应付职工薪酬（费用确认、挂账不动现金），次月结算时实付上月工资；
  *   - 设备折旧是**非现金**费用，只影响利润与资产账面，不动现金；
  *   - 生产领料是资产内部转换（原料 → 成品），不动现金，只在售出时通过销售成本影响利润。
  */
@@ -403,11 +404,29 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
 
   /**
    * 现金流出：只包含真正动用现金的部分。
-   * 折旧、生产领料都是非现金项目；招聘费/打牌费在发生时已扣现金，
-   * 结算只确认费用，不再重复扣款。
+   * 折旧、生产领料、工资（当月计提、次月实付）都是当期非现金项目；
+   * 招聘费/打牌费在发生时已扣现金，结算只确认费用，不再重复扣款。
    */
-  const cashOut = salaryBy.ops + salaryBy.buy + salaryBy.make + salaryBy.sell + salaryBy.rnd + projectCost + d.interest
+  const cashOut = projectCost + d.interest
   state.cash -= cashOut
+
+  /**
+   * 实付上月计提的应付职工薪酬（现金流出）：
+   * 金额 = 上月工资计提额（分部门存于 wagePayableBy），
+   * 账务行为部门账录「工资支付（上月计提）」（借 应付职工薪酬 / 贷 现金），
+   * 由 derive 自动生成，与本月计提行同屏展示。
+   */
+  const wagePaid = wagePayableOf(state)
+  if (wagePaid > 0) state.cash -= wagePaid
+
+  /** 计提本月工资：贷 应付职工薪酬，次月实付（不动本期现金） */
+  state.wagePayableBy = {
+    ops: salaryBy.ops,
+    buy: salaryBy.buy,
+    make: salaryBy.make,
+    sell: salaryBy.sell,
+    rnd: salaryBy.rnd,
+  }
 
   const preTax = grossProfit - mfgExpense - sellExpense - adminExpense - rndExpense - financeExpense + otherIncome
   const tax = preTax > 0 ? Math.round(preTax * TAX_RATE) : 0
@@ -772,7 +791,8 @@ export function unitLabel(metric: string): 'w' | '件' | '人' | '%' {
 
 export function computeScore(state: GameState): ScoreBreakdown {
   const profitSum = state.ledgers.reduce((a, l) => a + l.netProfit, 0)
-  const assetsEnd = state.cash + inventoryValue(state) + equipmentNet(state) - state.debt
+  // 期末净资产：应付职工薪酬（上月计提未付部分）仍是负债，需从资产侧扣减
+  const assetsEnd = state.cash + inventoryValue(state) + equipmentNet(state) - state.debt - wagePayableOf(state)
   // 盈利分：12 个月累计净利润 ÷ 10w；资产分：期末净资产 ÷ 10w
   const profit = Math.round((profitSum / 100) * 1.5)
   const assets = Math.round((assetsEnd / 100) * 1.0)

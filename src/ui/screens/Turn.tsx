@@ -26,6 +26,12 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
   const getDetailLines = (r: typeof rows[number]): string[] => {
     if (r.detail?.length) return r.detail
     if (r.item.includes('工资')) {
+      if (r.item.includes('支付')) {
+        return [
+          `实付上月计提的薪酬 ${wan(r.debitAmt)}（借 应付职工薪酬 / 贷 现金）`,
+          '当月计提、次月实发：上月工资在本月现金流出，费用已于计提当月确认',
+        ]
+      }
       const per = d.salaryPer[dept]
       const base = STAFF[dept].salary
       const lines: string[] = [`基础月薪 ${wan(base)} / 人`]
@@ -34,7 +40,7 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
         lines.push(`修正后 ${wan(per)} / 人（${delta > 0 ? '+' : ''}${wan(delta)}，受 IP / 事件影响）`)
       }
       lines.push(`人数 ${s.depts[dept].staff} 人`)
-      lines.push(`支付额 ${wan(per * s.depts[dept].staff)}（结算时现金支付，资产负债不挂应付工资）`)
+      lines.push(`计提额 ${wan(per * s.depts[dept].staff)}（贷 应付职工薪酬，次月实付；本月不动现金）`)
       return lines
     }
     if (r.item.includes('招聘')) {

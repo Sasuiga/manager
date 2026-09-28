@@ -49,7 +49,8 @@ describe('audit', () => {
 
         const rep = E.settleMonth(s)
         const b = E.balanceSheet(s)
-        const gap = r2(b.totalAssets - b.debt - b.equity)
+        // 恒等式：资产 = 负债（借款 + 应付职工薪酬） + 所有者权益
+        const gap = r2(b.totalAssets - b.debt - b.wagePayable - b.equity)
         worst = Math.max(worst, Math.abs(gap))
         if (gap !== 0) console.log(`seed ${seed} m${m} 失衡 ${gap}`)
         // 报表自洽：损益表编制出来的净利润 = 留存收益增量

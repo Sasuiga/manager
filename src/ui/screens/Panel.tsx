@@ -168,15 +168,16 @@ function BalanceCard({ bal }: { bal: E.BalanceSheet }) {
       </div>
       <div className="stack-sm">
         <Row k="借款" v={wan(bal.debt)} />
+        <Row k="应付职工薪酬" v={wan(bal.wagePayable)} />
         <Row k="实收资本" v={wan(bal.paidIn)} />
         <Row k="股东实物投入" v={wan(bal.ownerCapital)} />
         <Row k="留存收益" v={wan(bal.retained)} cls={bal.retained < 0 ? 'red' : ''} />
         <div className="row bold">
           <span className="row-key">负债与权益合计</span>
-          <span className="row-val">{wan(bal.debt + bal.equity)}</span>
+          <span className="row-val">{wan(bal.debt + bal.wagePayable + bal.equity)}</span>
         </div>
       </div>
-      <div className="hint">资产 = 负债 + 所有者权益。借款只作负债列示，不从权益中扣减。</div>
+      <div className="hint">资产 = 负债 + 所有者权益。借款与应付职工薪酬只作负债列示，不从权益中扣减。</div>
     </div>
   )
 }
@@ -187,7 +188,7 @@ function RatioCard({ led, bal }: { led: E.Ledger; bal: E.BalanceSheet }) {
     ['毛利率', led.revenue > 0 ? `${((led.grossProfit / led.revenue) * 100).toFixed(1)}%` : '—'],
     ['净利率', led.revenue > 0 ? `${((led.netProfit / led.revenue) * 100).toFixed(1)}%` : '—'],
     ['需求满足率', led.demandTotal > 0 ? `${((led.demandFilled / led.demandTotal) * 100).toFixed(0)}%` : '—'],
-    ['资产负债率', bal.totalAssets > 0 ? `${((bal.debt / bal.totalAssets) * 100).toFixed(0)}%` : '—'],
+    ['资产负债率', bal.totalAssets > 0 ? `${(((bal.debt + bal.wagePayable) / bal.totalAssets) * 100).toFixed(0)}%` : '—'],
     ['债务权益比', eq > 0 ? `${((bal.debt / eq) * 100).toFixed(0)}%` : '—'],
     ['权益乘数', eq > 0 ? (bal.totalAssets / eq).toFixed(2) : '—'],
   ]
