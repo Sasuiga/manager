@@ -13,8 +13,7 @@ describe('audit', () => {
       if (s.challengeOffered.length) E.chooseChallenge(s, seed % Math.max(1, s.challengeOffered.length))
       let months = 0
       for (let m = 1; m <= 12; m++) {
-        E.beginMonthEvent(s)
-        const ev = s.currentEvent
+        const ev = s.currentEvent // 事件已由 startGame/nextMonth 在月初统一抽取
         if (ev) {
           if (ev.type === 'choice' && ev.options) E.applyEventOption(s, 0)
           else if (ev.type === 'chance' && ev.chance) {

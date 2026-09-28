@@ -12,8 +12,7 @@ function play(seed: number) {
   const hist: { m: number; cash: number; np: number; net: number }[] = []
   for (let m = 1; m <= 12; m++) {
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
-    E.beginMonthEvent(s)
-    const ev = s.currentEvent
+    const ev = s.currentEvent // 事件已由 startGame/nextMonth 在月初统一抽取
     if (ev) {
       if (ev.type === 'choice' && ev.options) {
         // 选现金代价最低的选项

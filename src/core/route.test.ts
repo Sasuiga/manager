@@ -11,8 +11,7 @@ function play(seed: number, cfg = { make: 3, sell: 3, buy: 2, rnd: 1, ops: 1, mi
   E.startGame(s)
   for (let m = 1; m <= 12; m++) {
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
-    E.beginMonthEvent(s)
-    const ev = s.currentEvent
+    const ev = s.currentEvent // 事件已由 startGame/nextMonth 在月初统一抽取
     if (ev) {
       if (ev.type === 'choice' && ev.options) {
         let best = 0

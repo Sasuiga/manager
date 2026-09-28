@@ -13,8 +13,7 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
   if (s.challengeOffered.length) E.chooseChallenge(s, 0)
 
   for (let m = 1; m <= 12; m++) {
-    E.beginMonthEvent(s)
-    // 事件处理
+    // 事件已由 startGame/nextMonth 在月初统一抽取，此处只处理
     const ev = s.currentEvent
     if (ev) {
       if (ev.type === 'choice' && ev.options) {
@@ -142,10 +141,9 @@ describe('引擎', () => {
 
   it('每月事件只抽一次：beginMonthEvent 仅消耗一次抽卡', () => {
     const s = E.newGame(20260101)
-    E.startGame(s)
-    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
     const prev = s.rngState
-    E.beginMonthEvent(s)
+    E.startGame(s) // 完整模式：第 1 月事件在这里恰好抽一次
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
     // 手动复算一次抽取：池大小相同、只 int() 一次，rngState 必须恰好推进这一步
     const pool = E.buildEventPool(s, Rng.fromState(prev))
     const manual = Rng.fromState(prev)
@@ -154,7 +152,7 @@ describe('引擎', () => {
     expect(s.currentEvent).not.toBeNull()
 
     // 即时事件：效果已并入 monthMods，但事件仍需 UI 展示，
-    // eventResolved 必须保持 false——否则调用方（App 自动推进）会再次抽卡
+    // eventResolved 必须保持 false——否则调用方会在「已解决」状态下再次抽卡
     if (s.currentEvent!.type === 'instant') {
       expect(s.eventResolved).toBe(false)
       expect(Object.keys(s.monthMods).length).toBeGreaterThan(0)
@@ -169,8 +167,7 @@ describe('引擎', () => {
       for (let m = 1; m <= 12; m++) {
         if (g.result !== 'playing') break
         if (g.challengeOffered.length) E.chooseChallenge(g, 0)
-        // App 逻辑：只在「董事会」阶段自动抽事件，'event' 阶段不重抽
-        if (g.phase === 'board') E.beginMonthEvent(g)
+        // 事件已由 startGame/nextMonth 在月初统一抽取（每月一张），事件阶段不重抽
         const ev = g.currentEvent!
         ids.push(ev.id)
         // 即时事件抽到即结算，但 eventResolved 仍为 false（等 UI 点「继续」）
@@ -213,7 +210,6 @@ describe('引擎', () => {
     const s = E.newGame(5)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
-    E.beginMonthEvent(s)
     E.enterDraw(s)
     E.enterOperate(s)
     const before = s.materials.pkg.value / Math.max(1, s.materials.pkg.qty)
@@ -229,7 +225,6 @@ describe('引擎', () => {
     const s = E.newGame(9)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
-    E.beginMonthEvent(s)
     E.enterDraw(s)
     E.enterOperate(s)
     const first = E.buyMaterial(s, 'pkg', 'small')
@@ -264,7 +259,6 @@ describe('引擎', () => {
     const s = E.newGame(11)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
-    E.beginMonthEvent(s)
     E.enterDraw(s)
     E.enterOperate(s)
     const d = E.derive(s)
@@ -290,7 +284,6 @@ describe('引擎', () => {
     const s = E.newGame(21)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
-    E.beginMonthEvent(s)
     E.enterDraw(s)
     E.enterOperate(s)
     void Rng
@@ -325,7 +318,6 @@ describe('引擎', () => {
     }
 
     for (let m = 1; m <= 12; m++) {
-      E.beginMonthEvent(s)
       const ev = s.currentEvent
       if (ev) {
         if (ev.type === 'choice' && ev.options) E.applyEventOption(s, 0)

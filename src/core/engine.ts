@@ -112,7 +112,7 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
   return weights.flatMap(({ ev, w }) => Array<GameEventDef>(w).fill(ev))
 }
 
-/** 开局：进入第 1 个月的事件阶段（第 1 月即季度首月，召开董事会）。 */
+/** 开局：第 1 月即季度首月，董事会下达目标后直接进入事件阶段。 */
 export function startGame(state: GameState) {
   if (state.mode === 'core') {
     state.phase = 'operate'
@@ -120,9 +120,9 @@ export function startGame(state: GameState) {
     generateMonthlyOrders(state)
     return
   }
-  state.phase = 'board'
   state.boardPrompted = false
   maybeDrawBoardGoals(state, new Rng(state.seed * 31 + 7))
+  beginMonthEvent(state)
 }
 
 /** 抽取本季度董事会目标（§4.2 / §4.4）。 */
@@ -202,7 +202,7 @@ export function chooseChallenge(state: GameState, index: number) {
   ])
 }
 
-/** 生成并进入本月事件。 */
+/** 生成并进入本月事件（引擎在 startGame/nextMonth 统一于月初调用）。 */
 export function beginMonthEvent(state: GameState) {
   const rng = Rng.fromState(state.rngState)
   const ev = drawEvent(state, rng)
@@ -215,8 +215,8 @@ export function beginMonthEvent(state: GameState) {
 
   // 即时事件：效果抽到即并入 monthMods，但 eventResolved 保持 false——
   // UI（EventScreen）先展示这张事件，玩家点「继续」后才进入立项。
-  // 若在这里标记已解决，调用方（App 的自动推进）会在「已解决」状态下
-  // 再次抽卡，导致单月叠加多张即时事件，且界面只显示最后一张。
+  // 若在这里标记已解决，任何在「已解决」状态下再次抽卡的调用方
+  // 都会让单月叠加多张即时事件，且界面只显示最后一张。
   if (ev.type === 'instant') {
     if (ev.mods) {
       state.monthMods = mergeMods(state.monthMods, ev.mods)
@@ -313,10 +313,10 @@ export function nextMonth(state: GameState) {
     generateMonthlyOrders(state)
     return
   }
-  state.phase = 'board'
   state.boardPrompted = false
   maybeDrawBoardGoals(state, new Rng(state.rngState + state.month * 7919))
   syncManagementCards(state)
+  beginMonthEvent(state)
 }
 
 /** 终局。 */
