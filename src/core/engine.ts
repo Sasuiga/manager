@@ -17,12 +17,12 @@ import type { SettleReport } from './settle'
 import type { Climate, GameEventDef, GameState, GoalDef, GoalTrack, Ledger, Money } from './types'
 
 export * from './types'
-export { derive, mergeMods, unitCost } from './derive'
-export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityOf, buildDeck } from './game'
+export { derive, mergeMods, unitCost, rndProjectOutcome } from './derive'
+export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityOf, buildDeck, wagePayableOf } from './game'
 export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct } from './settle'
 export type { SettleReport } from './settle'
-export { previewOperations } from './preview'
-export type { OperatingPreview, ProductPreview, ValueRange } from './preview'
+export { previewOperations, preSettleCash } from './preview'
+export type { OperatingPreview, ProductPreview, ValueRange, PreSettleCash } from './preview'
 export { CORE_SCENARIOS, applyCoreScenario } from './scenarios'
 export type { CoreScenarioDef, CoreScenarioId } from './scenarios'
 export {
@@ -47,11 +47,14 @@ export {
   availableCashAfterPurchasePlan,
   materialAvailableForProduction,
   executePlannedPurchases,
+  plannedMaterialUnitCost,
+  productionUnitCosts,
   lotQty,
   lotPrice,
   lotLabel,
   traderOffer,
   buyFromTrader,
+  traderQuota,
   signAgreement,
   cancelAgreement,
   agreementSlots,
@@ -75,6 +78,10 @@ export {
   toggleOrder,
   startResearch,
   activeResearch,
+  setRndAssign,
+  confirmRndAssignments,
+  rndAssignedTotal,
+  rndActiveThisMonth,
   ipSlots,
   activateIp,
   deactivateIp,
@@ -407,5 +414,5 @@ export function cumulative(ledgers: Ledger[]) {
   )
 }
 
-export { STAFF, RND_PROJECTS, CARD_BY_ID, EQUIPMENT_SHOP, IP_BY_ID } from '../data/game'
+export { OVERTIME_COST, STAFF, RND_PROJECTS, CARD_BY_ID, EQUIPMENT_SHOP, IP_BY_ID } from '../data/game'
 export { DEPT_NAMES, DEPT_SHORT, TIER_LABEL, TIERS, PRODUCT_PRICE } from '../data/game'

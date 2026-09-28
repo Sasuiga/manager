@@ -35,6 +35,8 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.retained = 0
   state.monthMods = setup.mods ?? {}
   state.cardMods = {}
+  /** 场景预设订单需要销售团队作为来源：无销售则开局无订单。 */
+  state.depts.sell.staff = setup.sellStaff ?? 0
   state.orders = setup.orders.map((o, i) => makeOrder(state, i, o))
   state.acceptedOrders = []
   state.declinedOrders = []
@@ -42,6 +44,19 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false }
   state.monthLedger = []
   state.lotsUsed = 0
+  state.wagePayableBy = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
+  // 研发：各场景预置 1 名研发（教学：前 2~3 个月可解锁中端），清空项目/放置/知产
+  state.depts.rnd.staff = setup.rndStaff ?? 1
+  state.depts.rnd.hired = state.depts.rnd.staff
+  state.ipOwned = []
+  state.rndStartsThisMonth = []
+  state.flags['rndConfirmed'] = 0
+  for (const s of Object.values(state.rnd)) {
+    s.projectId = null
+    s.progress = 0
+    s.done = false
+    s.assigned = 0
+  }
   for (const mat of Object.values(state.materials)) {
     mat.qty = 0
     mat.value = 0
@@ -59,18 +74,22 @@ interface ScenarioSetup {
   cash: number
   mods?: MonthMods
   orders: { tier: Tier; qty: number; priceShift?: number }[]
+  /** 开局销售人数：为场景预设订单提供「来源」，与人员模型自洽。 */
+  sellStaff?: number
+  /** 开局研发人数：默认 1（中端解锁教学）；现金受限等场景可覆写。 */
+  rndStaff?: number
 }
 
 const SCENARIO_SETUP: Record<CoreScenarioId, ScenarioSetup> = {
   cheap_low_demand: {
     climate: 'depression',
     cash: 600,
-    orders: [{ tier: 'low', qty: 3 }],
+    orders: [],
   },
   expensive_high_demand: {
     climate: 'overheat',
     cash: 600,
-    orders: [{ tier: 'high', qty: 2 }],
+    orders: [],
   },
   order_heavy: {
     climate: 'boom',
@@ -81,6 +100,7 @@ const SCENARIO_SETUP: Record<CoreScenarioId, ScenarioSetup> = {
       { tier: 'high', qty: 2 },
       { tier: 'special', qty: 1 },
     ],
+    sellStaff: 4,
   },
   spot_heavy: {
     climate: 'boom',
@@ -96,15 +116,12 @@ const SCENARIO_SETUP: Record<CoreScenarioId, ScenarioSetup> = {
         alloy: { supply: -6, tierShift: 0 },
       },
     },
-    orders: [
-      { tier: 'mid', qty: 3 },
-      { tier: 'high', qty: 2 },
-    ],
+    orders: [],
   },
   cash_constrained: {
     climate: 'recovery',
     cash: 250,
-    orders: [{ tier: 'mid', qty: 2 }],
+    orders: [],
   },
 }
 

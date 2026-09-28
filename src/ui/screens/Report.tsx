@@ -67,17 +67,25 @@ export function ReportSheet({ g, onAdvance }: { g: Game; onAdvance: () => void }
         </div>
       ) : null}
 
-      {rep.rnd ? (
+      {rep.rnd.length ? (
         <div className="card">
           <div className="section-label">研发</div>
-          <Row k={rep.rnd.name} v={`${rep.rnd.progress}/${rep.rnd.need}`} />
-          <Row
-            k="本月判定"
-            v={rep.rnd.success === null ? '进度未满' : rep.rnd.success ? '成功' : '失败（保留进度）'}
-            cls={rep.rnd.success ? 'green' : rep.rnd.success === false ? 'red' : ''}
-          />
-          <div style={{ marginTop: 'var(--s2)' }}>
-            <Bar value={rep.rnd.progress} max={rep.rnd.need} kind="emerald" />
+          <div className="stack-sm">
+            {rep.rnd.map((r) => (
+              <div key={r.projectId}>
+                <Row k={r.name} v={`${r.progress}/${r.need}`} />
+                <Row
+                  k="本月判定"
+                  v={r.success === null ? '进度未满' : r.success ? '成功' : '失败（保留进度）'}
+                  cls={r.success ? 'green' : r.success === false ? 'red' : ''}
+                />
+                {r.success === null ? (
+                  <div style={{ marginTop: 'var(--s2)' }}>
+                    <Bar value={r.progress} max={r.need} kind="emerald" />
+                  </div>
+                ) : null}
+              </div>
+            ))}
           </div>
         </div>
       ) : null}
@@ -135,10 +143,11 @@ export function ReportSheet({ g, onAdvance }: { g: Game; onAdvance: () => void }
         </div>
         <div className="stack-sm">
           <Row k="借款" v={wan(bal.debt)} />
+          <Row k="应付职工薪酬" v={wan(bal.wagePayable)} />
           <Row k="实收资本" v={wan(bal.paidIn)} />
           <Row k="股东实物投入" v={wan(bal.ownerCapital)} />
           <Row k="留存收益" v={wan(bal.retained)} cls={bal.retained < 0 ? 'red' : ''} />
-          <Row k="负债与权益合计" v={wan(bal.debt + bal.equity)} bold />
+          <Row k="负债与权益合计" v={wan(bal.debt + bal.wagePayable + bal.equity)} bold />
         </div>
       </div>
 
@@ -227,7 +236,7 @@ function DrillSheet({
         ))}
       </div>
       <div className="hint">
-        事件开销、协议手续费等在支付当月确认，结算不重复扣现金；提案（卡牌）费与招聘费计入管理费用。
+        事件开销、协议手续费等在支付当月确认，结算不重复扣现金；工资当月计提应付职工薪酬、次月实付；提案（卡牌）费与招聘费计入管理费用。
       </div>
     </Sheet>
   )

@@ -12,13 +12,18 @@ import {
   CLIMATE_MATERIAL,
   DEPT_ORDER,
   IP_BY_ID,
-  MAKER_CAP_NO_SLOT,
-  MAKER_CAP_WITH_SLOT,
+  EQUIP_CAP_PER_WORKER,
+  MAKER_CAP_BASE,
   MATERIALS,
+  OWNER_CAPACITY,
   MONTHLY_RATE,
   OVERTIME_COST,
-  PRODUCT_PRICE,
   RND_COST_PER_PROJECT,
+  RND_PROGRESS_PER_WORKER,
+  RND_RATE_PER_WORKER,
+  RND_RATE_CAP,
+  RND_PROJECTS,
+  PRODUCT_PRICE,
   SALES_ORDER_COUNT,
   SALES_PUSH_CAP,
   SALES_PUSH_COST,
@@ -27,7 +32,7 @@ import {
   TIERS,
   priceOf,
 } from '../data/game'
-import type { CardPlayEffect, Dept, GameState, MonthMods, Tier } from './types'
+import type { CardPlayEffect, Dept, GameState, MonthMods, ResearchProjectDef, Tier } from './types'
 
 /**
  * 派生层：把「气候 + 事件 + 已打出的卡 + 已激活知产 + 人员」汇总成一组
@@ -81,9 +86,11 @@ export interface DerivedTotals {
   buyLots: number
   /** 采购总价格档位修正 */
   buyTierShift: number
-  /** 研发 */
+  /** 研发：平修正（事件/卡牌/知产），作用于每个在研项目；人员放置按项目另行计算（rndProjectOutcome） */
   rndProgress: number
   rndRate: number
+  /** 本月在研项目数（已立项且放置 ≥1 人） */
+  rndActiveCount: number
   rndCost: number
   rndCostTotal: number
   /** 每月解雇 / 招聘等特殊标记 */
@@ -191,7 +198,9 @@ function mergeTier(r: Record<Tier, number>): Partial<Record<Tier, number>> {
 /** 当前已激活的知识产权列表（含事件带来的临时知产）。 */
 export function activeIps(state: GameState): string[] {
   const out: string[] = []
-  for (const id of state.ipActive) if (id) out.push(id)
+  // 核心模式无知产激活槽位：已拥有即生效；完整模式保留槽位制
+  const effective = state.mode === 'core' ? state.ipOwned : state.ipActive
+  for (const id of effective) if (id) out.push(id)
   for (const id of state.monthMods.tempIps ?? []) {
     if (id === 'normal' || id === 'strong') {
       // 事件临时知产：从对应池中挑一个尚未拥有的
@@ -224,6 +233,7 @@ function ipEffects(ids: string[]) {
     creditLine: 0,
     rateSave: 0,
     orderPriceShift: 0,
+    buyTierShift: 0,
   }
   for (const id of ids) {
     const e = IP_BY_ID[id]?.effect
@@ -246,6 +256,7 @@ function ipEffects(ids: string[]) {
     acc.creditLine += e.creditLine ?? 0
     acc.rateSave += e.rateSave ?? 0
     acc.orderPriceShift += e.orderPriceShift ?? 0
+    acc.buyTierShift += e.buyTierShift ?? 0
   }
   return acc
 }
@@ -275,16 +286,15 @@ export function derive(state: GameState): DerivedTotals {
   }
   const mods = mergeMods(climateMods, state.monthMods, state.cardMods)
 
-  // ── 原料 ──
-  const buyStaffSupply = staffCount.buy * 2
+  // ── 原料（采购人员不再提供供应加成：增量供给走供应商开发/气候/事件）──
   const materials: DerivedTotals['materials'] = {}
   for (const m of MATERIALS) {
     const mm = mods.materials?.[m.id] ?? { supply: 0, tierShift: 0 }
     const developed = state.materialsDeveloped[m.id] ?? 0
-    const supply = Math.max(0, m.baseSupply + developed + mm.supply + (mods.allSupply ?? 0) + buyStaffSupply + ip.matSupply)
+    const supply = Math.max(0, m.baseSupply + developed + mm.supply + (mods.allSupply ?? 0) + ip.matSupply)
     let shift = mm.tierShift + (mods.allTierShift ?? 0)
     if (staffCount.buy >= 4) shift -= 1 // 采购 4 人：所有原料价格降 1 档
-    shift -= ip.priceShift > 0 && state.ipOwned.includes('I8') ? 0 : 0 // 质量认证作用于售价，不作用于原料
+    shift += ip.buyTierShift // 大宗集采（J9）：所有原料价格降 1 档（质量认证 I8 只作用于产品售价，不作用于原料）
     shift = Math.max(-3, Math.min(3, shift))
     const cap = m.baseCapacity + ip.capacityBonus
     materials[m.id] = { supply, tierShift: shift, price: priceOf(m, shift), cap }
@@ -324,15 +334,8 @@ export function derive(state: GameState): DerivedTotals {
   const price: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const t of TIERS) price[t] = productPriceRaw(t, priceShift[t])
 
-  // ── 产能 ──
-  const slots = state.equipment.length
-  const equipCap = state.equipment.reduce((a, e) => a + e.capacity + ip.equipCapacity, 0)
-  const placed = Math.min(staffCount.make, slots)
-  const unplaced = Math.max(0, staffCount.make - slots)
-  let makerCap = 0
-  const per = makerPerStaff(staffCount.make)
-  makerCap += placed * per + unplaced * MAKER_CAP_NO_SLOT
-  const capacity = Math.max(0, equipCap + makerCap + (mods.capacity ?? 0))
+  // ── 产能：老板自产 + 工人数 × 每人产能（基础 5，2 人/4 人解锁各 +1，每台设备 +2） ──
+  const capacity = Math.max(0, OWNER_CAPACITY + staffCount.make * makerPerStaff(staffCount.make, state.equipment.length) + (mods.capacity ?? 0))
 
   // ── 薪酬 ──
   const salaryPer: Record<Dept, number> = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
@@ -347,26 +350,30 @@ export function derive(state: GameState): DerivedTotals {
   // ── 资金 ──
   const rate = Math.max(0, MONTHLY_RATE + (mods.rateShift ?? 0) * 0.001 - ip.rateSave * 0.001)
   const interest = Math.max(0, Math.round(state.debt * rate) - ip.interestSave)
-  const equipCredit = state.equipment.reduce((a, e) => a + e.creditLine, 0)
-  const creditLine = Math.round((BASE_CREDIT_LINE + equipCredit + ip.creditLine) * (mods.creditFactor ?? 1))
+  const creditLine = Math.round((BASE_CREDIT_LINE + ip.creditLine) * (mods.creditFactor ?? 1))
 
   // ── 销售 ──
   // 品牌加成计入资源池（新模型下品牌 = 更多推力）
   const brandBonus = (staffCount.sell >= 5 ? 3 : 0) + ip.brandBonus
   const salesResource = BASE_SALES_RESOURCE + salesResourceFromStaff(Math.min(5, staffCount.sell)) + ip.salesResource + brandBonus + (mods.salesResource ?? 0)
-  const orderCount = (state.mode === 'core' ? 2 : SALES_ORDER_COUNT[Math.min(5, staffCount.sell)]) + ip.orderBonus + (mods.orders ?? 0)
+  const orderCount = SALES_ORDER_COUNT[Math.min(5, staffCount.sell)] + ip.orderBonus + (mods.orders ?? 0)
   const orderQty = mods.orderQty ?? 10
   const orderPriceShift = 1 + ip.orderPriceShift + (mods.orderPriceShift ?? 0)
 
   // ── 采购 ──
-  const buyLots = (state.mode === 'core' ? 4 : BUY_LOT_SLOTS[Math.min(5, staffCount.buy)]) + (mods.buyLots ?? 0)
+  const buyLots = BUY_LOT_SLOTS[Math.min(5, staffCount.buy)] + (mods.buyLots ?? 0)
 
-  // ── 研发 ──
-  const rndProgress = staffCount.rnd * 2 + (mods.rndProgress ?? 0) + ip.rndProgress
-  const rndRate = staffCount.rnd * 5 + (mods.rndRate ?? 0) + ip.rndRate
-  const hasProject = Object.values(state.rnd).some((s) => s.projectId && !s.done)
-  const rndCost = RND_COST_PER_PROJECT + (mods.rndCost ?? 0)
-  const rndCostTotal = hasProject ? Math.max(0, rndCost) : 0
+  // ── 研发：平修正（事件/卡牌/知产）+ 按项目放置人数，见 rndProjectOutcome ──
+  const rndProgress = (mods.rndProgress ?? 0) + ip.rndProgress
+  const rndRate = (mods.rndRate ?? 0) + ip.rndRate
+  let rndActiveCount = 0
+  for (const p of RND_PROJECTS) {
+    const s = state.rnd[p.id]
+    if (s?.projectId && !s.done) rndActiveCount += 1
+  }
+  const rndCost = Math.max(0, RND_COST_PER_PROJECT + (mods.rndCost ?? 0))
+  /** 在研项目数 × 单项月费（在研 = 已立项且未完成，承诺制费用） */
+  const rndCostTotal = rndCost * rndActiveCount
 
   // ── 运营 ──
   const apMax = BASE_AP + Math.max(0, staffCount.ops - 1) + (mods.ap ?? 0)
@@ -408,12 +415,16 @@ export function derive(state: GameState): DerivedTotals {
   }
   for (const dp of DEPT_ORDER) {
     const rows: typeof deptLedger.ops = []
-    // 工资（月末结算现金支付；资产负债无「应付工资」科目，不再挂账）
+    // 工资（月末计提应付职工薪酬：费用当期确认、挂账不动现金，次月结算时实付上月工资）
     if (salaryPer[dp] > 0 && staffCount[dp] > 0) {
-      const acc = dp === 'make' ? '制造费用' : dp === 'rnd' ? '研发费用' : '管理费用'
+      const acc = dp === 'make' ? '制造费用' : dp === 'rnd' ? '研发费用' : dp === 'sell' ? '销售费用' : '管理费用'
       const per = salaryPer[dp]
       const total = per * staffCount[dp]
-      rows.push({ item: '工资支付', debit: acc, debitAmt: total, credit: '现金', creditAmt: total })
+      rows.push({ item: '工资计提', debit: acc, debitAmt: total, credit: '应付职工薪酬', creditAmt: total })
+    }
+    // 实付上月计提的工资（借 应付职工薪酬 / 贷 现金；本月现金流出，上月费用已在计提时确认）
+    if (state.wagePayableBy[dp] > 0) {
+      rows.push({ item: '工资支付（上月计提）', debit: '应付职工薪酬', debitAmt: state.wagePayableBy[dp], credit: '现金', creditAmt: state.wagePayableBy[dp] })
     }
     // 设备折旧（非现金）
     if (dp === 'make' && makeDepreciation > 0) {
@@ -437,7 +448,7 @@ export function derive(state: GameState): DerivedTotals {
         credit: hireFee > 0 ? '现金' : '管理费用',
         creditAmt: Math.abs(hireFee),
         detail: [
-          `本月招聘 ${hireThisMonth[dp]} 人、裁员返还已抵减，净额 ${(Math.abs(hireFee) / 10).toFixed(1)}w`,
+          `本月招聘 ${hireThisMonth[dp]} 人、裁员返还已抵减，净额 ${(Math.abs(hireFee) / 10).toFixed(2)}w`,
           hireFee > 0 ? '当期费用化：计入管理费用（不再资本化为待摊费用）' : '裁员返还多于本月招聘费：反向冲减管理费用',
         ],
       })
@@ -455,7 +466,7 @@ export function derive(state: GameState): DerivedTotals {
         credit: '现金',
         creditAmt: interest,
         detail: [
-          `借款余额 ${(state.debt / 10).toFixed(0)}w × 月利率 ${(rate * 100).toFixed(1)}%`,
+          `借款余额 ${(state.debt / 10).toFixed(2)}w × 月利率 ${(rate * 100).toFixed(1)}%`,
           '计入财务费用，结算时现金支付',
         ],
       })
@@ -477,10 +488,10 @@ export function derive(state: GameState): DerivedTotals {
       const closing = wageTotal + makeDepreciation + overtimeCost + variance
       if (closing > 0) {
         const lines: string[] = []
-        if (wageTotal > 0) lines.push(`生产人员工资 ${(wageTotal / 10).toFixed(1)}w`)
-        if (makeDepreciation > 0) lines.push(`设备折旧 ${(makeDepreciation / 10).toFixed(1)}w`)
-        if (overtimeCost > 0) lines.push(`加班费 ${(overtimeCost / 10).toFixed(1)}w`)
-        if (variance > 0) lines.push(`降本差异 ${(variance / 10).toFixed(1)}w`)
+        if (wageTotal > 0) lines.push(`生产人员工资 ${(wageTotal / 10).toFixed(2)}w`)
+        if (makeDepreciation > 0) lines.push(`设备折旧 ${(makeDepreciation / 10).toFixed(2)}w`)
+        if (overtimeCost > 0) lines.push(`加班费 ${(overtimeCost / 10).toFixed(2)}w`)
+        if (variance > 0) lines.push(`降本差异 ${(variance / 10).toFixed(2)}w`)
         lines.push('制造费用中未转入存货的部分当期费用化（工资/折旧不资本化进存货成本），与损益表「生产费用」一致')
         rows.push({ item: '生产费用结转', debit: '生产费用', debitAmt: closing, credit: '制造费用', creditAmt: closing, detail: lines })
       }
@@ -514,6 +525,7 @@ export function derive(state: GameState): DerivedTotals {
     buyTierShift: mods.allTierShift ?? 0,
     rndProgress,
     rndRate,
+    rndActiveCount,
     rndCost,
     rndCostTotal,
     flags: collectFlags(state, mods),
@@ -535,10 +547,11 @@ function productPriceRaw(tier: Tier, shift: number) {
   return arr[idx]
 }
 
-export function makerPerStaff(staff: number): number {
-  let v = MAKER_CAP_WITH_SLOT
-  if (staff >= 2) v += 2
+export function makerPerStaff(staff: number, equipmentCount = 0): number {
+  let v = MAKER_CAP_BASE
+  if (staff >= 2) v += 1
   if (staff >= 4) v += 1
+  v += equipmentCount * EQUIP_CAP_PER_WORKER
   return v
 }
 
@@ -581,4 +594,16 @@ export function unitCost(_state: GameState, tier: Tier, d: DerivedTotals): numbe
     cost += per * (mat?.price ?? 0)
   }
   return Math.round(cost * d.costFactor)
+}
+
+/** 单项目研发：按本月放置人数计算进度增量与成功率（平修正作用于所有在研项目）。 */
+export function rndProjectOutcome(
+  d: DerivedTotals,
+  def: ResearchProjectDef,
+  assigned: number,
+): { gain: number; rate: number } {
+  const gain = assigned * RND_PROGRESS_PER_WORKER + (d.rndProgress ?? 0)
+  const cap = def.rateCap ?? RND_RATE_CAP / 100
+  const rate = Math.max(0.05, Math.min(cap, def.rate + (assigned * RND_RATE_PER_WORKER + (d.rndRate ?? 0)) / 100))
+  return { gain, rate }
 }

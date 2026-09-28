@@ -66,7 +66,9 @@ function play(seed: number) {
 
     E.setPlan(s, 'low', Math.min(E.maxProducible(s, 'low'), want))
     E.setAlloc(s, 'low', E.derive(s).salesResource)
-    if (s.depts.rnd.staff >= 1 && !E.activeResearch(s)) E.startResearch(s, 'bom-mid')
+    if (s.depts.rnd.staff >= 1 && !E.activeResearch(s)) {
+      E.setRndAssign(s, 'bom-mid', s.depts.rnd.staff)
+    }
 
     // 周转紧张时借一点
     if (s.cash < 200) {

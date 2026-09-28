@@ -44,12 +44,13 @@ describe('audit', () => {
         const d = E.derive(s)
         E.setPlan(s, 'low', Math.min(E.maxProducible(s, 'low'), 12))
         E.setAlloc(s, 'low', d.salesResource)
-        if (s.depts.rnd.staff >= 1) { const t = s.products.mid.built ? 'ip-normal' : 'bom-mid'; if (!s.rnd[t].done) E.startResearch(s, t) }
+        if (s.depts.rnd.staff >= 1) { const t = s.products.mid.built ? 'ip-supply-1' : 'bom-mid'; if (!s.rnd[t].done) E.setRndAssign(s, t, s.depts.rnd.staff) }
         if (s.cash < 300) { const d2 = E.derive(s); const amt = Math.min(d2.creditAvailable, 200); if (amt >= 10) E.borrow(s, amt - (amt % 10)) }
 
         const rep = E.settleMonth(s)
         const b = E.balanceSheet(s)
-        const gap = r2(b.totalAssets - b.debt - b.equity)
+        // 恒等式：资产 = 负债（借款 + 应付职工薪酬） + 所有者权益
+        const gap = r2(b.totalAssets - b.debt - b.wagePayable - b.equity)
         worst = Math.max(worst, Math.abs(gap))
         if (gap !== 0) console.log(`seed ${seed} m${m} 失衡 ${gap}`)
         // 报表自洽：损益表编制出来的净利润 = 留存收益增量

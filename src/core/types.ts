@@ -185,6 +185,9 @@ export interface SaleRecord {
 
 export type ResearchKind = 'bom' | 'ip'
 
+/** IP 技能树分支 */
+export type RndBranch = 'supply' | 'channel' | 'equip'
+
 export interface ResearchProjectDef {
   id: string
   name: string
@@ -193,10 +196,18 @@ export interface ResearchProjectDef {
   need: number
   /** 基础成功率 0–1 */
   rate: number
+  /** 成功率上限 0–1（默认 90%；中端教学项 100%） */
+  rateCap?: number
   /** BOM 项目对应的层次 */
   tier?: Tier
-  /** IP 项目对应的池 */
-  ipPool?: 'normal' | 'strong'
+  /** IP 技能树节点授予的具体知产 */
+  ipId?: string
+  /** IP 技能树分支 */
+  branch?: RndBranch
+  /** IP 技能树阶段 1/2/3 */
+  stage?: 1 | 2 | 3
+  /** 前置节点（完成后方可立项） */
+  preq?: string
   desc: string
 }
 
@@ -205,6 +216,8 @@ export interface ResearchSlot {
   progress: number
   /** 本局已完成次数（用于条件型目标） */
   done: boolean
+  /** 本月放置的研发人员数（计划层，结算执行，月初清零） */
+  assigned: number
 }
 
 export interface IpDef {
@@ -234,6 +247,8 @@ export interface IpEffect {
   creditLine: Money
   rateSave: number
   orderPriceShift: number
+  /** 原料价格档位修正（大宗集采） */
+  buyTierShift: number
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -525,6 +540,8 @@ export interface BalanceSheet {
   equipmentAccum: Money
   totalAssets: Money
   debt: Money
+  /** 应付职工薪酬（上月计提、次月实付，挂账负债） */
+  wagePayable: Money
   equity: Money
   retained: Money
   paidIn: Money
@@ -613,6 +630,11 @@ export interface GameState {
    */
   pendingIncome: Money
   pendingCost: Money
+  /**
+   * 应付职工薪酬（分部门挂账）：月末按当月工资计提，次月结算时实付上月工资。
+   * 计提当月费用确认进损益、负债增加（不动现金）；实付次月现金流出、负债冲销。
+   */
+  wagePayableBy: Record<Dept, Money>
   /** 下月售价修正（库存积压等） */
   nextMonthPrice: Partial<Record<Tier, number>>
   /** 本月已完成的研发立项 */

@@ -26,6 +26,12 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
   const getDetailLines = (r: typeof rows[number]): string[] => {
     if (r.detail?.length) return r.detail
     if (r.item.includes('工资')) {
+      if (r.item.includes('支付')) {
+        return [
+          `实付上月计提的薪酬 ${wan(r.debitAmt)}（借 应付职工薪酬 / 贷 现金）`,
+          '当月计提、次月实发：上月工资在本月现金流出，费用已于计提当月确认',
+        ]
+      }
       const per = d.salaryPer[dept]
       const base = STAFF[dept].salary
       const lines: string[] = [`基础月薪 ${wan(base)} / 人`]
@@ -34,7 +40,7 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
         lines.push(`修正后 ${wan(per)} / 人（${delta > 0 ? '+' : ''}${wan(delta)}，受 IP / 事件影响）`)
       }
       lines.push(`人数 ${s.depts[dept].staff} 人`)
-      lines.push(`支付额 ${wan(per * s.depts[dept].staff)}（结算时现金支付，资产负债不挂应付工资）`)
+      lines.push(`计提额 ${wan(per * s.depts[dept].staff)}（贷 应付职工薪酬，次月实付；本月不动现金）`)
       return lines
     }
     if (r.item.includes('招聘')) {
@@ -165,7 +171,7 @@ export function TurnScreen({
 }) {
   const s = g.s
   const d = E.derive(s)
-  const visibleDepts: E.Dept[] = s.mode === 'core' ? ['buy', 'make', 'sell'] : DEPTS
+  const visibleDepts: E.Dept[] = s.mode === 'core' ? ['buy', 'make', 'sell', 'rnd'] : DEPTS
 
   /** 轨道红点：有未处理事项时亮起。 */
   const dots: Record<E.Dept, boolean> = {
@@ -186,7 +192,7 @@ export function TurnScreen({
         {dept === 'rnd' ? <RndPage g={g} /> : null}
         {dept === 'preview' ? <PreviewPage g={g} onSettle={onSettle} /> : null}
 
-        {s.mode === 'full' && dept !== 'preview' ? <HireBlock g={g} dept={dept} /> : null}
+        {dept !== 'preview' ? <HireBlock g={g} dept={dept} /> : null}
       </div>
 
       <nav className="track">
@@ -202,7 +208,7 @@ export function TurnScreen({
           onClick={() => s.mode === 'core' ? onDept('preview') : onSettle()}
         >
           <Icon name="settle" size={19} />
-          <span>{s.mode === 'core' ? '预演' : '结算'}</span>
+          <span>{s.mode === 'core' ? '预算' : '结算'}</span>
         </button>
       </nav>
     </>
@@ -367,6 +373,8 @@ function BuyPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
   const mats = E.materialViews(gs)
+  /** 结算前现金（与预算页同一口径）：月初现金 − 纯消耗（采购计划/协议/加班/研发/利息/上月工资） */
+  const presettle = E.preSettleCash(gs)
   const [buy, setBuy] = useState<{ id: string; lot: E.LotSize } | null>(null)
   const [pickLot, setPickLot] = useState<string | null>(null)
   const [trader, setTrader] = useState(false)
@@ -381,15 +389,43 @@ function BuyPage({ g }: { g: Game }) {
           每月为原料选择采购档位，签长期协议锁定供货量；人员越多档位越宽、可解锁高级材料。
         </p>
         <LedgerSection g={g} dept="buy" />
-        <p className="hint" style={{ marginTop: 'var(--s2)' }}>
-          {gs.mode === 'core'
-            ? '普通采购先形成计划，结算时按“采购入库 → 生产 → 销售”统一执行；结算前可调整。'
-            : '采购实付现金自动入账「借 库存 / 贷 现金」，金额与库存账面、生产领料出库严格勾稽。'}
-        </p>
+      </div>
+
+      {/* 产品 BOM 看板（从生产页挪来）：采购时对照配方估算「买多少原料 ≈ 产多少货」 */}
+      <div className="card">
+        <h3>产品 BOM</h3>
+        <div className="title-rule" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
+          <span className="xs" style={{ color: 'var(--gold)' }}>产品</span>
+          <span className="xs faint">配方（每件）</span>
+          <span className="xs faint">库存 / 成本</span>
+          {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
+            const bom = BOMS[t]
+            const p = gs.products[t]
+            const recipeText = Object.entries(bom.recipe)
+              .map(([id, n]) => `${MATERIAL_BY_ID[id]?.name ?? id}×${n}`)
+              .join(' + ')
+            return (
+              <Fragment key={t}>
+                <span className="sm">
+                  <b>{bom.name}</b>
+                  <span className="faint xs"> · {TIER_LABEL[t]}</span>
+                </span>
+                <span className="xs faint">{recipeText}</span>
+                <span>
+                  <span className="mono sm">{p.qty}</span>
+                  <span className="faint xs"> 件 · {wan(p.avgCost)}/件</span>
+                </span>
+              </Fragment>
+            )
+          })}
+        </div>
+        <div className="hint">配方按 BOM 扣料；库存为成品总件数，单位成本为最近批次入账均价。对照配方与原料库存，估算本次采购能支撑的产量。</div>
       </div>
 
       <div className="card">
-        <div className="section-label">原料</div>
+        <h3>原料采购</h3>
+        <div className="title-rule" />
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85em' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--line)' }}>
@@ -397,6 +433,7 @@ function BuyPage({ g }: { g: Game }) {
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>{gs.mode === 'core' ? '库存 + 计划' : '库存'}</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>供给</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>价格水平</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>库存成本</th>
               {gs.mode === 'core' ? <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>库存占用</th> : null}
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>操作</th>
             </tr>
@@ -418,6 +455,22 @@ function BuyPage({ g }: { g: Game }) {
                 </td>
                 <td style={{ textAlign: 'right', padding: '6px 8px' }}>
                   <span className={tierClass(m.tierShift)}>{tierName(m.tierShift)}</span>
+                </td>
+                <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
+                  {gs.mode === 'core' && m.chosenLot ? (
+                    <span className="mono xs">
+                      {m.qty > 0 ? (
+                        <>
+                          {wan(m.avgCost)} →{' '}
+                        </>
+                      ) : null}
+                      <b>{wan(E.plannedMaterialUnitCost(gs, m.id))}</b>
+                    </span>
+                  ) : m.qty > 0 ? (
+                    <span className="mono xs">{wan(m.avgCost)}</span>
+                  ) : (
+                    <span className="xs faint">无库存</span>
+                  )}
                 </td>
                 {gs.mode === 'core' ? (
                   <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
@@ -450,18 +503,30 @@ function BuyPage({ g }: { g: Game }) {
             ))}
           </tbody>
         </table>
+        <p className="hint" style={{ marginTop: 'var(--s2)' }}>
+          {gs.mode === 'core'
+            ? '普通采购先形成计划，结算时按“采购入库 → 生产 → 销售”统一执行；结算前可调整。'
+            : '采购实付现金自动入账「借 库存 / 贷 现金」，金额与库存账面、生产领料出库严格勾稽。'}
+        </p>
+        <p className="hint" style={{ marginTop: 'var(--s1)' }}>
+          库存成本 = 原料账面移动加权平均单价；核心模式选档后按（账面 + 计划付款）÷（库存 + 计划到货）更新，供生产页单位成本与销售页单件毛利使用。
+        </p>
       </div>
 
       {gs.mode === 'core' ? (
         <div className="card">
-          <div className="section-label">采购计划汇总</div>
-          <Row k="计划支出" v={wan(E.plannedPurchaseCost(gs))} />
-          <Row k="计划后可用现金" v={wan(E.availableCashAfterPurchasePlan(gs))} />
+          <h3>采购计划汇总</h3>
+          <div className="title-rule" />
+          <Row k="计划支出" v={wan(presettle.purchaseSpend)} />
+          <Row k="结算前现金" v={wan(presettle.cashAfter)} cls={presettle.cashAfter < 0 ? 'red' : ''} />
           <Row k="已选采购档" v={`${gs.lotsUsed} / ${d.buyLots}`} />
+          {presettle.cashAfter < 0 ? (
+            <p className="hint">纯消耗（含协议/加班/研发/利息/上月工资）超出月初现金，计划超出资金能力；明细见「预算」页</p>
+          ) : null}
         </div>
       ) : null}
 
-      {gs.mode === 'full' ? <div className="card">
+      <div className="card">
         <h3>其他采购手段</h3>
         <div className="title-rule" />
         <div className="stack">
@@ -480,7 +545,7 @@ function BuyPage({ g }: { g: Game }) {
             </span>
           </button>
         </div>
-      </div> : null}
+      </div>
 
       {pickLot ? (
         <Sheet title="选择采购档位" sub={mats.find((x) => x.id === pickLot)?.name} onClose={() => setPickLot(null)}>
@@ -497,7 +562,7 @@ function BuyPage({ g }: { g: Game }) {
               return (
                 <button
                   key={lot}
-                  className={`btn btn-mini${chosen ? ' on' : ''}`}
+                  className={`btn btn-mini${chosen ? ' on selected' : ''}`}
                   disabled={disabled}
                   onClick={() => {
                     setBuy({ id: pickLot, lot })
@@ -696,11 +761,18 @@ function BuyConfirmSheet({
 function TraderSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const gs = g.s
   const offers = E.traderOffer(gs)
+  const quota = E.traderQuota(gs)
   return (
     <Sheet title="贸易商" sub="小批 · 价格更高 · 不占本月档数" onClose={onClose}>
+      {quota > 1 ? (
+        <p className="muted sm" style={{ marginBottom: 'var(--s2)' }}>
+          卡牌【贸易商】生效中：每品种额外 {quota - 1} 次购买机会
+        </p>
+      ) : null}
       <div className="stack">
         {offers.map((o) => {
-          const used = gs.extraBuys.some((e) => e.kind === 'trader' && e.materialId === o.materialId)
+          const used = gs.extraBuys.filter((e) => e.kind === 'trader' && e.materialId === o.materialId).length
+          const soldOut = used >= quota
           const total = o.qty * o.price
           return (
             <div key={o.materialId} className="card">
@@ -710,10 +782,10 @@ function TraderSheet({ g, onClose }: { g: Game; onClose: () => void }) {
               <div style={{ marginTop: 'var(--s3)' }}>
                 <button
                   className="btn btn-mini"
-                  disabled={used || total > gs.cash || o.qty <= 0}
+                  disabled={soldOut || total > gs.cash || o.qty <= 0}
                   onClick={() => g.act((st) => E.buyFromTrader(st, o.materialId, o.qty, o.price))}
                 >
-                  <span className="btn-main">{used ? '本月已购' : '购买'}</span>
+                  <span className="btn-main">{soldOut ? '本月已购' : '购买'}</span>
                 </button>
               </div>
             </div>
@@ -786,7 +858,7 @@ function AgreementSheet({ g, onClose }: { g: Game; onClose: () => void }) {
         })}
       </div>
       <div className="hint">
-        采购 {d.buyLots} 档可用；研发到 5 人可将锁定期延长至 6 个月。
+        采购 {d.buyLots} 档可用；采购到 5 人可将锁定期延长至 6 个月。
       </div>
     </Sheet>
   )
@@ -801,6 +873,7 @@ function MakePage({ g }: { g: Game }) {
   const maxBy = E.maxProducibleByTier(gs)
   const plannedTotal = E.plannedTotal(gs)
   const remainingCap = Math.max(0, cap - plannedTotal)
+  const ucost = E.productionUnitCosts(gs)
   const [equip, setEquip] = useState(false)
   const [confirm, setConfirm] = useState(false)
 
@@ -813,38 +886,6 @@ function MakePage({ g }: { g: Game }) {
           将产能分配到各产品线，确认后按 BOM 立即扣料入库；设备与加班可提升产能上限，人员越多单月产量越高。
         </p>
         <LedgerSection g={g} dept="make" />
-      </div>
-
-      {/* 产品 BOM 看板：与销售部「市场需求表」同款布局，仅展示已解锁产品线 */}
-      <div className="card">
-        <h3>产品 BOM</h3>
-        <div className="title-rule" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
-          <span className="xs" style={{ color: 'var(--gold)' }}>产品</span>
-          <span className="xs faint">配方（每件）</span>
-          <span className="xs faint">库存 / 成本</span>
-          {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
-            const bom = BOMS[t]
-            const p = gs.products[t]
-            const recipeText = Object.entries(bom.recipe)
-              .map(([id, n]) => `${MATERIAL_BY_ID[id]?.name ?? id}×${n}`)
-              .join(' + ')
-            return (
-              <Fragment key={t}>
-                <span className="sm">
-                  <b>{bom.name}</b>
-                  <span className="faint xs"> · {TIER_LABEL[t]}</span>
-                </span>
-                <span className="xs faint">{recipeText}</span>
-                <span>
-                  <span className="mono sm">{p.qty}</span>
-                  <span className="faint xs"> 件 · {wan(p.avgCost)}/件</span>
-                </span>
-              </Fragment>
-            )
-          })}
-        </div>
-        <div className="hint">配方按 BOM 扣料；库存为成品总件数，单位成本为最近批次入账均价。</div>
       </div>
 
       {/* 产能分配：与销售资源分配面板同款，已分配产能可在已解锁产品线间自由腾挪 */}
@@ -926,13 +967,39 @@ function MakePage({ g }: { g: Game }) {
             onClick={() => setConfirm(true)}
           >
             <span className="btn-main">确认生产安排</span>
-            <span className="btn-sub">{plannedTotal > 0 ? `共 ${plannedTotal} 件，于预演结算时统一入库` : '先分配产量'}</span>
+            <span className="btn-sub">{plannedTotal > 0 ? `共 ${plannedTotal} 件，于结算时统一入库` : '先分配产量'}</span>
           </button>
         </div> : null}
       </div>
 
-      {gs.mode === 'full' ? <div className="card">
-        <h3>加班与设备</h3>
+      {/* 生产单位成本（统一口径）：材料按采购计划后库存单价，固定成本按排产量分摊；销售页单件毛利与预算页预计毛利共用此数值 */}
+      <div className="card">
+        <h3>生产单位成本</h3>
+        <div className="title-rule" />
+        {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
+          const c = ucost.tiers[t]
+          return (
+            <Row
+              key={t}
+              k={
+                <>
+                  {BOMS[t].name}
+                  <span className="faint xs"> · {TIER_LABEL[t]}</span>
+                </>
+              }
+              v={`${wan(c.total)}/件（材料 ${wan(c.material)} + 固定分摊 ${wan(c.fixed)}）`}
+            />
+          )
+        })}
+        <div className="hint">
+          {ucost.planned > 0
+            ? `材料按采购计划后库存单价（移动加权平均）×配方×降本系数计；固定成本 ${wan(ucost.fixedTotal)}（薪酬 ${wan(ucost.fixedParts.labor)} + 折旧 ${wan(ucost.fixedParts.depreciation)} + 加班 ${wan(ucost.fixedParts.overtime)}）按排产 ${ucost.planned} 件分摊。销售页单件毛利与预算页预计毛利按此口径。`
+            : '本月未排产：单位成本只计材料，固定成本暂不分摊。销售页单件毛利与预算页预计毛利按此口径。'}
+        </div>
+      </div>
+
+      <div className="card">
+        <h3>{gs.mode === 'core' ? '加班' : '加班与设备'}</h3>
         <div className="title-rule" />
         <div className="stack">
           <button
@@ -945,12 +1012,14 @@ function MakePage({ g }: { g: Game }) {
               {gs.depts.make.staff < 3 ? '需生产 3 人解锁' : '0.5w · 本月产能 +10'}
             </span>
           </button>
-          <button className="btn btn-mini" onClick={() => setEquip(true)}>
-            <span className="btn-main">购买设备</span>
-            <span className="btn-sub">扩充产能与借款额度</span>
-          </button>
+          {gs.mode === 'full' ? (
+            <button className="btn btn-mini" onClick={() => setEquip(true)}>
+              <span className="btn-main">购买设备</span>
+              <span className="btn-sub">扩充产能与借款额度</span>
+            </button>
+          ) : null}
         </div>
-      </div> : null}
+      </div>
 
       {gs.equipment.length ? (
         <div className="card">
@@ -1169,14 +1238,9 @@ function TierOrderRow({
 function SellPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
-  const plannedTotal = TIER_ORDER.reduce((sum, tier) => sum + Math.max(0, gs.plan.quantities[tier]), 0)
-  const depreciation = gs.equipment.reduce((sum, e) => sum + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0)
-  const fixedProductionCost = d.salaryPer.make * gs.depts.make.staff + depreciation
-  /** 预估单件毛利（万元）= 单价 − 变动单位成本 − 固定成本分摊；市价与订单价按单件同口径对比。 */
-  const estimatedGrossProfit = (tier: Tier, price: number) => {
-    const allocatedFixed = plannedTotal > 0 ? fixedProductionCost / plannedTotal : 0
-    return Math.round(price - E.unitCost(gs, tier, d) - allocatedFixed)
-  }
+  const unitCosts = E.productionUnitCosts(gs)
+  /** 预估单件毛利（统一口径）= 单价 − 生产单位成本（计划后库存材料成本 + 固定成本分摊）；与预算页同口径、同数值（不取整），市价与订单价按单件同口径对比。 */
+  const estimatedGrossProfit = (tier: Tier, price: number) => price - unitCosts.tiers[tier].total
   const used = E.allocUsed(gs)
   /** 各层强制订单量（事件/卡牌产生，必交）。 */
   const forcedQtyBy: Record<string, number> = { low: 0, mid: 0, high: 0, special: 0 }
@@ -1348,9 +1412,23 @@ function SellPage({ g }: { g: Game }) {
 function RndPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
-  const active = E.activeResearch(gs)
+  const staff = gs.depts.rnd.staff
+  const assigned = E.rndAssignedTotal(gs)
   const slots = E.ipSlots(gs)
   const [ips, setIps] = useState(false)
+  const [theme, setTheme] = useState<'prod' | 'ip' | null>(null)
+
+  const themeStats = (kind: E.ResearchKind) => {
+    const list = E.RND_PROJECTS.filter((p) => p.kind === kind)
+    // 逐层揭示：前置未解锁的阶段 2/3 节点不算可见总数（BOM 无前置，恒 3）
+    const visible = list.filter((p) => !p.preq || !!gs.rnd[p.preq]?.done)
+    const active = visible.filter((p) => { const s = gs.rnd[p.id]; return !!s?.projectId && !s.done && s.assigned > 0 }).length
+    return { active, total: visible.length }
+  }
+  const bom = themeStats('bom')
+  const ip = themeStats('ip')
+
+  const free = Math.max(0, staff - assigned)
 
   return (
     <>
@@ -1358,92 +1436,343 @@ function RndPage({ g }: { g: Game }) {
         <h3>研发部</h3>
         <div className="title-rule" />
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          推进研发项目，解锁新产品与知识产权；人员越多每月进度越快、成功率越高。
+          将人员放置到在研项目（承诺制）：每人 +5 进度、+5% 成功率，确定后本月锁定，下月初可再调。
         </p>
+        <div className="grid-3" style={{ marginBottom: 'var(--s2)' }}>
+          <div>
+            <div className="stat-label">研发人员</div>
+            <div className="stat-value">{staff}<span className="faint">/5</span></div>
+          </div>
+          <div>
+            <div className="stat-label">已放置</div>
+            <div className="stat-value">{assigned}</div>
+          </div>
+          <div>
+            <div className="stat-label">本月研发费用</div>
+            <div className={`stat-value${d.rndActiveCount > 0 ? ' gold' : ''}`}>{wan(d.rndActiveCount * d.rndCost)}</div>
+          </div>
+        </div>
+        {d.rndActiveCount > 0 ? (
+          <p className="hint">{d.rndActiveCount} 个在研 × {wan(d.rndCost)} / 项目。</p>
+        ) : null}
+        {free > 0 ? (
+          <p className="hint">{free} 人未放置：照计提工资但不产出进度，请放到在研项目上。</p>
+        ) : null}
         <LedgerSection g={g} dept="rnd" />
       </div>
 
       <div className="card">
-        <h3>研发项目</h3>
+        <h3>研发主题</h3>
         <div className="title-rule" />
         <div className="stack">
-          {E.RND_PROJECTS.map((p) => {
-            const slot = gs.rnd[p.id]
-            const isActive = active === p.id
-            const rate = Math.min(100, Math.round((p.rate + d.rndRate / 100) * 100))
-            return (
-              <div key={p.id} className={`card-item d-rnd${isActive ? ' on' : ''}`}>
-                <span className="spine" />
-                <span className="card-body">
-                  <span className="hstack-between">
-                    <span className="card-name">{p.name}</span>
-                    <span className="tag">
-                      {slot.done ? '已完成' : `${slot.progress}/${p.need}`}
+          <button className="btn btn-mini" onClick={() => setTheme('prod')}>
+            <span className="btn-main">新产品 · BOM 配方</span>
+            <span className="btn-sub">在研 {bom.active}/{bom.total} · 解锁当月即可排产</span>
+          </button>
+          <button className="btn btn-mini" onClick={() => setTheme('ip')}>
+            <span className="btn-main">知识产权 · 技能树</span>
+            <span className="btn-sub">在研 {ip.active}/{ip.total} · 三分支 · 逐层揭示</span>
+          </button>
+        </div>
+        <p className="hint">
+          成功率封顶 90%（中端教学 100%），放置人数越多越稳。
+        </p>
+      </div>
+
+      {gs.mode === 'full' ? (
+        <div className="card">
+          <div className="hstack-between">
+            <h3>知识产权</h3>
+            <span className="xs faint mono">
+              槽位 {gs.ipActive.filter(Boolean).length}/{slots}
+            </span>
+          </div>
+          <div className="title-rule" />
+          {gs.ipOwned.length === 0 ? (
+            <p className="muted sm">尚未拥有知识产权。完成「知识产权」类研发项目后可获得。</p>
+          ) : (
+            <div className="stack-sm">
+              {gs.ipOwned.map((id) => {
+                const on = gs.ipActive.includes(id)
+                const def = IP_BY_ID[id]
+                return (
+                  <div key={id} className="hstack-between">
+                    <span className="sm">
+                      {def?.name ?? id}
+                      {on ? <span className="tag gold" style={{ marginLeft: 6 }}>已激活</span> : null}
                     </span>
-                  </span>
-                  <span className="card-desc">{p.desc}</span>
-                  <span className="card-cond">
-                    基础成功率 {Math.round(p.rate * 100)}% · 当前 {rate}%
-                  </span>
-                  <div style={{ marginTop: 'var(--s2)' }}>
                     <button
                       className="btn btn-mini"
-                      disabled={slot.done || gs.depts.rnd.staff < 1 || isActive}
-                      onClick={() => g.act((st) => E.startResearch(st, p.id))}
+                      style={{ width: 'auto' }}
+                      onClick={() => setIps(true)}
                     >
-                      <span className="btn-main">
-                        {slot.done ? '已完成' : isActive ? '推进中' : '推进研发'}
-                      </span>
-                      <span className="btn-sub">
-                        {gs.depts.rnd.staff < 1 ? '需 1 名研发人员' : `立项后每月 ${wan(d.rndCost)}`}
-                      </span>
+                      <span className="btn-main xs">管理</span>
                     </button>
                   </div>
-                </span>
-              </div>
-            )
-          })}
+                )
+              })}
+            </div>
+          )}
         </div>
-        <div className="hint">研发失败会保留进度，下月可继续推进。</div>
-      </div>
+      ) : null}
 
-      <div className="card">
-        <div className="hstack-between">
-          <h3>知识产权</h3>
-          <span className="xs faint mono">
-            槽位 {gs.ipActive.filter(Boolean).length}/{slots}
-          </span>
-        </div>
-        <div className="title-rule" />
-        {gs.ipOwned.length === 0 ? (
-          <p className="muted sm">尚未拥有知识产权。完成「知识产权」类研发项目后可获得。</p>
-        ) : (
-          <div className="stack-sm">
-            {gs.ipOwned.map((id) => {
-              const on = gs.ipActive.includes(id)
-              const def = IP_BY_ID[id]
-              return (
-                <div key={id} className="hstack-between">
-                  <span className="sm">
-                    {def?.name ?? id}
-                    {on ? <span className="tag gold" style={{ marginLeft: 6 }}>已激活</span> : null}
-                  </span>
-                  <button
-                    className="btn btn-mini"
-                    style={{ width: 'auto' }}
-                    onClick={() => setIps(true)}
-                  >
-                    <span className="btn-main xs">管理</span>
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
+      {theme === 'prod' ? <RndBomSheet g={g} onClose={() => setTheme(null)} /> : null}
+      {theme === 'ip' ? <RndIpSheet g={g} onClose={() => setTheme(null)} /> : null}
       {ips ? <IpSheet g={g} onClose={() => setIps(false)} /> : null}
     </>
+  )
+}
+
+/** 主题弹框草稿：打开期间只在本地状态调整（不动游戏状态），「确定」时经 confirmRndAssignments 批量写回并锁定本月。 */
+function useRndSheetDraft(g: Game, projects: E.ResearchProjectDef[]) {
+  const gs = g.s
+  const [draft, setDraft] = useState<Record<string, number>>(() => {
+    const m: Record<string, number> = {}
+    for (const p of projects) m[p.id] = gs.rnd[p.id]?.assigned ?? 0
+    return m
+  })
+  const setDraftValue = (id: string, n: number) => setDraft((m) => ({ ...m, [id]: n }))
+  /** 本月确认锁：确定后到月初前不再可调（settle 的 advanceMonth 清零） */
+  const confirmed = gs.flags['rndConfirmed'] === 1
+  // 池约束（跨主题全局）：本弹框外 = 已承诺人员，本弹框内 = 草稿值
+  const committedThisSheet = projects.reduce((a, p) => {
+    const s = gs.rnd[p.id]
+    return a + (s?.projectId && !s.done ? s.assigned : 0)
+  }, 0)
+  const outsideTotal = E.rndAssignedTotal(gs) - committedThisSheet
+  const sheetEffective = projects.reduce((a, p) => {
+    const s = gs.rnd[p.id]
+    const active = (s?.projectId && !s.done) || (draft[p.id] ?? 0) > 0
+    return a + (active ? (draft[p.id] ?? 0) : 0)
+  }, 0)
+  /** 某项目最多可放置人数（绝对值口径） */
+  const capFor = (id: string) => gs.depts.rnd.staff - (outsideTotal + sheetEffective - (draft[id] ?? 0))
+  const confirm = () => g.act((st) => E.confirmRndAssignments(st, draft))
+  return { draft, setDraftValue, confirmed, capFor, confirm }
+}
+
+/** 主题弹框底部：默认「关闭」（关闭即还原草稿）+ T1「确认放置」（写回并锁定本月）。 */
+function RndSheetFooter({ confirmed, onConfirm }: { confirmed: boolean; onConfirm: () => void }) {
+  return (
+    <button className="btn btn-primary" disabled={confirmed} onClick={onConfirm}>
+      <span className="btn-main">确认放置</span>
+      <span className="btn-sub">{confirmed ? '已确认 · 下月初可再调' : '确认后本月锁定'}</span>
+    </button>
+  )
+}
+
+/** 主题弹框：新产品（BOM 配方）。草稿态调整，确定后本月锁定。 */
+function RndBomSheet({ g, onClose }: { g: Game; onClose: () => void }) {
+  const projects = E.RND_PROJECTS.filter((p) => p.kind === 'bom')
+  const { draft, setDraftValue, confirmed, capFor, confirm } = useRndSheetDraft(g, projects)
+  return (
+    <Sheet
+      title="新产品研发"
+      sub="BOM 配方 · 解锁后当月排产计划即可生产该层次"
+      onClose={onClose}
+      footer={(
+        <RndSheetFooter
+          confirmed={confirmed}
+          onConfirm={() => {
+            const r = confirm()
+            if (r.ok) onClose()
+          }}
+        />
+      )}
+    >
+      <div className="stack">
+        {projects.map((p) => (
+          <RndProjectRow
+            key={p.id}
+            g={g}
+            p={p}
+            n={draft[p.id] ?? 0}
+            cap={capFor(p.id)}
+            confirmed={confirmed}
+            onAssign={(n) => setDraftValue(p.id, n)}
+          />
+        ))}
+      </div>
+    </Sheet>
+  )
+}
+
+const RND_BRANCH_META: { id: E.RndBranch; name: string; sub: string }[] = [
+  { id: 'supply', name: '供应线', sub: '原料供给 · 成本与资金' },
+  { id: 'channel', name: '渠道线', sub: '订单 · 品牌与质量' },
+  { id: 'equip', name: '装备线', sub: '产能 · 工艺与效率' },
+]
+
+/** 主题弹框：知识产权技能树（三分支，阶段 2/3 每层 2 个方向任选，前置解锁后揭示下层）。草稿态调整，确定后本月锁定。 */
+function RndIpSheet({ g, onClose }: { g: Game; onClose: () => void }) {
+  const gs = g.s
+  const projects = E.RND_PROJECTS.filter((p) => p.kind === 'ip')
+  const { draft, setDraftValue, confirmed, capFor, confirm } = useRndSheetDraft(g, projects)
+  return (
+    <Sheet
+      title="知识产权技能树"
+      sub="解锁上游后揭示下层方向（阶段 2/3 各 2 选 1）；效果解锁即生效"
+      onClose={onClose}
+      footer={(
+        <RndSheetFooter
+          confirmed={confirmed}
+          onConfirm={() => {
+            const r = confirm()
+            if (r.ok) onClose()
+          }}
+        />
+      )}
+    >
+      <div className="stack">
+        {RND_BRANCH_META.map((b) => {
+          const branchProjects = projects.filter((p) => p.branch === b.id)
+          // 逐层揭示：前置未解锁的下游方向暂不展示（阶段 1 恒展示）
+          const shown = branchProjects.filter((p) => !p.preq || !!gs.rnd[p.preq]?.done)
+          const active = shown.filter((p) => { const s = gs.rnd[p.id]; return !!s?.projectId && !s.done }).length
+          return (
+            <div key={b.id}>
+              <div className="section-label">
+                {b.name} · {b.sub} — 在研 {active}/{shown.length}
+              </div>
+              <div className="stack-sm">
+                {shown.map((p) => (
+                  <RndProjectRow
+                    key={p.id}
+                    g={g}
+                    p={p}
+                    n={draft[p.id] ?? 0}
+                    cap={capFor(p.id)}
+                    confirmed={confirmed}
+                    onAssign={(n) => setDraftValue(p.id, n)}
+                  />
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Sheet>
+  )
+}
+
+/** 单个研发项目行（内容卡）：状态 / 进度（紫条 = 当前进度，金色标记 = 本月结算后位置）/ 人员放置槽位（草稿态，确定前可增减）。 */
+function RndProjectRow({
+  g,
+  p,
+  n,
+  cap,
+  confirmed,
+  onAssign,
+}: {
+  g: Game
+  p: E.ResearchProjectDef
+  n: number
+  cap: number
+  confirmed: boolean
+  onAssign: (n: number) => void
+}) {
+  const gs = g.s
+  const d = E.derive(gs)
+  const staff = gs.depts.rnd.staff
+  const slot = gs.rnd[p.id]
+  const done = !!slot?.done
+  const started = !!slot?.projectId && !done
+  const preqDef = p.preq ? E.RND_PROJECTS.find((x) => x.id === p.preq) : undefined
+  const locked = !!p.preq && !gs.rnd[p.preq]?.done
+  const { gain, rate } = E.rndProjectOutcome(d, p, n)
+  const willRoll = gain > 0 && slot.progress + gain >= p.need
+  const pct = Math.min(100, (slot.progress / p.need) * 100)
+  const projPct = Math.min(100, ((slot.progress + gain) / p.need) * 100)
+  const statusText = done
+    ? '已完成'
+    : started
+      ? `推进中 ${slot.progress}/${p.need}`
+      : locked
+        ? `需先解锁 ${preqDef?.name ?? '上游'}`
+        : n > 0
+          ? '确定后立项'
+          : '未开始'
+  const tagCls = done ? ' green' : started ? ' gold' : locked ? '' : n > 0 ? ' amber' : ''
+
+  return (
+    <div className="card">
+      <div className="hstack-between">
+        <span className="card-name">{p.name}{p.stage ? ` · 阶段 ${p.stage}` : ''}</span>
+        <span className={`tag${tagCls}`}>{statusText}</span>
+      </div>
+      <div className="card-desc">{p.desc}</div>
+      {!locked && preqDef ? <div className="xs faint">前置：{preqDef.name}</div> : null}
+      {!done ? (
+        <>
+          <div style={{ margin: 'var(--s3) 0 var(--s1)' }}>
+            <div className="bar" style={{ position: 'relative' }}>
+              <i style={{ width: `${pct}%`, background: 'var(--grape)' }} />
+              {gain > 0 ? (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: `${projPct}%`,
+                    width: 2,
+                    background: 'var(--gold-hi)',
+                    boxShadow: '0 0 6px rgba(201, 162, 74, 0.8)',
+                  }}
+                />
+              ) : null}
+            </div>
+            <div className="hstack-between" style={{ marginTop: 4 }}>
+              <span className="xs faint">{willRoll ? '本月结算判定成败' : gain > 0 ? '金色标记 = 结算后进度位置' : ''}</span>
+              <span className="xs mono">{slot.progress}/{p.need}{gain > 0 ? `（+${gain}）` : ''}</span>
+            </div>
+          </div>
+          <div className="card-cond">
+            基础成功率 {Math.round(p.rate * 100)}% · 放置 {n} 人：成功率 {Math.round(rate * 100)}%
+          </div>
+          {/* 人员放置槽位：5 格（每部门上限 5 人）；草稿态可增减，「确定」后全部锁定至月初 */}
+          <div style={{ marginTop: 'var(--s2)', display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[0, 1, 2, 3, 4].map((k) => {
+                const count = k + 1
+                const lit = count <= n
+                const hired = count <= staff
+                const usable = !locked && !confirmed && count <= cap
+                return (
+                  <button
+                    key={k}
+                    className={`rnd-slot${lit ? ' lit' : ''}${hired ? '' : ' unhired'}${locked ? ' locked' : ''}`}
+                    title={
+                      !hired
+                        ? '需再招聘研发人员'
+                        : confirmed
+                          ? '已确认锁定，下月初可再调'
+                          : lit
+                            ? count === n
+                              ? '点击收回 1 人'
+                              : '点击减少到此格'
+                            : '点击放置到此格'
+                    }
+                    disabled={!usable}
+                    onClick={() => onAssign(lit && count === n ? Math.max(0, n - 1) : count)}
+                  />
+                )
+              })}
+            </div>
+            <button
+              className="slot-btn"
+              disabled={locked || confirmed || n + 1 > cap}
+              title={locked ? '先解锁上游节点' : confirmed ? '已确认锁定' : n + 1 > cap ? '可放置人员已用完' : '多放置 1 人'}
+              onClick={() => onAssign(n + 1)}
+            >
+              +
+            </button>
+            <span className="xs mono faint">{n}/{staff} 人</span>
+          </div>
+          {locked ? <span className="xs faint" style={{ display: 'block', marginTop: 4 }}>解锁上游节点后方可放置人员</span> : null}
+          {confirmed && n > 0 ? <span className="xs gold" style={{ display: 'block', marginTop: 4 }}>已确认锁定：下月初可再调整</span> : null}
+        </>
+      ) : null}
+    </div>
   )
 }
 

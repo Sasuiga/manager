@@ -111,11 +111,11 @@ export function EndScreen({ g, onRestart }: { g: Game; onRestart: () => void }) 
           ))}
           <div className="row">
             <span className="row-key">累计净利润</span>
-            <span className={`row-val ${sc.netsum < 0 ? 'red' : 'green'}`}>{sc.netsum / 10}w</span>
+            <span className={`row-val ${sc.netsum < 0 ? 'red' : 'green'}`}>{(sc.netsum / 10).toFixed(2)}w</span>
           </div>
           <div className="row">
             <span className="row-key">期末净资产</span>
-            <span className={`row-val ${net < 0 ? 'red' : ''}`}>{net / 10}w</span>
+            <span className={`row-val ${net < 0 ? 'red' : ''}`}>{(net / 10).toFixed(2)}w</span>
           </div>
         </div>
 

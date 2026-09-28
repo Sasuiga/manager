@@ -95,8 +95,8 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
 
     // ── 研发 ──
     if (s.depts.rnd.staff >= 1) {
-      const target = s.products.mid.built ? 'ip-normal' : 'bom-mid'
-      if (!s.rnd[target].done) E.startResearch(s, target)
+      const target = s.products.mid.built ? 'ip-supply-1' : 'bom-mid'
+      if (!s.rnd[target].done) E.setRndAssign(s, target, s.depts.rnd.staff)
     }
 
     // ── 借款：现金不够时借一点 ──
@@ -145,7 +145,7 @@ describe('引擎', () => {
     const b = E.balanceSheet(s)
     // 金额按分取整后比较：存货结转会产生浮点尾差，业务上无意义
     const r2 = (n: number) => Math.round(n * 100) / 100
-    expect(r2(b.totalAssets)).toBe(r2(b.debt + b.equity))
+    expect(r2(b.totalAssets)).toBe(r2(b.debt + b.wagePayable + b.equity))
   })
 
   it('移动加权平均成本随采购价变化', () => {
@@ -207,7 +207,7 @@ describe('引擎', () => {
     E.enterDraw(s)
     E.enterOperate(s)
     const d = E.derive(s)
-    expect(d.capacity).toBe(10) // 开局一台产能 10 的设备，无生产人员
+    expect(d.capacity).toBe(5) // 老板自产 5，开局无生产人员、无设备
     expect(E.maxProducible(s, 'low')).toBe(0) // 无原料
   })
 
@@ -233,12 +233,13 @@ describe('引擎', () => {
     E.enterDraw(s)
     E.enterOperate(s)
     void Rng
-    // 给出 4 名研发人员
+    // 给出 4 名研发人员，全部放置到中端项目
     s.depts.rnd.staff = 4
-    E.startResearch(s, 'bom-mid')
+    E.setRndAssign(s, 'bom-mid', 4)
     const r1 = E.settleMonth(s)
-    expect(r1.rnd).not.toBeNull()
-    expect(s.rnd['bom-mid'].progress).toBeGreaterThan(0)
+    expect(r1.rnd).toHaveLength(1)
+    expect(r1.rnd[0].success).toBe(true)
+    expect(s.products.mid.built).toBe(true)
   })
   /**
    * 会计恒等式回归：资产 = 负债 + 所有者权益。
@@ -259,7 +260,7 @@ describe('引擎', () => {
     const r2 = (n: number) => Math.round(n * 100) / 100
     const check = (tag: string) => {
       const b = E.balanceSheet(s)
-      expect(r2(b.totalAssets - b.debt - b.equity), `${tag} 失衡`).toBe(0)
+      expect(r2(b.totalAssets - b.debt - b.wagePayable - b.equity), `${tag} 失衡`).toBe(0)
     }
 
     for (let m = 1; m <= 12; m++) {
@@ -291,12 +292,12 @@ describe('引擎', () => {
   it('折旧提足原值即停，账面价值不会穿负', () => {
     const s = E.newGame(5)
     E.startGame(s)
-    const eq = s.equipment[0]
-    eq.accumulated = eq.cost // 已提足
+    // 新模型开局无设备，手动挂一台已提足的验证折旧会计路径
+    s.equipment.push({ id: 'eq-test', name: '测试产线', capacity: 10, depreciation: 20, creditLine: 0, cost: 50, accumulated: 50, purchasedAt: 1 })
     const before = E.balanceSheet(s).equipmentAccum
     const rep = E.settleMonth(s)
     // 不再计提：累计折旧停在原值，净值也不会被压成负数
-    expect(eq.accumulated).toBe(eq.cost)
+    expect(s.equipment[0].accumulated).toBe(50)
     expect(E.balanceSheet(s).equipmentAccum).toBe(before)
     expect(E.equipmentNet(s)).toBe(0)
     expect(rep.ledger.parts['设备折旧']).toBe(0)
@@ -309,7 +310,7 @@ describe('引擎', () => {
    * 订单量被压成 1 件，招销售几乎变成纯支出。
    */
   it('订单数随销售人数增长，且每单数量在 8~12 件之间', () => {
-    for (const [sell, wantCount] of [[0, 0], [2, 1], [4, 3]] as [number, number][]) {
+    for (const [sell, wantCount] of [[0, 0], [2, 1], [4, 2]] as [number, number][]) {
       const s = E.newGame(7)
       E.startGame(s)
       if (s.challengeOffered.length) E.chooseChallenge(s, 0)
@@ -435,6 +436,8 @@ describe('引擎', () => {
   it('多产品排产：共享产能与原料，并一次确认多条产品线', () => {
     const s = E.newGame(11, 'core')
     E.startGame(s)
+    // 本测试验证共享产能/原料，手动解锁中端（研发解锁由「研发放置」测试覆盖）
+    s.products.mid.built = true
     s.materials.pkg.qty = 4
     s.materials.pkg.value = 40
     s.materials.resin.qty = 6
@@ -570,7 +573,7 @@ describe('引擎', () => {
     s.materials.resin.value = 200
     const gapOf = () => {
       const b = E.balanceSheet(s)
-      return Math.round((b.totalAssets - b.debt - b.equity) * 10000) / 10000
+      return Math.round((b.totalAssets - b.debt - b.wagePayable - b.equity) * 10000) / 10000
     }
     const gapBefore = gapOf()
     E.setPlan(s, 'low', 5)
@@ -597,7 +600,7 @@ describe('引擎', () => {
     s.depts.buy.staff = 3
     const gapOf = () => {
       const b = E.balanceSheet(s)
-      return Math.round((b.totalAssets - b.debt - b.equity) * 10000) / 10000
+      return Math.round((b.totalAssets - b.debt - b.wagePayable - b.equity) * 10000) / 10000
     }
     const gapBefore = gapOf()
     expect(E.signAgreement(s, 'pkg', 3).ok).toBe(true) // 非 free：1 AP + 1w
@@ -648,5 +651,51 @@ describe('引擎', () => {
     expect(closing!.debitAmt).toBe(rep.ledger.mfgExpense)
     expect(closing!.debit).toBe('生产费用')
     expect(closing!.credit).toBe('制造费用')
+  })
+
+  it('工资当月计提应付职工薪酬、次月实付：现金流出延迟一个月', () => {
+    const s = E.newGame(1)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    s.climate = 'recovery'
+    E.beginMonthEvent(s)
+    s.monthMods = {}
+    E.enterDraw(s)
+    E.enterOperate(s)
+    s.depts.make.staff = 2 // 2 × 0.5w = 1w 月工资
+    const wage = E.derive(s).salaryTotal
+    expect(wage).toBe(10)
+
+    // 当月部门账：工资计提行（借 制造费用 / 贷 应付职工薪酬），不动现金
+    const acc = E.derive(s).deptLedger['make'].find((l) => l.item === '工资计提')
+    expect(acc).toBeTruthy()
+    expect(acc!.debit).toBe('制造费用')
+    expect(acc!.credit).toBe('应付职工薪酬')
+    expect(acc!.debitAmt).toBe(wage)
+
+    const cash0 = s.cash
+    E.settleMonth(s)
+    // 第 1 月：只计提、无上月挂账 → 现金未因工资减少，负债确认进应付职工薪酬
+    expect(s.wagePayableBy.make).toBe(wage)
+    expect(s.cash).toBe(cash0)
+    const b1 = E.balanceSheet(s)
+    expect(b1.wagePayable).toBe(wage)
+    expect(b1.totalAssets - b1.debt - b1.wagePayable - b1.equity).toBe(0)
+
+    E.nextMonth(s)
+    // 第 2 月账：出现「工资支付（上月计提）」行，借 应付职工薪酬 / 贷 现金
+    const pay = E.derive(s).deptLedger['make'].find((l) => l.item === '工资支付（上月计提）')
+    expect(pay).toBeTruthy()
+    expect(pay!.debit).toBe('应付职工薪酬')
+    expect(pay!.credit).toBe('现金')
+    expect(pay!.debitAmt).toBe(wage)
+
+    const cash1 = s.cash
+    E.settleMonth(s)
+    // 第 2 月：实付上月工资，现金恰好减少 wage；结算后又计提本月工资重新挂账
+    expect(s.cash).toBe(cash1 - wage)
+    expect(s.wagePayableBy.make).toBe(wage)
+    const b2 = E.balanceSheet(s)
+    expect(b2.totalAssets - b2.debt - b2.wagePayable - b2.equity).toBe(0)
   })
 })

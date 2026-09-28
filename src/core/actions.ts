@@ -75,8 +75,8 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   state.depts[dept].hired += 1
   state.flags[`hireMonth:${dept}:${state.month}`] = (state.flags[`hireMonth:${dept}:${state.month}`] ?? 0) + 1
   pushLog(state, 'action', `招聘 ${DEPT_NAMES[dept]}工作人员（第 ${state.depts[dept].staff} 名）`, [
-    `招聘费 ${fee / 10}w`,
-    `月薪 ${STAFF[dept].salary / 10}w`,
+    `招聘费 ${(fee / 10).toFixed(2)}w`,
+    `月薪 ${(STAFF[dept].salary / 10).toFixed(2)}w`,
   ])
   checkAchievements(state)
   // 管理人员增加 AP 上限（下月生效，本月记 pending）
@@ -119,8 +119,8 @@ export function fire(state: GameState, dept: Dept): ActionResult {
   /** 返款从本月招聘费净额中抵减（与招聘费同科目，进管理费用） */
   state.hireFeeBy[dept] -= refund
   state.monthFlags = state.monthFlags.filter((f) => f !== 'canFire')
-  pushLog(state, 'action', `解雇 1 名${DEPT_NAMES[dept]}人员`, [`返还招聘费 ${refund / 10}w`])
-  return { ok: true, msg: `解雇 1 人，返还 ${refund / 10}w` }
+  pushLog(state, 'action', `解雇 1 名${DEPT_NAMES[dept]}人员`, [`返还招聘费 ${(refund / 10).toFixed(2)}w`])
+  return { ok: true, msg: `解雇 1 人，返还 ${(refund / 10).toFixed(2)}w` }
 }
 
 function checkAchievements(state: GameState) {
@@ -275,7 +275,7 @@ export function playCard(state: GameState, uid: string, opts?: { materialId?: st
 
   pushLog(state, 'action', `打出【${def.name}】${card.empowered ? '（强化）' : ''}`, [
     def.text,
-    ...(cost ? [`支付 ${cost / 10}w`] : []),
+    ...(cost ? [`支付 ${(cost / 10).toFixed(2)}w`] : []),
   ])
   return { ok: true, msg: `已打出【${def.name}】` }
 }
@@ -540,13 +540,13 @@ export function buyMaterial(state: GameState, materialId: string, lot: LotSize):
       debitAmt: added * unit,
       creditAmt: added * unit,
       detail: [
-        `${added} 件 × ${unit / 10}w = ${((added * unit) / 10).toFixed(1)}w`,
+        `${added} 件 × ${(unit / 10).toFixed(2)}w = ${((added * unit) / 10).toFixed(2)}w`,
         '现金实付全额转入库存（移动加权平均计价），与生产领料出库勾稽',
       ],
     })
   }
   pushLog(state, 'action', `采购 ${nameOf(materialId)} · ${lotLabel(lot)}`, [
-    `${added} 单位 × ${unit / 10}w = ${((added * unit) / 10).toFixed(1)}w`,
+    `${added} 单位 × ${(unit / 10).toFixed(2)}w = ${((added * unit) / 10).toFixed(2)}w`,
   ])
   return { ok: true, msg: `入库 ${added} 单位` }
 }
@@ -625,6 +625,67 @@ export function materialAvailableForProduction(state: GameState, materialId: str
   return current + (state.mode === 'core' ? plannedPurchaseLine(state, materialId).qty : 0)
 }
 
+/**
+ * 采购计划后的原料单位成本（统一口径，移动加权平均）：
+ * - 核心模式：(账面价值 + 计划采购付款) ÷ (现库存 + 计划到货)——计划执行后的库存成本；
+ * - 完整模式：采购已即时入账，即当前账面单价；
+ * - 无库存且无计划：以当前价格水平代理未来采购成本。
+ */
+export function plannedMaterialUnitCost(state: GameState, materialId: string): number {
+  const mat = state.materials[materialId]
+  const line = plannedPurchaseLine(state, materialId)
+  const totalQty = (mat?.qty ?? 0) + line.qty
+  if (totalQty > 0) return ((mat?.value ?? 0) + line.cost) / totalQty
+  return derive(state).materials[materialId]?.price ?? 0
+}
+
+/** 单条产品线成本构成（统一口径） */
+export interface UnitCostBreakdown {
+  /** 直接材料成本：BOM 领料量（含节材修正）× 计划后原料库存单价 × 降本系数 */
+  material: number
+  /** 固定成本分摊：(生产薪酬 + 折旧 + 加班费) ÷ 本月排产量，各线相同 */
+  fixed: number
+  /** 单位成本 = 材料 + 固定成本分摊 */
+  total: number
+}
+
+/** 生产单位成本（统一口径）汇总视图 */
+export interface ProductionUnitCosts {
+  tiers: Record<Tier, UnitCostBreakdown>
+  /** 本月生产固定成本合计（薪酬 + 折旧 + 加班费） */
+  fixedTotal: number
+  fixedParts: { labor: number; depreciation: number; overtime: number }
+  /** 本月排产量（分摊分母）；为 0 时固定成本不分摊 */
+  planned: number
+}
+
+/**
+ * 生产单位成本（完全成本口径，供生产 / 销售 / 预算页共用）：
+ * 材料成本按采购计划后的原料库存单价计 BOM 领料（采购计划在此影响库存成本）；
+ * 固定成本（生产薪酬、本月折旧、加班费）按排产量分摊到每件。
+ */
+export function productionUnitCosts(state: GameState): ProductionUnitCosts {
+  const d = derive(state)
+  const labor = d.salaryPer.make * state.depts.make.staff
+  const depreciation = state.equipment.reduce((sum, e) => sum + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0)
+  const overtime = state.plan.overtime && state.depts.make.staff >= 3 ? OVERTIME_COST : 0
+  const fixedTotal = labor + depreciation + overtime
+  const planned = TIERS.reduce((sum, t) => sum + state.plan.quantities[t], 0)
+  const allocated = planned > 0 ? fixedTotal / planned : 0
+  const tiers = {} as Record<Tier, UnitCostBreakdown>
+  for (const t of TIERS) {
+    const bom = BOMS[t]
+    let material = 0
+    for (const [id, need] of Object.entries(bom.recipe)) {
+      const per = Math.max(1, need - d.matSave)
+      material += per * plannedMaterialUnitCost(state, id)
+    }
+    material = Math.round(material * d.costFactor)
+    tiers[t] = { material, fixed: allocated, total: material + allocated }
+  }
+  return { tiers, fixedTotal, fixedParts: { labor, depreciation, overtime }, planned }
+}
+
 /** 正式结算时执行核心模式采购计划。 */
 export function executePlannedPurchases(state: GameState) {
   if (state.mode !== 'core') return
@@ -642,7 +703,7 @@ export function executePlannedPurchases(state: GameState) {
       debitAmt: added * line.unit,
       creditAmt: added * line.unit,
       detail: [
-        `${added} 件 × ${line.unit / 10}w = ${((added * line.unit) / 10).toFixed(1)}w`,
+        `${added} 件 × ${(line.unit / 10).toFixed(2)}w = ${((added * line.unit) / 10).toFixed(2)}w`,
         '结算时按采购计划入库并付款',
       ],
     })
@@ -735,10 +796,24 @@ export function traderOffer(state: GameState) {
   })
 }
 
+/**
+ * 本月单品种贸易商购买上限：基础 1 次。
+ * C4【贸易商】额外 +1（强化 +2）；事件/员工能力可在同一口径上扩展。
+ * 已购次数记录在 state.extraBuys（月初随 advanceMonth 清零）。
+ */
+export function traderQuota(state: GameState): number {
+  let quota = 1
+  for (const p of state.playedThisMonth) {
+    if (p.defId === 'C4') quota += p.empowered ? 2 : 1
+  }
+  return quota
+}
+
 export function buyFromTrader(state: GameState, materialId: string, qty: number, price: Money): ActionResult {
+  const used = state.extraBuys.filter((e) => e.kind === 'trader' && e.materialId === materialId).length
+  if (used >= traderQuota(state)) return fail('该品种本月已购买')
   if (state.cash < qty * price) return fail('现金不足')
-  if (state.flags[`trader:${materialId}`]) return fail('该品种本月已采购')
-  state.flags[`trader:${materialId}`] = 1
+  state.extraBuys.push({ kind: 'trader', materialId, qty, price, used: true })
   const added = addMaterial(state, materialId, qty, price, false)
   if (added > 0) {
     const name = nameOf(materialId)
@@ -750,12 +825,12 @@ export function buyFromTrader(state: GameState, materialId: string, qty: number,
       debitAmt: added * price,
       creditAmt: added * price,
       detail: [
-        `${added} 件 × ${price / 10}w（贸易商小批，价格 +1 档）`,
+        `${added} 件 × ${(price / 10).toFixed(2)}w（贸易商小批，价格 +1 档）`,
         '现金实付全额转入库存（移动加权平均计价），不占本月采购档数',
       ],
     })
   }
-  pushLog(state, 'action', `贸易商采购 ${nameOf(materialId)}`, [`${added} 单位 × ${price / 10}w`])
+  pushLog(state, 'action', `贸易商采购 ${nameOf(materialId)}`, [`${added} 单位 × ${(price / 10).toFixed(2)}w`])
   return { ok: true, msg: `入库 ${added} 单位` }
 }
 
@@ -865,11 +940,11 @@ export function buyEquipment(state: GameState, shopId: string): ActionResult {
     debitAmt: shop.price,
     creditAmt: shop.price,
     detail: [
-      `现金支出 ${shop.price / 10}w 资本化为固定资产（不计入当期损益）`,
-      `月折旧 ${shop.depreciation / 10}w 为非现金费用，逐月进生产费用`,
+      `现金支出 ${(shop.price / 10).toFixed(2)}w 资本化为固定资产（不计入当期损益）`,
+      `月折旧 ${(shop.depreciation / 10).toFixed(2)}w 为非现金费用，逐月进生产费用`,
     ],
   })
-  pushLog(state, 'action', `购置设备【${shop.name}】`, [`${shop.price / 10}w`, shop.desc])
+  pushLog(state, 'action', `购置设备【${shop.name}】`, [`${(shop.price / 10).toFixed(2)}w`, shop.desc])
   return { ok: true, msg: `产能 +${shop.capacity}` }
 }
 
@@ -996,7 +1071,7 @@ export function postProductionInbound(
       debitAmt: Math.round(bonusVal),
       creditAmt: Math.round(bonusVal),
       detail: [
-        `每 5 件额外入库 1 件（生产 5 人），按本批单位成本 ${unitCostIn > 0 ? (unitCostIn / 10).toFixed(1) : '0'}w 计价`,
+        `每 5 件额外入库 1 件（生产 5 人），按本批单位成本 ${unitCostIn > 0 ? (unitCostIn / 10).toFixed(2) : '0'}w 计价`,
         '贷记营业外收入：资产与权益同步增加，恒等式不漂移',
       ],
     })
@@ -1050,7 +1125,7 @@ export function toggleOvertime(state: GameState): ActionResult {
   }
   if (state.cash < OVERTIME_COST) return fail('现金不足')
   state.plan.overtime = true
-  return { ok: true, msg: `加班已安排（结算时扣 ${OVERTIME_COST / 10}w）` }
+  return { ok: true, msg: `加班已安排（结算时扣 ${(OVERTIME_COST / 10).toFixed(2)}w）` }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1162,6 +1237,101 @@ export function activeResearch(state: GameState): string | null {
   return null
 }
 
+/** 在研项目（已立项、未完成）锁定的研发人员总数：完成前不释放。 */
+export function rndAssignedTotal(state: GameState): number {
+  let n = 0
+  for (const p of RND_PROJECTS) {
+    const s = state.rnd[p.id]
+    if (s?.projectId && !s.done) n += s.assigned
+  }
+  return n
+}
+
+/** 本月在研项目数（已立项且未完成；费用 3w × 在研数）。 */
+export function rndActiveThisMonth(state: GameState): number {
+  let n = 0
+  for (const p of RND_PROJECTS) {
+    const s = state.rnd[p.id]
+    if (s?.projectId && !s.done) n += 1
+  }
+  return n
+}
+
+/**
+ * 研发人员放置（承诺制：放入即锁定到项目完成，完成前不可减少；结算执行，跨月保留）：
+ * 每放 1 人该项目 +5 进度/月、成功率 +5%（封顶见 def.rateCap）。
+ * 首次放置自动立项。0 人 = 项目留在研但本月无进度（仅 API 可达，UI 不暴露）。
+ */
+export function setRndAssign(state: GameState, projectId: string, n: number): ActionResult {
+  const def = RND_PROJECTS.find((p) => p.id === projectId)
+  if (!def) return fail('未知项目')
+  const slot = state.rnd[projectId]
+  if (!slot) return fail('未知项目')
+  if (slot.done) return fail('该项目已完成')
+  if (n > 0 && def.preq && !state.rnd[def.preq].done) {
+    const preq = RND_PROJECTS.find((p) => p.id === def.preq)
+    return fail(`需先解锁「${preq?.name ?? def.preq}」`)
+  }
+  const free = state.depts.rnd.staff - (rndAssignedTotal(state) - slot.assigned)
+  if (n < 0 || n > free) return fail(`可用研究员不足（可用 ${free} 人）`)
+  if (n > 0 && !slot.projectId) {
+    // 首次放置即立项（计入季度研发立项数）
+    slot.projectId = projectId
+    state.rndStartsThisMonth.push(projectId)
+    state.flags['rndStartsQ'] = (state.flags['rndStartsQ'] ?? 0) + 1
+    pushLog(state, 'action', `研发立项：${def.name}`, [`进度需求 ${def.need}`, `基础成功率 ${Math.round(def.rate * 100)}%`])
+  }
+  slot.assigned = n
+  return { ok: true, msg: `已为「${def.name}」放置 ${n} 人` }
+}
+
+/**
+ * 确认研发放置（承诺制，每月一次）：弹框草稿批量写回。
+ * 校验：完成项目不可再放置、前置未解锁不可放置、Σ 在研有效放置 ≤ 研发人数（跨主题池）。
+ * 确认后 `flags['rndConfirmed'] = 1`：本月不再可调，月初重置。
+ */
+export function confirmRndAssignments(state: GameState, drafts: Record<string, number>): ActionResult {
+  const defs = RND_PROJECTS.filter((p) => drafts[p.id] !== undefined)
+  if (!defs.length) return OK
+  for (const def of defs) {
+    const slot = state.rnd[def.id]
+    const n = Math.max(0, drafts[def.id] ?? 0)
+    if (slot.done && n > 0) return fail(`「${def.name}」已完成，无需再放置`)
+    if (n > 0 && def.preq && !state.rnd[def.preq].done) {
+      const preq = RND_PROJECTS.find((p) => p.id === def.preq)
+      return fail(`「${def.name}」需先解锁「${preq?.name ?? def.preq}」`)
+    }
+  }
+  // 池校验：在研项目（已立项或草稿 > 0）的有效放置总量 ≤ 研发人数
+  let total = 0
+  for (const p of RND_PROJECTS) {
+    const slot = state.rnd[p.id]
+    if (slot.done) continue
+    const active = !!slot.projectId || (drafts[p.id] ?? 0) > 0
+    if (!active) continue
+    total += drafts[p.id] ?? slot.assigned
+  }
+  if (total > state.depts.rnd.staff) {
+    return fail(`放置总量 ${total} 超过研发人数 ${state.depts.rnd.staff}`)
+  }
+  for (const def of defs) {
+    const slot = state.rnd[def.id]
+    const n = Math.max(0, drafts[def.id] ?? 0)
+    if (n === slot.assigned) continue
+    if (n > 0 && !slot.projectId) {
+      // 首次放置即立项（计入季度研发立项数）
+      slot.projectId = def.id
+      state.rndStartsThisMonth.push(def.id)
+      state.flags['rndStartsQ'] = (state.flags['rndStartsQ'] ?? 0) + 1
+      pushLog(state, 'action', `研发立项：${def.name}`, [`进度需求 ${def.need}`, `基础成功率 ${Math.round(def.rate * 100)}%`])
+    }
+    slot.assigned = n
+    pushLog(state, 'action', `研发放置：${def.name} ${n} 人`, ['承诺制：项目完成前锁定，下月初可再调'])
+  }
+  state.flags['rndConfirmed'] = 1
+  return { ok: true, msg: '研发放置已确认，本月锁定' }
+}
+
 export function ipSlots(state: GameState): number {
   const s = state.depts.rnd.staff
   let n = 1
@@ -1209,12 +1379,12 @@ export function borrow(state: GameState, amount: Money): ActionResult {
     debitAmt: amount,
     creditAmt: amount,
     detail: [
-      `到账 ${amount / 10}w，新增负债 ${amount / 10}w`,
+      `到账 ${(amount / 10).toFixed(2)}w，新增负债 ${(amount / 10).toFixed(2)}w`,
       '现金与负债同步增加，净资产不变；利息按月确认进财务费用',
     ],
   })
-  pushLog(state, 'action', `借款 ${amount / 10}w`, [`月利率 ${(d.rate * 100).toFixed(1)}%`])
-  return { ok: true, msg: `到账 ${amount / 10}w` }
+  pushLog(state, 'action', `借款 ${(amount / 10).toFixed(2)}w`, [`月利率 ${(d.rate * 100).toFixed(1)}%`])
+  return { ok: true, msg: `到账 ${(amount / 10).toFixed(2)}w` }
 }
 
 export function repay(state: GameState, amount: Money): ActionResult {
@@ -1230,10 +1400,10 @@ export function repay(state: GameState, amount: Money): ActionResult {
     credit: '现金',
     debitAmt: amount,
     creditAmt: amount,
-    detail: [`归还 ${amount / 10}w，负债同步减少`],
+    detail: [`归还 ${(amount / 10).toFixed(2)}w，负债同步减少`],
   })
-  pushLog(state, 'action', `还款 ${amount / 10}w`)
-  return { ok: true, msg: `已还 ${amount / 10}w` }
+  pushLog(state, 'action', `还款 ${(amount / 10).toFixed(2)}w`)
+  return { ok: true, msg: `已还 ${(amount / 10).toFixed(2)}w` }
 }
 
 // ════════════════════════════════════════════════════════════

@@ -4,7 +4,6 @@ import {
   CARD_BY_ID,
   CLIMATE_NAMES,
   CLIMATE_ORDER,
-  IP_BY_ID,
   MATERIALS,
   MGMT_CARD_UNLOCK,
   NEW_MATERIALS,
@@ -12,8 +11,8 @@ import {
   TAX_RATE,
   TIERS,
 } from '../data/game'
-import { derive, mergeMods } from './derive'
-import { balanceSheet, equipmentNet, equityOf, inventoryValue } from './game'
+import { derive, mergeMods, rndProjectOutcome } from './derive'
+import { balanceSheet, equipmentNet, equityOf, inventoryValue, wagePayableOf } from './game'
 import { executePlannedPurchases, issueMaterials, postProductionInbound } from './actions'
 import { Rng } from './rng'
 import type {
@@ -29,11 +28,12 @@ import type {
 } from './types'
 
 /**
- * 结算阶段：按「长期协议 → 生产 → 销售 → 研发 → 过账」的顺序推进，
+ * 结算阶段：按「长期协议 → 研发 → 生产 → 销售 → 过账」的顺序推进，
  * 一次结算产出完整的报表与结算报告，供 UI 逐行展开。
  *
  * 现金处理原则：
- *   - 原料采购、薪酬、利息、税金、设备折旧之外的支出在发生时即扣减现金；
+ *   - 原料采购、利息、税金、设备折旧之外的支出在发生时即扣减现金；
+ *   - 工资当月计提应付职工薪酬（费用确认、挂账不动现金），次月结算时实付上月工资；
  *   - 设备折旧是**非现金**费用，只影响利润与资产账面，不动现金；
  *   - 生产领料是资产内部转换（原料 → 成品），不动现金，只在售出时通过销售成本影响利润。
  */
@@ -58,7 +58,8 @@ export interface SettleReport {
     lost: Record<Tier, number>
     fillRate: number
   }
-  rnd: { projectId: string; name: string; progress: number; need: number; rate: number; success: boolean | null } | null
+  /** 在研项目逐条结果；空数组 = 本月无在研 */
+  rnd: { projectId: string; name: string; progress: number; need: number; rate: number; success: boolean | null }[]
   ledger: Ledger
   balance: BalanceSheet
   autoPurchase: { id: string; name: string; qty: number; unit: Money; total: Money; from: string; skipped?: string }[]
@@ -111,7 +112,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
         debitAmt: added * unit,
         creditAmt: added * unit,
         detail: [
-          `${added} 件 × ${unit / 10}w（协议锁价，不占本月采购档数）`,
+          `${added} 件 × ${(unit / 10).toFixed(2)}w（协议锁价，不占本月采购档数）`,
           '现金实付全额转入库存（移动加权平均计价）',
         ],
       })
@@ -129,7 +130,34 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
 
   const cashBegin = state.cash
 
-  // ══════════ 1. 生产 ══════════
+  // ══════════ 1. 研发（在生产之前：解锁当月即可排产） ══════════
+  const rng = Rng.fromState(state.rngState + state.month * 7919)
+  const rndResults: SettleReport['rnd'] = []
+  for (const def of RND_PROJECTS) {
+    const slot = state.rnd[def.id]
+    if (!slot?.projectId || slot.done) continue
+    const { gain, rate } = rndProjectOutcome(d, def, slot.assigned)
+    slot.progress += gain
+    let rolledRate = 0
+    let success: boolean | null = null
+    if (slot.progress >= def.need) {
+      rolledRate = rate
+      success = rng.next() < rate
+      if (success) {
+        slot.done = true
+        slot.projectId = null
+        slot.progress = 0
+        // 承诺制：完成时释放本项目锁定的人员
+        slot.assigned = 0
+        state.flags['rndSuccessQ'] = (state.flags['rndSuccessQ'] ?? 0) + 1
+        applyResearchSuccess(state, def.id)
+      }
+    }
+    rndResults.push({ projectId: def.id, name: def.name, progress: slot.progress, need: def.need, rate: rolledRate, success })
+  }
+  state.rngState = rng.state
+
+  // ══════════ 2. 生产 ══════════
   const capacity = planCapacity(state)
   const requested = TIERS.reduce((sum, t) => sum + state.plan.quantities[t], 0)
   let planned = 0
@@ -196,7 +224,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
     warnings.push('已支付加班费 0.5w')
   }
 
-  // ══════════ 2. 销售 ══════════
+  // ══════════ 3. 销售 ══════════
   const orders: SaleRecord[] = []
   const spots: SaleRecord[] = []
   const filled: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
@@ -314,31 +342,6 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
     }
   }
 
-  // ══════════ 3. 研发 ══════════
-  const rng = Rng.fromState(state.rngState + state.month * 7919)
-  let rndResult: SettleReport['rnd'] = null
-  const activeId = Object.keys(state.rnd).find((id) => state.rnd[id].projectId && !state.rnd[id].done)
-  if (activeId) {
-    const def = RND_PROJECTS.find((p) => p.id === activeId)!
-    const slot = state.rnd[activeId]
-    slot.progress += d.rndProgress
-    if (slot.progress >= def.need) {
-      const rate = Math.max(0.05, Math.min(0.95, def.rate + d.rndRate / 100))
-      const success = rng.next() < rate
-      rndResult = { projectId: activeId, name: def.name, progress: slot.progress, need: def.need, rate, success }
-      if (success) {
-        slot.done = true
-        slot.projectId = null
-        slot.progress = 0
-        state.flags['rndSuccessQ'] = (state.flags['rndSuccessQ'] ?? 0) + 1
-        applyResearchSuccess(state, def.id, rng)
-      }
-    } else {
-      rndResult = { projectId: activeId, name: def.name, progress: slot.progress, need: def.need, rate: 0, success: null }
-    }
-  }
-  state.rngState = rng.state
-
   // ══════════ 4. 过账 ══════════
   const revenue = [...orders, ...spots].reduce((a, s) => a + s.revenue, 0)
   /** 销售成本取各笔实际结转额之和，与存货减记严格一致。 */
@@ -401,11 +404,29 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
 
   /**
    * 现金流出：只包含真正动用现金的部分。
-   * 折旧、生产领料都是非现金项目；招聘费/打牌费在发生时已扣现金，
-   * 结算只确认费用，不再重复扣款。
+   * 折旧、生产领料、工资（当月计提、次月实付）都是当期非现金项目；
+   * 招聘费/打牌费在发生时已扣现金，结算只确认费用，不再重复扣款。
    */
-  const cashOut = salaryBy.ops + salaryBy.buy + salaryBy.make + salaryBy.sell + salaryBy.rnd + projectCost + d.interest
+  const cashOut = projectCost + d.interest
   state.cash -= cashOut
+
+  /**
+   * 实付上月计提的应付职工薪酬（现金流出）：
+   * 金额 = 上月工资计提额（分部门存于 wagePayableBy），
+   * 账务行为部门账录「工资支付（上月计提）」（借 应付职工薪酬 / 贷 现金），
+   * 由 derive 自动生成，与本月计提行同屏展示。
+   */
+  const wagePaid = wagePayableOf(state)
+  if (wagePaid > 0) state.cash -= wagePaid
+
+  /** 计提本月工资：贷 应付职工薪酬，次月实付（不动本期现金） */
+  state.wagePayableBy = {
+    ops: salaryBy.ops,
+    buy: salaryBy.buy,
+    make: salaryBy.make,
+    sell: salaryBy.sell,
+    rnd: salaryBy.rnd,
+  }
 
   const preTax = grossProfit - mfgExpense - sellExpense - adminExpense - rndExpense - financeExpense + otherIncome
   const tax = preTax > 0 ? Math.round(preTax * TAX_RATE) : 0
@@ -506,7 +527,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   // ══════════ 6. 终局判定 ══════════
   if (state.cash < 0) {
     state.result = 'lost'
-    state.lossReason = `第 ${state.month} 月结算后资金为负（${(state.cash / 10).toFixed(1)}w）`
+    state.lossReason = `第 ${state.month} 月结算后资金为负（${(state.cash / 10).toFixed(2)}w）`
   } else if (state.misses >= 2) {
     state.result = 'lost'
     state.lossReason = '连续两个季度未达成董事会基本目标'
@@ -528,7 +549,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
       lines: productionLines,
     },
     sales: { orders, spots, revenue, demand: d.demand, filled, lost, fillRate: demandTotal ? TIERS.reduce((a, t) => a + filled[t], 0) / demandTotal : 1 },
-    rnd: rndResult,
+    rnd: rndResults,
     ledger,
     balance,
     autoPurchase,
@@ -608,9 +629,14 @@ export function priceAtProduct(tier: Tier, shift: number): Money {
   return arr[Math.max(0, Math.min(4, 2 + shift))]
 }
 
+/** 原料锁价（协议用）：按档位查表，与结算执行同一口径。 */
+export function materialPriceAt(id: string, shift: number): Money {
+  return priceAt(id, shift)
+}
+
 const TIER_LABEL: Record<Tier, string> = { low: '低端', mid: '中端', high: '高端', special: '特殊' }
 
-function applyResearchSuccess(state: GameState, projectId: string, rng: Rng) {
+function applyResearchSuccess(state: GameState, projectId: string) {
   const def = RND_PROJECTS.find((p) => p.id === projectId)
   if (!def) return
   if (def.kind === 'bom' && def.tier) {
@@ -630,10 +656,9 @@ function applyResearchSuccess(state: GameState, projectId: string, rng: Rng) {
         }
       }
     }
-  } else if (def.kind === 'ip' && def.ipPool) {
-    const owned = new Set(state.ipOwned)
-    const cands = Object.values(IP_BY_ID).filter((ip) => ip.pool === def.ipPool && !owned.has(ip.id))
-    if (cands.length) state.ipOwned.push(cands[rng.int(cands.length)].id)
+  } else if (def.kind === 'ip' && def.ipId) {
+    // 技能树节点：确定性授予固定知产
+    if (!state.ipOwned.includes(def.ipId)) state.ipOwned.push(def.ipId)
   }
 }
 
@@ -771,7 +796,8 @@ export function unitLabel(metric: string): 'w' | '件' | '人' | '%' {
 
 export function computeScore(state: GameState): ScoreBreakdown {
   const profitSum = state.ledgers.reduce((a, l) => a + l.netProfit, 0)
-  const assetsEnd = state.cash + inventoryValue(state) + equipmentNet(state) - state.debt
+  // 期末净资产：应付职工薪酬（上月计提未付部分）仍是负债，需从资产侧扣减
+  const assetsEnd = state.cash + inventoryValue(state) + equipmentNet(state) - state.debt - wagePayableOf(state)
   // 盈利分：12 个月累计净利润 ÷ 10w；资产分：期末净资产 ÷ 10w
   const profit = Math.round((profitSum / 100) * 1.5)
   const assets = Math.round((assetsEnd / 100) * 1.0)
@@ -807,6 +833,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.monthFlags = []
   state.playedThisMonth = []
   state.lotsUsed = 0
+  state.extraBuys = []
   state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false }
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   state.monthLedger = []
@@ -815,6 +842,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.futures = {}
   state.ipChangedThisMonth = false
   state.rndStartsThisMonth = []
+  state.flags['rndConfirmed'] = 0
   state.eventResolved = false
   state.eventChosen = null
   state.eventSkipped = false
