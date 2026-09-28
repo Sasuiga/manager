@@ -448,7 +448,7 @@ export function derive(state: GameState): DerivedTotals {
         credit: hireFee > 0 ? '现金' : '管理费用',
         creditAmt: Math.abs(hireFee),
         detail: [
-          `本月招聘 ${hireThisMonth[dp]} 人、裁员返还已抵减，净额 ${(Math.abs(hireFee) / 10).toFixed(1)}w`,
+          `本月招聘 ${hireThisMonth[dp]} 人、裁员返还已抵减，净额 ${(Math.abs(hireFee) / 10).toFixed(2)}w`,
           hireFee > 0 ? '当期费用化：计入管理费用（不再资本化为待摊费用）' : '裁员返还多于本月招聘费：反向冲减管理费用',
         ],
       })
@@ -466,7 +466,7 @@ export function derive(state: GameState): DerivedTotals {
         credit: '现金',
         creditAmt: interest,
         detail: [
-          `借款余额 ${(state.debt / 10).toFixed(0)}w × 月利率 ${(rate * 100).toFixed(1)}%`,
+          `借款余额 ${(state.debt / 10).toFixed(2)}w × 月利率 ${(rate * 100).toFixed(1)}%`,
           '计入财务费用，结算时现金支付',
         ],
       })
@@ -488,10 +488,10 @@ export function derive(state: GameState): DerivedTotals {
       const closing = wageTotal + makeDepreciation + overtimeCost + variance
       if (closing > 0) {
         const lines: string[] = []
-        if (wageTotal > 0) lines.push(`生产人员工资 ${(wageTotal / 10).toFixed(1)}w`)
-        if (makeDepreciation > 0) lines.push(`设备折旧 ${(makeDepreciation / 10).toFixed(1)}w`)
-        if (overtimeCost > 0) lines.push(`加班费 ${(overtimeCost / 10).toFixed(1)}w`)
-        if (variance > 0) lines.push(`降本差异 ${(variance / 10).toFixed(1)}w`)
+        if (wageTotal > 0) lines.push(`生产人员工资 ${(wageTotal / 10).toFixed(2)}w`)
+        if (makeDepreciation > 0) lines.push(`设备折旧 ${(makeDepreciation / 10).toFixed(2)}w`)
+        if (overtimeCost > 0) lines.push(`加班费 ${(overtimeCost / 10).toFixed(2)}w`)
+        if (variance > 0) lines.push(`降本差异 ${(variance / 10).toFixed(2)}w`)
         lines.push('制造费用中未转入存货的部分当期费用化（工资/折旧不资本化进存货成本），与损益表「生产费用」一致')
         rows.push({ item: '生产费用结转', debit: '生产费用', debitAmt: closing, credit: '制造费用', creditAmt: closing, detail: lines })
       }

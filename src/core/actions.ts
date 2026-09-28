@@ -75,8 +75,8 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   state.depts[dept].hired += 1
   state.flags[`hireMonth:${dept}:${state.month}`] = (state.flags[`hireMonth:${dept}:${state.month}`] ?? 0) + 1
   pushLog(state, 'action', `招聘 ${DEPT_NAMES[dept]}工作人员（第 ${state.depts[dept].staff} 名）`, [
-    `招聘费 ${fee / 10}w`,
-    `月薪 ${STAFF[dept].salary / 10}w`,
+    `招聘费 ${(fee / 10).toFixed(2)}w`,
+    `月薪 ${(STAFF[dept].salary / 10).toFixed(2)}w`,
   ])
   checkAchievements(state)
   // 管理人员增加 AP 上限（下月生效，本月记 pending）
@@ -119,8 +119,8 @@ export function fire(state: GameState, dept: Dept): ActionResult {
   /** 返款从本月招聘费净额中抵减（与招聘费同科目，进管理费用） */
   state.hireFeeBy[dept] -= refund
   state.monthFlags = state.monthFlags.filter((f) => f !== 'canFire')
-  pushLog(state, 'action', `解雇 1 名${DEPT_NAMES[dept]}人员`, [`返还招聘费 ${refund / 10}w`])
-  return { ok: true, msg: `解雇 1 人，返还 ${refund / 10}w` }
+  pushLog(state, 'action', `解雇 1 名${DEPT_NAMES[dept]}人员`, [`返还招聘费 ${(refund / 10).toFixed(2)}w`])
+  return { ok: true, msg: `解雇 1 人，返还 ${(refund / 10).toFixed(2)}w` }
 }
 
 function checkAchievements(state: GameState) {
@@ -275,7 +275,7 @@ export function playCard(state: GameState, uid: string, opts?: { materialId?: st
 
   pushLog(state, 'action', `打出【${def.name}】${card.empowered ? '（强化）' : ''}`, [
     def.text,
-    ...(cost ? [`支付 ${cost / 10}w`] : []),
+    ...(cost ? [`支付 ${(cost / 10).toFixed(2)}w`] : []),
   ])
   return { ok: true, msg: `已打出【${def.name}】` }
 }
@@ -540,13 +540,13 @@ export function buyMaterial(state: GameState, materialId: string, lot: LotSize):
       debitAmt: added * unit,
       creditAmt: added * unit,
       detail: [
-        `${added} 件 × ${unit / 10}w = ${((added * unit) / 10).toFixed(1)}w`,
+        `${added} 件 × ${(unit / 10).toFixed(2)}w = ${((added * unit) / 10).toFixed(2)}w`,
         '现金实付全额转入库存（移动加权平均计价），与生产领料出库勾稽',
       ],
     })
   }
   pushLog(state, 'action', `采购 ${nameOf(materialId)} · ${lotLabel(lot)}`, [
-    `${added} 单位 × ${unit / 10}w = ${((added * unit) / 10).toFixed(1)}w`,
+    `${added} 单位 × ${(unit / 10).toFixed(2)}w = ${((added * unit) / 10).toFixed(2)}w`,
   ])
   return { ok: true, msg: `入库 ${added} 单位` }
 }
@@ -703,7 +703,7 @@ export function executePlannedPurchases(state: GameState) {
       debitAmt: added * line.unit,
       creditAmt: added * line.unit,
       detail: [
-        `${added} 件 × ${line.unit / 10}w = ${((added * line.unit) / 10).toFixed(1)}w`,
+        `${added} 件 × ${(line.unit / 10).toFixed(2)}w = ${((added * line.unit) / 10).toFixed(2)}w`,
         '结算时按采购计划入库并付款',
       ],
     })
@@ -940,11 +940,11 @@ export function buyEquipment(state: GameState, shopId: string): ActionResult {
     debitAmt: shop.price,
     creditAmt: shop.price,
     detail: [
-      `现金支出 ${shop.price / 10}w 资本化为固定资产（不计入当期损益）`,
-      `月折旧 ${shop.depreciation / 10}w 为非现金费用，逐月进生产费用`,
+      `现金支出 ${(shop.price / 10).toFixed(2)}w 资本化为固定资产（不计入当期损益）`,
+      `月折旧 ${(shop.depreciation / 10).toFixed(2)}w 为非现金费用，逐月进生产费用`,
     ],
   })
-  pushLog(state, 'action', `购置设备【${shop.name}】`, [`${shop.price / 10}w`, shop.desc])
+  pushLog(state, 'action', `购置设备【${shop.name}】`, [`${(shop.price / 10).toFixed(2)}w`, shop.desc])
   return { ok: true, msg: `产能 +${shop.capacity}` }
 }
 
@@ -1071,7 +1071,7 @@ export function postProductionInbound(
       debitAmt: Math.round(bonusVal),
       creditAmt: Math.round(bonusVal),
       detail: [
-        `每 5 件额外入库 1 件（生产 5 人），按本批单位成本 ${unitCostIn > 0 ? (unitCostIn / 10).toFixed(1) : '0'}w 计价`,
+        `每 5 件额外入库 1 件（生产 5 人），按本批单位成本 ${unitCostIn > 0 ? (unitCostIn / 10).toFixed(2) : '0'}w 计价`,
         '贷记营业外收入：资产与权益同步增加，恒等式不漂移',
       ],
     })
@@ -1125,7 +1125,7 @@ export function toggleOvertime(state: GameState): ActionResult {
   }
   if (state.cash < OVERTIME_COST) return fail('现金不足')
   state.plan.overtime = true
-  return { ok: true, msg: `加班已安排（结算时扣 ${OVERTIME_COST / 10}w）` }
+  return { ok: true, msg: `加班已安排（结算时扣 ${(OVERTIME_COST / 10).toFixed(2)}w）` }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1379,12 +1379,12 @@ export function borrow(state: GameState, amount: Money): ActionResult {
     debitAmt: amount,
     creditAmt: amount,
     detail: [
-      `到账 ${amount / 10}w，新增负债 ${amount / 10}w`,
+      `到账 ${(amount / 10).toFixed(2)}w，新增负债 ${(amount / 10).toFixed(2)}w`,
       '现金与负债同步增加，净资产不变；利息按月确认进财务费用',
     ],
   })
-  pushLog(state, 'action', `借款 ${amount / 10}w`, [`月利率 ${(d.rate * 100).toFixed(1)}%`])
-  return { ok: true, msg: `到账 ${amount / 10}w` }
+  pushLog(state, 'action', `借款 ${(amount / 10).toFixed(2)}w`, [`月利率 ${(d.rate * 100).toFixed(1)}%`])
+  return { ok: true, msg: `到账 ${(amount / 10).toFixed(2)}w` }
 }
 
 export function repay(state: GameState, amount: Money): ActionResult {
@@ -1400,10 +1400,10 @@ export function repay(state: GameState, amount: Money): ActionResult {
     credit: '现金',
     debitAmt: amount,
     creditAmt: amount,
-    detail: [`归还 ${amount / 10}w，负债同步减少`],
+    detail: [`归还 ${(amount / 10).toFixed(2)}w，负债同步减少`],
   })
-  pushLog(state, 'action', `还款 ${amount / 10}w`)
-  return { ok: true, msg: `已还 ${amount / 10}w` }
+  pushLog(state, 'action', `还款 ${(amount / 10).toFixed(2)}w`)
+  return { ok: true, msg: `已还 ${(amount / 10).toFixed(2)}w` }
 }
 
 // ════════════════════════════════════════════════════════════

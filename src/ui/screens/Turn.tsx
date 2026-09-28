@@ -562,7 +562,7 @@ function BuyPage({ g }: { g: Game }) {
               return (
                 <button
                   key={lot}
-                  className={`btn btn-mini${chosen ? ' on' : ''}`}
+                  className={`btn btn-mini${chosen ? ' on selected' : ''}`}
                   disabled={disabled}
                   onClick={() => {
                     setBuy({ id: pickLot, lot })

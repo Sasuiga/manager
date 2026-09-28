@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as E from '../core/engine'
 import type { CoreScenarioId, GameMode, GameState } from '../core/engine'
 import type { ActionResult } from '../core/actions'
@@ -74,7 +74,7 @@ export function useGame(seed: number | null, mode: GameMode = 'full', scenario?:
    * 时把 ref.current 永久定死成 null，之后再也不更新。
    * 这里每次渲染都从 ref 现取，重渲染由 tick 驱动。
    */
-  return {
+  const game: Game = {
     s: ref.current as GameState,
     act,
     mutate,
@@ -84,4 +84,11 @@ export function useGame(seed: number | null, mode: GameMode = 'full', scenario?:
     setToast,
     tick,
   }
+
+  /** dev 调试句柄：控制台里 window.__g.mutate(fn) 可直接改游戏状态（配合 CDP 截图/手测） */
+  useEffect(() => {
+    if (import.meta.env.DEV) (window as unknown as { __g?: Game }).__g = game
+  }, [game, tick])
+
+  return game
 }

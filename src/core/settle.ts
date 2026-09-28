@@ -112,7 +112,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
         debitAmt: added * unit,
         creditAmt: added * unit,
         detail: [
-          `${added} 件 × ${unit / 10}w（协议锁价，不占本月采购档数）`,
+          `${added} 件 × ${(unit / 10).toFixed(2)}w（协议锁价，不占本月采购档数）`,
           '现金实付全额转入库存（移动加权平均计价）',
         ],
       })
@@ -527,7 +527,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   // ══════════ 6. 终局判定 ══════════
   if (state.cash < 0) {
     state.result = 'lost'
-    state.lossReason = `第 ${state.month} 月结算后资金为负（${(state.cash / 10).toFixed(1)}w）`
+    state.lossReason = `第 ${state.month} 月结算后资金为负（${(state.cash / 10).toFixed(2)}w）`
   } else if (state.misses >= 2) {
     state.result = 'lost'
     state.lossReason = '连续两个季度未达成董事会基本目标'

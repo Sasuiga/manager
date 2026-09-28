@@ -5,17 +5,16 @@ import type { Money, Tier } from '../core/types'
  * 展示时统一走这里，避免各页面各写一套换算。
  */
 
-/** 42.5w / -3w / 0 */
-export function wan(v: Money, digits = 1): string {
+/** 42.50w / -3.00w / 0 —— 财务金额统一保留两位小数 */
+export function wan(v: Money, digits = 2): string {
   const w = v / 10
-  if (Math.abs(w) < 0.05) return '0'
-  const s = w.toFixed(digits)
-  return s.replace(/\.0+$/, '') + 'w'
+  if (Math.abs(w) < 0.5 * 10 ** (1 - digits)) return '0'
+  return w.toFixed(digits) + 'w'
 }
 
-/** 带符号：+3w / -3w */
-export function wanSigned(v: Money, digits = 1): string {
-  if (Math.abs(v) < 0.5) return '0'
+/** 带符号：+3.00w / -3.00w */
+export function wanSigned(v: Money, digits = 2): string {
+  if (Math.abs(v) < 0.5 * 10 ** (1 - digits)) return '0'
   return (v > 0 ? '+' : '') + wan(v, digits)
 }
 
