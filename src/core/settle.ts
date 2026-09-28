@@ -629,6 +629,11 @@ export function priceAtProduct(tier: Tier, shift: number): Money {
   return arr[Math.max(0, Math.min(4, 2 + shift))]
 }
 
+/** 原料锁价（协议用）：按档位查表，与结算执行同一口径。 */
+export function materialPriceAt(id: string, shift: number): Money {
+  return priceAt(id, shift)
+}
+
 const TIER_LABEL: Record<Tier, string> = { low: '低端', mid: '中端', high: '高端', special: '特殊' }
 
 function applyResearchSuccess(state: GameState, projectId: string) {

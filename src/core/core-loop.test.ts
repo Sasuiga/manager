@@ -33,6 +33,21 @@ describe('核心循环预演', () => {
     expect(p.products.find((x) => x.tier === 'low')?.planned).toBe(8)
   })
 
+  it('收入与毛利可按产品拆分，产品内再按订单/现货拆分并可还原汇总值', () => {
+    const s = preparedCoreState()
+    const p = E.previewOperations(s)
+    for (const item of p.products) {
+      expect(item.orderRevenue + item.spotRevenue.min).toBe(item.revenue.min)
+      expect(item.orderRevenue + item.spotRevenue.max).toBe(item.revenue.max)
+      expect(item.orderGrossProfit + item.spotGrossProfit.min).toBeCloseTo(item.grossProfit.min, 1)
+      expect(item.orderGrossProfit + item.spotGrossProfit.max).toBeCloseTo(item.grossProfit.max, 1)
+    }
+    expect(p.products.reduce((a, x) => a + x.revenue.min, 0)).toBe(p.revenue.min)
+    expect(p.products.reduce((a, x) => a + x.revenue.max, 0)).toBe(p.revenue.max)
+    expect(p.products.reduce((a, x) => a + x.grossProfit.min, 0)).toBe(p.grossProfit.min)
+    expect(p.products.reduce((a, x) => a + x.grossProfit.max, 0)).toBe(p.grossProfit.max)
+  })
+
   it('核心模式正式结算结果落在预演区间内', () => {
     const s = preparedCoreState()
     const p = E.previewOperations(s)
@@ -40,8 +55,7 @@ describe('核心循环预演', () => {
 
     expect(report.ledger.revenue).toBeGreaterThanOrEqual(p.revenue.min)
     expect(report.ledger.revenue).toBeLessThanOrEqual(p.revenue.max)
-    expect(report.ledger.grossProfit).toBeGreaterThanOrEqual(p.grossProfit.min)
-    expect(report.ledger.grossProfit).toBeLessThanOrEqual(p.grossProfit.max)
+    // 预计毛利现为统一口径（含固定成本分摊），与损益表口径的 report.ledger.grossProfit 不保证同区间，不再断言
     expect(report.ledger.cashEnd).toBeGreaterThanOrEqual(p.cashEnd.min)
     expect(report.ledger.cashEnd).toBeLessThanOrEqual(p.cashEnd.max)
   })
@@ -617,5 +631,40 @@ describe('贸易商', () => {
     E.nextMonth(s)
     expect(s.extraBuys).toEqual([])
     expect(E.traderQuota(s)).toBe(1)
+  })
+})
+
+describe('统一成本口径（采购计划 → 单位成本 → 单件毛利 → 预计毛利）', () => {
+  it('计划后原料单价：无计划等于账面单价，选档后按移动加权平均更新', () => {
+    const s = preparedCoreState()
+    const m = s.materials.pkg
+    expect(E.plannedMaterialUnitCost(s, 'pkg')).toBe(m.value / m.qty)
+    s.materials.pkg.chosenLot = 'mid'
+    const line = E.plannedPurchaseLine(s, 'pkg')
+    expect(line.qty).toBeGreaterThan(0)
+    expect(E.plannedMaterialUnitCost(s, 'pkg')).toBe((m.value + line.cost) / (m.qty + line.qty))
+  })
+
+  it('生产单位成本 = 计划后库存材料成本 + 固定成本分摊', () => {
+    const s = preparedCoreState()
+    const uc = E.productionUnitCosts(s)
+    expect(uc.tiers.low.total).toBe(uc.tiers.low.material + uc.tiers.low.fixed)
+    expect(uc.fixedTotal).toBe(uc.fixedParts.labor + uc.fixedParts.depreciation + uc.fixedParts.overtime)
+    if (uc.planned > 0) {
+      expect(uc.tiers.low.fixed).toBe(uc.fixedTotal / uc.planned)
+    }
+  })
+
+  it('预计毛利 = 市场单件毛利 ×（订单 + 现货区间）', () => {
+    const s = preparedCoreState()
+    const p = E.previewOperations(s)
+    const lo = p.products.find((x) => x.tier === 'low')!
+    expect(lo.unitGrossProfit).toBeCloseTo(E.derive(s).price.low - E.productionUnitCosts(s).tiers.low.total, 3)
+    expect(lo.grossProfit.min).toBe(lo.unitGrossProfit * (lo.orderQty + lo.spotQty.min))
+    expect(lo.grossProfit.max).toBe(lo.unitGrossProfit * (lo.orderQty + lo.spotQty.max))
+    expect(lo.orderGrossProfit).toBe(lo.unitGrossProfit * lo.orderQty)
+    // 仅低端有排产：汇总等于单品
+    expect(p.grossProfit.min).toBe(lo.grossProfit.min)
+    expect(p.grossProfit.max).toBe(lo.grossProfit.max)
   })
 })

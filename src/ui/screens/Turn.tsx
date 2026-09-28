@@ -208,7 +208,7 @@ export function TurnScreen({
           onClick={() => s.mode === 'core' ? onDept('preview') : onSettle()}
         >
           <Icon name="settle" size={19} />
-          <span>{s.mode === 'core' ? '预演' : '结算'}</span>
+          <span>{s.mode === 'core' ? '预算' : '结算'}</span>
         </button>
       </nav>
     </>
@@ -373,6 +373,8 @@ function BuyPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
   const mats = E.materialViews(gs)
+  /** 结算前现金（与预算页同一口径）：月初现金 − 纯消耗（采购计划/协议/加班/研发/利息/上月工资） */
+  const presettle = E.preSettleCash(gs)
   const [buy, setBuy] = useState<{ id: string; lot: E.LotSize } | null>(null)
   const [pickLot, setPickLot] = useState<string | null>(null)
   const [trader, setTrader] = useState(false)
@@ -387,11 +389,6 @@ function BuyPage({ g }: { g: Game }) {
           每月为原料选择采购档位，签长期协议锁定供货量；人员越多档位越宽、可解锁高级材料。
         </p>
         <LedgerSection g={g} dept="buy" />
-        <p className="hint" style={{ marginTop: 'var(--s2)' }}>
-          {gs.mode === 'core'
-            ? '普通采购先形成计划，结算时按“采购入库 → 生产 → 销售”统一执行；结算前可调整。'
-            : '采购实付现金自动入账「借 库存 / 贷 现金」，金额与库存账面、生产领料出库严格勾稽。'}
-        </p>
       </div>
 
       {/* 产品 BOM 看板（从生产页挪来）：采购时对照配方估算「买多少原料 ≈ 产多少货」 */}
@@ -436,6 +433,7 @@ function BuyPage({ g }: { g: Game }) {
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>{gs.mode === 'core' ? '库存 + 计划' : '库存'}</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>供给</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>价格水平</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>库存成本</th>
               {gs.mode === 'core' ? <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>库存占用</th> : null}
               <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 500, color: 'var(--muted)' }}>操作</th>
             </tr>
@@ -457,6 +455,22 @@ function BuyPage({ g }: { g: Game }) {
                 </td>
                 <td style={{ textAlign: 'right', padding: '6px 8px' }}>
                   <span className={tierClass(m.tierShift)}>{tierName(m.tierShift)}</span>
+                </td>
+                <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
+                  {gs.mode === 'core' && m.chosenLot ? (
+                    <span className="mono xs">
+                      {m.qty > 0 ? (
+                        <>
+                          {wan(m.avgCost)} →{' '}
+                        </>
+                      ) : null}
+                      <b>{wan(E.plannedMaterialUnitCost(gs, m.id))}</b>
+                    </span>
+                  ) : m.qty > 0 ? (
+                    <span className="mono xs">{wan(m.avgCost)}</span>
+                  ) : (
+                    <span className="xs faint">无库存</span>
+                  )}
                 </td>
                 {gs.mode === 'core' ? (
                   <td style={{ textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
@@ -489,15 +503,26 @@ function BuyPage({ g }: { g: Game }) {
             ))}
           </tbody>
         </table>
+        <p className="hint" style={{ marginTop: 'var(--s2)' }}>
+          {gs.mode === 'core'
+            ? '普通采购先形成计划，结算时按“采购入库 → 生产 → 销售”统一执行；结算前可调整。'
+            : '采购实付现金自动入账「借 库存 / 贷 现金」，金额与库存账面、生产领料出库严格勾稽。'}
+        </p>
+        <p className="hint" style={{ marginTop: 'var(--s1)' }}>
+          库存成本 = 原料账面移动加权平均单价；核心模式选档后按（账面 + 计划付款）÷（库存 + 计划到货）更新，供生产页单位成本与销售页单件毛利使用。
+        </p>
       </div>
 
       {gs.mode === 'core' ? (
         <div className="card">
           <h3>采购计划汇总</h3>
           <div className="title-rule" />
-          <Row k="计划支出" v={wan(E.plannedPurchaseCost(gs))} />
-          <Row k="计划后可用现金" v={wan(E.availableCashAfterPurchasePlan(gs))} />
+          <Row k="计划支出" v={wan(presettle.purchaseSpend)} />
+          <Row k="结算前现金" v={wan(presettle.cashAfter)} cls={presettle.cashAfter < 0 ? 'red' : ''} />
           <Row k="已选采购档" v={`${gs.lotsUsed} / ${d.buyLots}`} />
+          {presettle.cashAfter < 0 ? (
+            <p className="hint">纯消耗（含协议/加班/研发/利息/上月工资）超出月初现金，计划超出资金能力；明细见「预算」页</p>
+          ) : null}
         </div>
       ) : null}
 
@@ -848,6 +873,7 @@ function MakePage({ g }: { g: Game }) {
   const maxBy = E.maxProducibleByTier(gs)
   const plannedTotal = E.plannedTotal(gs)
   const remainingCap = Math.max(0, cap - plannedTotal)
+  const ucost = E.productionUnitCosts(gs)
   const [equip, setEquip] = useState(false)
   const [confirm, setConfirm] = useState(false)
 
@@ -941,9 +967,35 @@ function MakePage({ g }: { g: Game }) {
             onClick={() => setConfirm(true)}
           >
             <span className="btn-main">确认生产安排</span>
-            <span className="btn-sub">{plannedTotal > 0 ? `共 ${plannedTotal} 件，于预演结算时统一入库` : '先分配产量'}</span>
+            <span className="btn-sub">{plannedTotal > 0 ? `共 ${plannedTotal} 件，于结算时统一入库` : '先分配产量'}</span>
           </button>
         </div> : null}
+      </div>
+
+      {/* 生产单位成本（统一口径）：材料按采购计划后库存单价，固定成本按排产量分摊；销售页单件毛利与预算页预计毛利共用此数值 */}
+      <div className="card">
+        <h3>生产单位成本</h3>
+        <div className="title-rule" />
+        {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
+          const c = ucost.tiers[t]
+          return (
+            <Row
+              key={t}
+              k={
+                <>
+                  {BOMS[t].name}
+                  <span className="faint xs"> · {TIER_LABEL[t]}</span>
+                </>
+              }
+              v={`${wan(c.total)}/件（材料 ${wan(c.material)} + 固定分摊 ${wan(c.fixed)}）`}
+            />
+          )
+        })}
+        <div className="hint">
+          {ucost.planned > 0
+            ? `材料按采购计划后库存单价（移动加权平均）×配方×降本系数计；固定成本 ${wan(ucost.fixedTotal)}（薪酬 ${wan(ucost.fixedParts.labor)} + 折旧 ${wan(ucost.fixedParts.depreciation)} + 加班 ${wan(ucost.fixedParts.overtime)}）按排产 ${ucost.planned} 件分摊。销售页单件毛利与预算页预计毛利按此口径。`
+            : '本月未排产：单位成本只计材料，固定成本暂不分摊。销售页单件毛利与预算页预计毛利按此口径。'}
+        </div>
       </div>
 
       <div className="card">
@@ -1186,15 +1238,9 @@ function TierOrderRow({
 function SellPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
-  const plannedTotal = TIER_ORDER.reduce((sum, tier) => sum + Math.max(0, gs.plan.quantities[tier]), 0)
-  const depreciation = gs.equipment.reduce((sum, e) => sum + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0)
-  const overtimeCost = gs.plan.overtime && gs.depts.make.staff >= 3 ? E.OVERTIME_COST : 0
-  const fixedProductionCost = d.salaryPer.make * gs.depts.make.staff + depreciation + overtimeCost
-  /** 预估单件毛利（万元）= 单价 − 变动单位成本 − 固定成本分摊；市价与订单价按单件同口径对比。 */
-  const estimatedGrossProfit = (tier: Tier, price: number) => {
-    const allocatedFixed = plannedTotal > 0 ? fixedProductionCost / plannedTotal : 0
-    return Math.round(price - E.unitCost(gs, tier, d) - allocatedFixed)
-  }
+  const unitCosts = E.productionUnitCosts(gs)
+  /** 预估单件毛利（统一口径）= 单价 − 生产单位成本（计划后库存材料成本 + 固定成本分摊）；与预算页同口径、同数值（不取整），市价与订单价按单件同口径对比。 */
+  const estimatedGrossProfit = (tier: Tier, price: number) => price - unitCosts.tiers[tier].total
   const used = E.allocUsed(gs)
   /** 各层强制订单量（事件/卡牌产生，必交）。 */
   const forcedQtyBy: Record<string, number> = { low: 0, mid: 0, high: 0, special: 0 }

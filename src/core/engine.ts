@@ -18,11 +18,11 @@ import type { Climate, GameEventDef, GameState, GoalDef, GoalTrack, Ledger, Mone
 
 export * from './types'
 export { derive, mergeMods, unitCost, rndProjectOutcome } from './derive'
-export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityOf, buildDeck } from './game'
+export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityOf, buildDeck, wagePayableOf } from './game'
 export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct } from './settle'
 export type { SettleReport } from './settle'
-export { previewOperations } from './preview'
-export type { OperatingPreview, ProductPreview, ValueRange } from './preview'
+export { previewOperations, preSettleCash } from './preview'
+export type { OperatingPreview, ProductPreview, ValueRange, PreSettleCash } from './preview'
 export { CORE_SCENARIOS, applyCoreScenario } from './scenarios'
 export type { CoreScenarioDef, CoreScenarioId } from './scenarios'
 export {
@@ -47,6 +47,8 @@ export {
   availableCashAfterPurchasePlan,
   materialAvailableForProduction,
   executePlannedPurchases,
+  plannedMaterialUnitCost,
+  productionUnitCosts,
   lotQty,
   lotPrice,
   lotLabel,

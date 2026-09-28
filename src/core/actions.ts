@@ -625,6 +625,67 @@ export function materialAvailableForProduction(state: GameState, materialId: str
   return current + (state.mode === 'core' ? plannedPurchaseLine(state, materialId).qty : 0)
 }
 
+/**
+ * 采购计划后的原料单位成本（统一口径，移动加权平均）：
+ * - 核心模式：(账面价值 + 计划采购付款) ÷ (现库存 + 计划到货)——计划执行后的库存成本；
+ * - 完整模式：采购已即时入账，即当前账面单价；
+ * - 无库存且无计划：以当前价格水平代理未来采购成本。
+ */
+export function plannedMaterialUnitCost(state: GameState, materialId: string): number {
+  const mat = state.materials[materialId]
+  const line = plannedPurchaseLine(state, materialId)
+  const totalQty = (mat?.qty ?? 0) + line.qty
+  if (totalQty > 0) return ((mat?.value ?? 0) + line.cost) / totalQty
+  return derive(state).materials[materialId]?.price ?? 0
+}
+
+/** 单条产品线成本构成（统一口径） */
+export interface UnitCostBreakdown {
+  /** 直接材料成本：BOM 领料量（含节材修正）× 计划后原料库存单价 × 降本系数 */
+  material: number
+  /** 固定成本分摊：(生产薪酬 + 折旧 + 加班费) ÷ 本月排产量，各线相同 */
+  fixed: number
+  /** 单位成本 = 材料 + 固定成本分摊 */
+  total: number
+}
+
+/** 生产单位成本（统一口径）汇总视图 */
+export interface ProductionUnitCosts {
+  tiers: Record<Tier, UnitCostBreakdown>
+  /** 本月生产固定成本合计（薪酬 + 折旧 + 加班费） */
+  fixedTotal: number
+  fixedParts: { labor: number; depreciation: number; overtime: number }
+  /** 本月排产量（分摊分母）；为 0 时固定成本不分摊 */
+  planned: number
+}
+
+/**
+ * 生产单位成本（完全成本口径，供生产 / 销售 / 预算页共用）：
+ * 材料成本按采购计划后的原料库存单价计 BOM 领料（采购计划在此影响库存成本）；
+ * 固定成本（生产薪酬、本月折旧、加班费）按排产量分摊到每件。
+ */
+export function productionUnitCosts(state: GameState): ProductionUnitCosts {
+  const d = derive(state)
+  const labor = d.salaryPer.make * state.depts.make.staff
+  const depreciation = state.equipment.reduce((sum, e) => sum + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0)
+  const overtime = state.plan.overtime && state.depts.make.staff >= 3 ? OVERTIME_COST : 0
+  const fixedTotal = labor + depreciation + overtime
+  const planned = TIERS.reduce((sum, t) => sum + state.plan.quantities[t], 0)
+  const allocated = planned > 0 ? fixedTotal / planned : 0
+  const tiers = {} as Record<Tier, UnitCostBreakdown>
+  for (const t of TIERS) {
+    const bom = BOMS[t]
+    let material = 0
+    for (const [id, need] of Object.entries(bom.recipe)) {
+      const per = Math.max(1, need - d.matSave)
+      material += per * plannedMaterialUnitCost(state, id)
+    }
+    material = Math.round(material * d.costFactor)
+    tiers[t] = { material, fixed: allocated, total: material + allocated }
+  }
+  return { tiers, fixedTotal, fixedParts: { labor, depreciation, overtime }, planned }
+}
+
 /** 正式结算时执行核心模式采购计划。 */
 export function executePlannedPurchases(state: GameState) {
   if (state.mode !== 'core') return
