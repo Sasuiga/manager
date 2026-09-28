@@ -520,6 +520,61 @@ describe('研发放置与 IP 技能树', () => {
   })
 })
 
+describe('IP 技能树 3 + 3×2 + 3×2×2 分支与逐层揭示', () => {
+  function ipState(seed = 218) {
+    const s = E.newGame(seed, 'core')
+    E.startGame(s)
+    s.orders = []
+    s.acceptedOrders = []
+    s.depts.rnd.staff = 5
+    return s
+  }
+
+  it('树形结构：21 个 IP 节点 = 3 阶段 1 + 6 阶段 2 + 12 阶段 3', () => {
+    const ips = E.RND_PROJECTS.filter((p) => p.kind === 'ip')
+    expect(ips.length).toBe(21)
+    const byStage = (st: 1 | 2 | 3) => ips.filter((p) => p.stage === st)
+    expect(byStage(1)).toHaveLength(3)
+    expect(byStage(2)).toHaveLength(6)
+    expect(byStage(3)).toHaveLength(12)
+    // 阶段 1 无前置；阶段 2/3 前置同分支、高一阶段
+    for (const p of byStage(1)) expect(p.preq).toBeUndefined()
+    for (const p of [...byStage(2), ...byStage(3)]) {
+      expect(p.preq).toBeTruthy()
+      const preq = E.RND_PROJECTS.find((x) => x.id === p.preq)!
+      expect(preq.branch).toBe(p.branch)
+      expect(preq.stage).toBe(p.stage! - 1)
+    }
+  })
+
+  it('前置链跨两层：阶段 3 需先完成对应的阶段 2 方向', () => {
+    const s = ipState()
+    expect(E.setRndAssign(s, 'ip-supply-3c', 1).ok).toBe(false) // 需先解锁「库存管理」
+    s.rnd['ip-supply-1'].done = true
+    expect(E.setRndAssign(s, 'ip-supply-3c', 1).ok).toBe(false) // 阶段 2 新方向未完成
+    s.rnd['ip-supply-2b'].done = true
+    expect(E.setRndAssign(s, 'ip-supply-3c', 1).ok).toBe(true)
+  })
+
+  it('大宗集采 J9：所有原料价格降 1 档', () => {
+    const s = ipState()
+    const before = E.derive(s).materials.resin.tierShift
+    s.ipOwned.push('J9')
+    expect(E.derive(s).materials.resin.tierShift).toBe(before - 1)
+  })
+
+  it('质量认证 I8 与品牌溢价 J10 售价档位叠加', () => {
+    const s = ipState()
+    const base = E.derive(s).price.low
+    s.ipOwned.push('I8')
+    const one = E.derive(s).price.low
+    s.ipOwned.push('J10')
+    const two = E.derive(s).price.low
+    expect(one).toBeGreaterThan(base)
+    expect(two).toBeGreaterThan(one)
+  })
+})
+
 describe('场景预置研发', () => {
   it('各场景开局预置 1 名研发、仅低端解锁、知产树为空', () => {
     for (const def of E.CORE_SCENARIOS) {

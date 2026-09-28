@@ -1367,47 +1367,62 @@ function RndPage({ g }: { g: Game }) {
 
   const themeStats = (kind: E.ResearchKind) => {
     const list = E.RND_PROJECTS.filter((p) => p.kind === kind)
-    const active = list.filter((p) => { const s = gs.rnd[p.id]; return !!s?.projectId && !s.done && s.assigned > 0 }).length
-    return { active, total: list.length }
+    // 逐层揭示：前置未解锁的阶段 2/3 节点不算可见总数（BOM 无前置，恒 3）
+    const visible = list.filter((p) => !p.preq || !!gs.rnd[p.preq]?.done)
+    const active = visible.filter((p) => { const s = gs.rnd[p.id]; return !!s?.projectId && !s.done && s.assigned > 0 }).length
+    return { active, total: visible.length }
   }
   const bom = themeStats('bom')
   const ip = themeStats('ip')
+
+  const free = Math.max(0, staff - assigned)
 
   return (
     <>
       <div className="card">
         <h3>研发部</h3>
         <div className="title-rule" />
-        <Row k="研发人员" v={`${staff}/5 人`} />
-        <Row k="人员放置" v={`${assigned} 人已放置 · ${Math.max(0, staff - assigned)} 人空闲`} />
-        <Row k="本月研发费用" v={`${d.rndActiveCount} 个在研 × ${wan(d.rndCost)} / 项目`} />
-        {staff - assigned > 0 ? <p className="hint">空闲人员照发工资但不产出进度，请放到研发项目上（主题弹框内可增减，确定后锁定至月初）。</p> : null}
+        <p className="card-desc" style={{ color: 'var(--muted)' }}>
+          将人员放置到在研项目（承诺制）：每人 +5 进度、+5% 成功率，确定后本月锁定，下月初可再调。
+        </p>
+        <div className="grid-3" style={{ marginBottom: 'var(--s2)' }}>
+          <div>
+            <div className="stat-label">研发人员</div>
+            <div className="stat-value">{staff}<span className="faint">/5</span></div>
+          </div>
+          <div>
+            <div className="stat-label">已放置</div>
+            <div className="stat-value">{assigned}</div>
+          </div>
+          <div>
+            <div className="stat-label">本月研发费用</div>
+            <div className={`stat-value${d.rndActiveCount > 0 ? ' gold' : ''}`}>{wan(d.rndActiveCount * d.rndCost)}</div>
+          </div>
+        </div>
+        {d.rndActiveCount > 0 ? (
+          <p className="hint">{d.rndActiveCount} 个在研 × {wan(d.rndCost)} / 项目。</p>
+        ) : null}
+        {free > 0 ? (
+          <p className="hint">{free} 人未放置：照计提工资但不产出进度，请放到在研项目上。</p>
+        ) : null}
         <LedgerSection g={g} dept="rnd" />
       </div>
 
       <div className="card">
         <h3>研发主题</h3>
         <div className="title-rule" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--s2)' }}>
-          <button className="card-item d-rnd" onClick={() => setTheme('prod')}>
-            <span className="spine" />
-            <span className="card-body">
-              <span className="card-name">新产品</span>
-              <span className="card-desc">产品配方 BOM · 解锁当月即可排产</span>
-              <span className="tag">在研 {bom.active}/{bom.total}</span>
-            </span>
+        <div className="stack">
+          <button className="btn btn-mini" onClick={() => setTheme('prod')}>
+            <span className="btn-main">新产品 · BOM 配方</span>
+            <span className="btn-sub">在研 {bom.active}/{bom.total} · 解锁当月即可排产</span>
           </button>
-          <button className="card-item d-rnd" onClick={() => setTheme('ip')}>
-            <span className="spine" />
-            <span className="card-body">
-              <span className="card-name">知识产权</span>
-              <span className="card-desc">技能树 · 三分支 × 三阶段</span>
-              <span className="tag">在研 {ip.active}/{ip.total}</span>
-            </span>
+          <button className="btn btn-mini" onClick={() => setTheme('ip')}>
+            <span className="btn-main">知识产权 · 技能树</span>
+            <span className="btn-sub">在研 {ip.active}/{ip.total} · 三分支 · 逐层揭示</span>
           </button>
         </div>
         <p className="hint">
-          每名研发人员 +5 进度/月、+5% 成功率（封顶 90%，中端教学 100%）；主题弹框内可增减，确定后本月锁定不可再调；每个在研项目每月 {wan(d.rndCost)}。
+          成功率封顶 90%（中端教学 100%），放置人数越多越稳。
         </p>
       </div>
 
@@ -1483,19 +1498,13 @@ function useRndSheetDraft(g: Game, projects: E.ResearchProjectDef[]) {
   return { draft, setDraftValue, confirmed, capFor, confirm }
 }
 
-/** 主题弹框底部：取消（关闭并还原）/ 确定（提交并锁定本月）。 */
-function RndSheetFooter({ confirmed, onConfirm, onCancel }: { confirmed: boolean; onConfirm: () => void; onCancel: () => void }) {
+/** 主题弹框底部：默认「关闭」（关闭即还原草稿）+ T1「确认放置」（写回并锁定本月）。 */
+function RndSheetFooter({ confirmed, onConfirm }: { confirmed: boolean; onConfirm: () => void }) {
   return (
-    <>
-      <button className="btn btn-nav" onClick={onCancel}>
-        <span className="btn-main">取消</span>
-        <span className="btn-sub">关闭并还原调整</span>
-      </button>
-      <button className="btn" disabled={confirmed} onClick={onConfirm}>
-        <span className="btn-main">确定</span>
-        <span className="btn-sub">{confirmed ? '本月已锁定' : '确认后本月不可再调'}</span>
-      </button>
-    </>
+    <button className="btn btn-primary" disabled={confirmed} onClick={onConfirm}>
+      <span className="btn-main">确认放置</span>
+      <span className="btn-sub">{confirmed ? '已确认 · 下月初可再调' : '确认后本月锁定'}</span>
+    </button>
   )
 }
 
@@ -1511,7 +1520,6 @@ function RndBomSheet({ g, onClose }: { g: Game; onClose: () => void }) {
       footer={(
         <RndSheetFooter
           confirmed={confirmed}
-          onCancel={onClose}
           onConfirm={() => {
             const r = confirm()
             if (r.ok) onClose()
@@ -1537,12 +1545,12 @@ function RndBomSheet({ g, onClose }: { g: Game; onClose: () => void }) {
 }
 
 const RND_BRANCH_META: { id: E.RndBranch; name: string; sub: string }[] = [
-  { id: 'supply', name: '供应线', sub: '采购网络 → 供应链联盟 → 成本转移' },
-  { id: 'channel', name: '渠道线', sub: '订单网络 → 渠道垄断 → 品牌壁垒' },
-  { id: 'equip', name: '装备线', sub: '设备专利 → 自动化产线 → 研发突破' },
+  { id: 'supply', name: '供应线', sub: '原料供给 · 成本与资金' },
+  { id: 'channel', name: '渠道线', sub: '订单 · 品牌与质量' },
+  { id: 'equip', name: '装备线', sub: '产能 · 工艺与效率' },
 ]
 
-/** 主题弹框：知识产权技能树（三分支）。草稿态调整，确定后本月锁定。 */
+/** 主题弹框：知识产权技能树（三分支，阶段 2/3 每层 2 个方向任选，前置解锁后揭示下层）。草稿态调整，确定后本月锁定。 */
 function RndIpSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const gs = g.s
   const projects = E.RND_PROJECTS.filter((p) => p.kind === 'ip')
@@ -1550,12 +1558,11 @@ function RndIpSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   return (
     <Sheet
       title="知识产权技能树"
-      sub="解锁上游节点后方可研究下游；解锁后效果立即生效"
+      sub="解锁上游后揭示下层方向（阶段 2/3 各 2 选 1）；效果解锁即生效"
       onClose={onClose}
       footer={(
         <RndSheetFooter
           confirmed={confirmed}
-          onCancel={onClose}
           onConfirm={() => {
             const r = confirm()
             if (r.ok) onClose()
@@ -1566,14 +1573,16 @@ function RndIpSheet({ g, onClose }: { g: Game; onClose: () => void }) {
       <div className="stack">
         {RND_BRANCH_META.map((b) => {
           const branchProjects = projects.filter((p) => p.branch === b.id)
-          const active = branchProjects.filter((p) => { const s = gs.rnd[p.id]; return !!s?.projectId && !s.done }).length
+          // 逐层揭示：前置未解锁的下游方向暂不展示（阶段 1 恒展示）
+          const shown = branchProjects.filter((p) => !p.preq || !!gs.rnd[p.preq]?.done)
+          const active = shown.filter((p) => { const s = gs.rnd[p.id]; return !!s?.projectId && !s.done }).length
           return (
             <div key={b.id}>
               <div className="section-label">
-                {b.name} · {b.sub} — 在研 {active}/{branchProjects.length}
+                {b.name} · {b.sub} — 在研 {active}/{shown.length}
               </div>
               <div className="stack-sm">
-                {branchProjects.map((p) => (
+                {shown.map((p) => (
                   <RndProjectRow
                     key={p.id}
                     g={g}
@@ -1593,7 +1602,7 @@ function RndIpSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   )
 }
 
-/** 单个研发项目行：状态 / 进度（紫条 = 当前进度，金色标记 = 本月结算后位置）/ 人员放置槽位（草稿态，确定前可增减）。 */
+/** 单个研发项目行（内容卡）：状态 / 进度（紫条 = 当前进度，金色标记 = 本月结算后位置）/ 人员放置槽位（草稿态，确定前可增减）。 */
 function RndProjectRow({
   g,
   p,
@@ -1630,87 +1639,86 @@ function RndProjectRow({
         : n > 0
           ? '确定后立项'
           : '未开始'
+  const tagCls = done ? ' green' : started ? ' gold' : locked ? '' : n > 0 ? ' amber' : ''
 
   return (
-    <div className={`card-item d-rnd${n > 0 && !done && !locked ? ' on' : ''}`}>
-      <span className="spine" />
-      <span className="card-body" style={{ flex: 1 }}>
-        <span className="hstack-between">
-          <span className="card-name">{p.name}{p.stage ? ` · 阶段 ${p.stage}` : ''}</span>
-          <span className="tag">{statusText}</span>
-        </span>
-        <span className="card-desc">{p.desc}</span>
-        {!done ? (
-          <>
-            <div style={{ margin: 'var(--s2) 0 var(--s1)' }}>
-              <div className="bar" style={{ position: 'relative' }}>
-                <i style={{ width: `${pct}%`, background: 'var(--grape)' }} />
-                {gain > 0 ? (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      bottom: 0,
-                      left: `${projPct}%`,
-                      width: 2,
-                      background: 'var(--gold-hi)',
-                      boxShadow: '0 0 6px rgba(201, 162, 74, 0.8)',
-                    }}
+    <div className="card">
+      <div className="hstack-between">
+        <span className="card-name">{p.name}{p.stage ? ` · 阶段 ${p.stage}` : ''}</span>
+        <span className={`tag${tagCls}`}>{statusText}</span>
+      </div>
+      <div className="card-desc">{p.desc}</div>
+      {!locked && preqDef ? <div className="xs faint">前置：{preqDef.name}</div> : null}
+      {!done ? (
+        <>
+          <div style={{ margin: 'var(--s3) 0 var(--s1)' }}>
+            <div className="bar" style={{ position: 'relative' }}>
+              <i style={{ width: `${pct}%`, background: 'var(--grape)' }} />
+              {gain > 0 ? (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: `${projPct}%`,
+                    width: 2,
+                    background: 'var(--gold-hi)',
+                    boxShadow: '0 0 6px rgba(201, 162, 74, 0.8)',
+                  }}
+                />
+              ) : null}
+            </div>
+            <div className="hstack-between" style={{ marginTop: 4 }}>
+              <span className="xs faint">{willRoll ? '本月结算判定成败' : gain > 0 ? '金色标记 = 结算后进度位置' : ''}</span>
+              <span className="xs mono">{slot.progress}/{p.need}{gain > 0 ? `（+${gain}）` : ''}</span>
+            </div>
+          </div>
+          <div className="card-cond">
+            基础成功率 {Math.round(p.rate * 100)}% · 放置 {n} 人：成功率 {Math.round(rate * 100)}%
+          </div>
+          {/* 人员放置槽位：5 格（每部门上限 5 人）；草稿态可增减，「确定」后全部锁定至月初 */}
+          <div style={{ marginTop: 'var(--s2)', display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[0, 1, 2, 3, 4].map((k) => {
+                const count = k + 1
+                const lit = count <= n
+                const hired = count <= staff
+                const usable = !locked && !confirmed && count <= cap
+                return (
+                  <button
+                    key={k}
+                    className={`rnd-slot${lit ? ' lit' : ''}${hired ? '' : ' unhired'}${locked ? ' locked' : ''}`}
+                    title={
+                      !hired
+                        ? '需再招聘研发人员'
+                        : confirmed
+                          ? '已确认锁定，下月初可再调'
+                          : lit
+                            ? count === n
+                              ? '点击收回 1 人'
+                              : '点击减少到此格'
+                            : '点击放置到此格'
+                    }
+                    disabled={!usable}
+                    onClick={() => onAssign(lit && count === n ? Math.max(0, n - 1) : count)}
                   />
-                ) : null}
-              </div>
-              <div className="hstack-between" style={{ marginTop: 4 }}>
-                <span className="xs faint">{willRoll ? '本月结算判定成败' : gain > 0 ? '金色标记 = 结算后进度位置' : ''}</span>
-                <span className="xs mono">{slot.progress}/{p.need}{gain > 0 ? `（+${gain}）` : ''}</span>
-              </div>
+                )
+              })}
             </div>
-            <span className="card-cond">
-              基础成功率 {Math.round(p.rate * 100)}% · 放置 {n} 人：成功率 {Math.round(rate * 100)}%
-            </span>
-            {/* 人员放置槽位：5 格（每部门上限 5 人）；草稿态可增减，「确定」后全部锁定至月初 */}
-            <div style={{ marginTop: 'var(--s2)', display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {[0, 1, 2, 3, 4].map((k) => {
-                  const count = k + 1
-                  const lit = count <= n
-                  const hired = count <= staff
-                  const usable = !locked && !confirmed && count <= cap
-                  return (
-                    <button
-                      key={k}
-                      className={`rnd-slot${lit ? ' lit' : ''}${hired ? '' : ' unhired'}${locked ? ' locked' : ''}`}
-                      title={
-                        !hired
-                          ? '需再招聘研发人员'
-                          : confirmed
-                            ? '已确认锁定，下月初可再调'
-                            : lit
-                              ? count === n
-                                ? '点击收回 1 人'
-                                : '点击减少到此格'
-                              : '点击放置到此格'
-                      }
-                      disabled={!usable}
-                      onClick={() => onAssign(lit && count === n ? Math.max(0, n - 1) : count)}
-                    />
-                  )
-                })}
-              </div>
-              <button
-                className="slot-btn"
-                disabled={locked || confirmed || n + 1 > cap}
-                title={locked ? '先解锁上游节点' : confirmed ? '已确认锁定' : n + 1 > cap ? '可放置人员已用完' : '多放置 1 人'}
-                onClick={() => onAssign(n + 1)}
-              >
-                +
-              </button>
-              <span className="xs mono faint">{n}/{staff} 人</span>
-            </div>
-            {locked ? <span className="xs faint" style={{ display: 'block', marginTop: 4 }}>解锁上游节点后方可放置人员</span> : null}
-            {confirmed ? <span className="xs gold" style={{ display: 'block', marginTop: 4 }}>已确认锁定：下月初可再调整</span> : null}
-          </>
-        ) : null}
-      </span>
+            <button
+              className="slot-btn"
+              disabled={locked || confirmed || n + 1 > cap}
+              title={locked ? '先解锁上游节点' : confirmed ? '已确认锁定' : n + 1 > cap ? '可放置人员已用完' : '多放置 1 人'}
+              onClick={() => onAssign(n + 1)}
+            >
+              +
+            </button>
+            <span className="xs mono faint">{n}/{staff} 人</span>
+          </div>
+          {locked ? <span className="xs faint" style={{ display: 'block', marginTop: 4 }}>解锁上游节点后方可放置人员</span> : null}
+          {confirmed && n > 0 ? <span className="xs gold" style={{ display: 'block', marginTop: 4 }}>已确认锁定：下月初可再调整</span> : null}
+        </>
+      ) : null}
     </div>
   )
 }

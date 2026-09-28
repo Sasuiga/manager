@@ -315,19 +315,32 @@ export const RND_PROJECTS: ResearchProjectDef[] = [
   { id: 'bom-high', name: '高端 BOM', kind: 'bom', tier: 'high', need: 50, rate: 0.6, desc: '解锁高端产品配方' },
   { id: 'bom-special', name: '特殊 BOM', kind: 'bom', tier: 'special', need: 50, rate: 0.45, desc: '解锁特殊产品配方，并揭示新材料' },
 
-  // IP 技能树：三条分支 × 三阶段，解锁上游节点后方可研究下游。
-  // 阶段进度 15/30/50，基础成功率 80%/70%/60%；放置 N 人 = N×5 进度、成功率 +N×5%（封顶 90%）。
+  // IP 技能树：三分支 × 三阶段，逐层揭示、阶段 2/3 每层 2 个方向任选（3 + 3×2 + 3×2×2 = 21 项）。
+  // 阶段 1（15 / 80%）；阶段 2（30 / 70%）；阶段 3（50 / 60%）。放置 N 人 = N×5 进度、成功率 +N×5%（封顶 90%）。
+  // 解锁上游节点后，其下游方向才揭示；每个阶段 2 节点下挂两个阶段 3 节点。
   { id: 'ip-supply-1', name: '采购网络', kind: 'ip', branch: 'supply', stage: 1, ipId: 'I3', need: 15, rate: 0.8, desc: '每类原料供给 +2' },
   { id: 'ip-supply-2', name: '供应链联盟', kind: 'ip', branch: 'supply', stage: 2, preq: 'ip-supply-1', ipId: 'J2', need: 30, rate: 0.7, desc: '每类原料供给 +4，且可多签 1 份长期协议' },
+  { id: 'ip-supply-2b', name: '库存管理', kind: 'ip', branch: 'supply', stage: 2, preq: 'ip-supply-1', ipId: 'I6', need: 30, rate: 0.7, desc: '原料与成品库存上限 +10' },
   { id: 'ip-supply-3', name: '成本转移', kind: 'ip', branch: 'supply', stage: 3, preq: 'ip-supply-2', ipId: 'J4', need: 50, rate: 0.6, desc: '原料涨价时，产品售价同步升 1 档' },
+  { id: 'ip-supply-3b', name: '大宗集采', kind: 'ip', branch: 'supply', stage: 3, preq: 'ip-supply-2', ipId: 'J9', need: 50, rate: 0.6, desc: '所有原料价格降 1 档' },
+  { id: 'ip-supply-3c', name: '财务优化', kind: 'ip', branch: 'supply', stage: 3, preq: 'ip-supply-2b', ipId: 'I5', need: 50, rate: 0.6, desc: '每月利息 -1w' },
+  { id: 'ip-supply-3d', name: '财务杠杆', kind: 'ip', branch: 'supply', stage: 3, preq: 'ip-supply-2b', ipId: 'J7', need: 50, rate: 0.6, desc: '借款额度 +20w，利率 -1w' },
 
   { id: 'ip-channel-1', name: '订单网络', kind: 'ip', branch: 'channel', stage: 1, ipId: 'I9', need: 15, rate: 0.8, desc: '每月订单 +1' },
   { id: 'ip-channel-2', name: '渠道垄断', kind: 'ip', branch: 'channel', stage: 2, preq: 'ip-channel-1', ipId: 'J8', need: 30, rate: 0.7, desc: '每月订单 +2，订单价格升 1 档' },
+  { id: 'ip-channel-2b', name: '质量认证', kind: 'ip', branch: 'channel', stage: 2, preq: 'ip-channel-1', ipId: 'I8', need: 30, rate: 0.7, desc: '所有产品售价升 1 档' },
   { id: 'ip-channel-3', name: '品牌壁垒', kind: 'ip', branch: 'channel', stage: 3, preq: 'ip-channel-2', ipId: 'J3', need: 50, rate: 0.6, desc: '销售资源 +8，且品牌加成 +3' },
+  { id: 'ip-channel-3b', name: '销售渠道', kind: 'ip', branch: 'channel', stage: 3, preq: 'ip-channel-2', ipId: 'I4', need: 50, rate: 0.6, desc: '销售资源 +3' },
+  { id: 'ip-channel-3c', name: '品牌溢价', kind: 'ip', branch: 'channel', stage: 3, preq: 'ip-channel-2b', ipId: 'J10', need: 50, rate: 0.6, desc: '所有产品售价升 1 档（与质量认证叠加）' },
+  { id: 'ip-channel-3d', name: '高端渠道', kind: 'ip', branch: 'channel', stage: 3, preq: 'ip-channel-2b', ipId: 'J11', need: 50, rate: 0.6, desc: '每月订单 +1，订单价格升 1 档' },
 
   { id: 'ip-equip-1', name: '设备专利', kind: 'ip', branch: 'equip', stage: 1, ipId: 'I2', need: 15, rate: 0.8, desc: '每台设备产能 +2' },
   { id: 'ip-equip-2', name: '自动化产线', kind: 'ip', branch: 'equip', stage: 2, preq: 'ip-equip-1', ipId: 'J1', need: 30, rate: 0.7, desc: '每台设备产能 +4' },
+  { id: 'ip-equip-2b', name: '工艺优化', kind: 'ip', branch: 'equip', stage: 2, preq: 'ip-equip-1', ipId: 'I1', need: 30, rate: 0.7, desc: '所有产品原料消耗 -1（最低 1）' },
   { id: 'ip-equip-3', name: '研发突破', kind: 'ip', branch: 'equip', stage: 3, preq: 'ip-equip-2', ipId: 'J6', need: 50, rate: 0.6, desc: '研发进度 +4/月，成功率 +10%' },
+  { id: 'ip-equip-3b', name: '专利壁垒', kind: 'ip', branch: 'equip', stage: 3, preq: 'ip-equip-2', ipId: 'J5', need: 50, rate: 0.6, desc: '每季度可复制一张已打出的卡' },
+  { id: 'ip-equip-3c', name: '精益生产', kind: 'ip', branch: 'equip', stage: 3, preq: 'ip-equip-2b', ipId: 'J12', need: 50, rate: 0.6, desc: '所有产品原料消耗 -2（最低 1）' },
+  { id: 'ip-equip-3d', name: '人力优化', kind: 'ip', branch: 'equip', stage: 3, preq: 'ip-equip-2b', ipId: 'I10', need: 50, rate: 0.6, desc: '所有员工薪酬 -0.5w' },
 ]
 
 /** 每名放置的研发人员每月研发进度 */
@@ -357,6 +370,10 @@ export const IP_DEFS: IpDef[] = [
   { id: 'J6', name: '研发突破', pool: 'strong', desc: '研发进度 +4/月，成功率 +10%', effect: { rndProgress: 4, rndRate: 10 } },
   { id: 'J7', name: '财务杠杆', pool: 'strong', desc: '借款额度 +20w，利率 -1w', effect: { creditLine: 200, rateSave: 1 } },
   { id: 'J8', name: '渠道垄断', pool: 'strong', desc: '每月订单 +2，订单价格升 1 档', effect: { orderBonus: 2, orderPriceShift: 1 } },
+  { id: 'J9', name: '大宗集采', pool: 'strong', desc: '所有原料价格降 1 档', effect: { buyTierShift: -1 } },
+  { id: 'J10', name: '品牌溢价', pool: 'strong', desc: '所有产品售价升 1 档', effect: { priceShift: 1 } },
+  { id: 'J11', name: '高端渠道', pool: 'strong', desc: '每月订单 +1，订单价格升 1 档', effect: { orderBonus: 1, orderPriceShift: 1 } },
+  { id: 'J12', name: '精益生产', pool: 'strong', desc: '所有产品原料消耗 -2（最低 1）', effect: { matSave: 2 } },
 ]
 
 export const IP_BY_ID: Record<string, IpDef> = Object.fromEntries(IP_DEFS.map((i) => [i.id, i]))

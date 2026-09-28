@@ -233,6 +233,7 @@ function ipEffects(ids: string[]) {
     creditLine: 0,
     rateSave: 0,
     orderPriceShift: 0,
+    buyTierShift: 0,
   }
   for (const id of ids) {
     const e = IP_BY_ID[id]?.effect
@@ -255,6 +256,7 @@ function ipEffects(ids: string[]) {
     acc.creditLine += e.creditLine ?? 0
     acc.rateSave += e.rateSave ?? 0
     acc.orderPriceShift += e.orderPriceShift ?? 0
+    acc.buyTierShift += e.buyTierShift ?? 0
   }
   return acc
 }
@@ -292,7 +294,7 @@ export function derive(state: GameState): DerivedTotals {
     const supply = Math.max(0, m.baseSupply + developed + mm.supply + (mods.allSupply ?? 0) + ip.matSupply)
     let shift = mm.tierShift + (mods.allTierShift ?? 0)
     if (staffCount.buy >= 4) shift -= 1 // 采购 4 人：所有原料价格降 1 档
-    shift -= ip.priceShift > 0 && state.ipOwned.includes('I8') ? 0 : 0 // 质量认证作用于售价，不作用于原料
+    shift += ip.buyTierShift // 大宗集采（J9）：所有原料价格降 1 档（质量认证 I8 只作用于产品售价，不作用于原料）
     shift = Math.max(-3, Math.min(3, shift))
     const cap = m.baseCapacity + ip.capacityBonus
     materials[m.id] = { supply, tierShift: shift, price: priceOf(m, shift), cap }

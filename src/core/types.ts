@@ -247,6 +247,8 @@ export interface IpEffect {
   creditLine: Money
   rateSave: number
   orderPriceShift: number
+  /** 原料价格档位修正（大宗集采） */
+  buyTierShift: number
 }
 
 // ─────────────────────────────────────────────────────────────
