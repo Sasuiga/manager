@@ -13,7 +13,8 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
   if (s.challengeOffered.length) E.chooseChallenge(s, 0)
 
   for (let m = 1; m <= 12; m++) {
-    // 事件已由 startGame/nextMonth 在月初统一抽取，此处只处理
+    // 季度首月：董事会先行，事件在确认后抽取；其余月已在月初抽取
+    if (s.phase === 'board') E.beginMonthEvent(s)
     const ev = s.currentEvent
     if (ev) {
       if (ev.type === 'choice' && ev.options) {
@@ -141,9 +142,11 @@ describe('引擎', () => {
 
   it('每月事件只抽一次：beginMonthEvent 仅消耗一次抽卡', () => {
     const s = E.newGame(20260101)
-    const prev = s.rngState
-    E.startGame(s) // 完整模式：第 1 月事件在这里恰好抽一次
+    E.startGame(s) // 第 1 月是季度首月：董事会先行，事件未抽
+    expect(s.phase).toBe('board')
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    const prev = s.rngState
+    E.beginMonthEvent(s) // 董事会确认后才抽取本月事件
     // 手动复算一次抽取：池大小相同、只 int() 一次，rngState 必须恰好推进这一步
     const pool = E.buildEventPool(s, Rng.fromState(prev))
     const manual = Rng.fromState(prev)
@@ -167,7 +170,8 @@ describe('引擎', () => {
       for (let m = 1; m <= 12; m++) {
         if (g.result !== 'playing') break
         if (g.challengeOffered.length) E.chooseChallenge(g, 0)
-        // 事件已由 startGame/nextMonth 在月初统一抽取（每月一张），事件阶段不重抽
+        // 镜像 UI 流程：季度首月事件在董事会确认后抽取，其余月已在月初抽取，事件阶段不重抽
+        if (g.phase === 'board') E.beginMonthEvent(g)
         const ev = g.currentEvent!
         ids.push(ev.id)
         // 即时事件抽到即结算，但 eventResolved 仍为 false（等 UI 点「继续」）
@@ -210,6 +214,7 @@ describe('引擎', () => {
     const s = E.newGame(5)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    E.beginMonthEvent(s)
     E.enterDraw(s)
     E.enterOperate(s)
     const before = s.materials.pkg.value / Math.max(1, s.materials.pkg.qty)
@@ -225,6 +230,7 @@ describe('引擎', () => {
     const s = E.newGame(9)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    E.beginMonthEvent(s)
     E.enterDraw(s)
     E.enterOperate(s)
     const first = E.buyMaterial(s, 'pkg', 'small')
@@ -259,6 +265,7 @@ describe('引擎', () => {
     const s = E.newGame(11)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    E.beginMonthEvent(s)
     E.enterDraw(s)
     E.enterOperate(s)
     const d = E.derive(s)
@@ -284,6 +291,7 @@ describe('引擎', () => {
     const s = E.newGame(21)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    E.beginMonthEvent(s)
     E.enterDraw(s)
     E.enterOperate(s)
     void Rng
@@ -318,6 +326,7 @@ describe('引擎', () => {
     }
 
     for (let m = 1; m <= 12; m++) {
+      if (s.phase === 'board') E.beginMonthEvent(s) // 季度首月：董事会后抽事件
       const ev = s.currentEvent
       if (ev) {
         if (ev.type === 'choice' && ev.options) E.applyEventOption(s, 0)
