@@ -828,6 +828,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.monthFlags = []
   state.playedThisMonth = []
   state.lotsUsed = 0
+  state.extraBuys = []
   state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false }
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   state.monthLedger = []

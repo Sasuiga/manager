@@ -736,11 +736,18 @@ function BuyConfirmSheet({
 function TraderSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const gs = g.s
   const offers = E.traderOffer(gs)
+  const quota = E.traderQuota(gs)
   return (
     <Sheet title="贸易商" sub="小批 · 价格更高 · 不占本月档数" onClose={onClose}>
+      {quota > 1 ? (
+        <p className="muted sm" style={{ marginBottom: 'var(--s2)' }}>
+          卡牌【贸易商】生效中：每品种额外 {quota - 1} 次购买机会
+        </p>
+      ) : null}
       <div className="stack">
         {offers.map((o) => {
-          const used = gs.extraBuys.some((e) => e.kind === 'trader' && e.materialId === o.materialId)
+          const used = gs.extraBuys.filter((e) => e.kind === 'trader' && e.materialId === o.materialId).length
+          const soldOut = used >= quota
           const total = o.qty * o.price
           return (
             <div key={o.materialId} className="card">
@@ -750,10 +757,10 @@ function TraderSheet({ g, onClose }: { g: Game; onClose: () => void }) {
               <div style={{ marginTop: 'var(--s3)' }}>
                 <button
                   className="btn btn-mini"
-                  disabled={used || total > gs.cash || o.qty <= 0}
+                  disabled={soldOut || total > gs.cash || o.qty <= 0}
                   onClick={() => g.act((st) => E.buyFromTrader(st, o.materialId, o.qty, o.price))}
                 >
-                  <span className="btn-main">{used ? '本月已购' : '购买'}</span>
+                  <span className="btn-main">{soldOut ? '本月已购' : '购买'}</span>
                 </button>
               </div>
             </div>

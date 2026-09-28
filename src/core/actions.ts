@@ -735,10 +735,24 @@ export function traderOffer(state: GameState) {
   })
 }
 
+/**
+ * 本月单品种贸易商购买上限：基础 1 次。
+ * C4【贸易商】额外 +1（强化 +2）；事件/员工能力可在同一口径上扩展。
+ * 已购次数记录在 state.extraBuys（月初随 advanceMonth 清零）。
+ */
+export function traderQuota(state: GameState): number {
+  let quota = 1
+  for (const p of state.playedThisMonth) {
+    if (p.defId === 'C4') quota += p.empowered ? 2 : 1
+  }
+  return quota
+}
+
 export function buyFromTrader(state: GameState, materialId: string, qty: number, price: Money): ActionResult {
+  const used = state.extraBuys.filter((e) => e.kind === 'trader' && e.materialId === materialId).length
+  if (used >= traderQuota(state)) return fail('该品种本月已购买')
   if (state.cash < qty * price) return fail('现金不足')
-  if (state.flags[`trader:${materialId}`]) return fail('该品种本月已采购')
-  state.flags[`trader:${materialId}`] = 1
+  state.extraBuys.push({ kind: 'trader', materialId, qty, price, used: true })
   const added = addMaterial(state, materialId, qty, price, false)
   if (added > 0) {
     const name = nameOf(materialId)
@@ -750,12 +764,12 @@ export function buyFromTrader(state: GameState, materialId: string, qty: number,
       debitAmt: added * price,
       creditAmt: added * price,
       detail: [
-        `${added} 件 × ${price / 10}w（贸易商小批，价格 +1 档）`,
+        `${added} 件 × ${(price / 10).toFixed(2)}w（贸易商小批，价格 +1 档）`,
         '现金实付全额转入库存（移动加权平均计价），不占本月采购档数',
       ],
     })
   }
-  pushLog(state, 'action', `贸易商采购 ${nameOf(materialId)}`, [`${added} 单位 × ${price / 10}w`])
+  pushLog(state, 'action', `贸易商采购 ${nameOf(materialId)}`, [`${added} 单位 × ${(price / 10).toFixed(2)}w`])
   return { ok: true, msg: `入库 ${added} 单位` }
 }
 

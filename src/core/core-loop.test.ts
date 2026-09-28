@@ -593,3 +593,29 @@ describe('场景预置研发', () => {
     }
   })
 })
+
+describe('贸易商', () => {
+  it('购买后记录 extraBuys，配额用尽后行动被拒', () => {
+    const s = preparedCoreState()
+    const offers = E.traderOffer(s)
+    expect(offers.length).toBeGreaterThan(0)
+    const o = offers[0]
+    expect(E.traderQuota(s)).toBe(1)
+    expect(E.buyFromTrader(s, o.materialId, o.qty, o.price).ok).toBe(true)
+    expect(s.extraBuys.filter((e) => e.kind === 'trader' && e.materialId === o.materialId)).toHaveLength(1)
+    expect(E.buyFromTrader(s, o.materialId, o.qty, o.price).ok).toBe(false)
+  })
+
+  it('C4 贸易商牌提升配额，月初清零', () => {
+    const s = preparedCoreState()
+    s.playedThisMonth.push({ uid: 'c4#test', defId: 'C4', empowered: false })
+    const o = E.traderOffer(s)[0]
+    expect(E.traderQuota(s)).toBe(2)
+    expect(E.buyFromTrader(s, o.materialId, o.qty, o.price).ok).toBe(true)
+    expect(E.buyFromTrader(s, o.materialId, o.qty, o.price).ok).toBe(true)
+    expect(E.buyFromTrader(s, o.materialId, o.qty, o.price).ok).toBe(false)
+    E.nextMonth(s)
+    expect(s.extraBuys).toEqual([])
+    expect(E.traderQuota(s)).toBe(1)
+  })
+})

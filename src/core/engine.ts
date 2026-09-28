@@ -52,6 +52,7 @@ export {
   lotLabel,
   traderOffer,
   buyFromTrader,
+  traderQuota,
   signAgreement,
   cancelAgreement,
   agreementSlots,
