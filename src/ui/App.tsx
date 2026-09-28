@@ -45,8 +45,10 @@ function GameRoot({ g, onRestart }: { g: Game; onRestart: () => void }) {
   if (s.phase === 'draw') return <DrawScreen g={g} />
 
   // 经营阶段尚未开始（例如刚开局）
-  if (s.phase !== 'operate' && s.phase !== 'report') {
-    // 自动进入事件阶段，不再让玩家多点一次
+  if (s.phase === 'board') {
+    // 只有「董事会」阶段才自动抽事件（完整模式事件阶段的唯一入口），不再让玩家多点一次。
+    // 注意别在 'event' 阶段再调 beginMonthEvent：否则抽到尚未确认的事件时会继续抽卡，
+    // 多张即时事件的修正会静默叠加进 monthMods。
     E.beginMonthEvent(s)
     g.mutate(() => {})
     return null

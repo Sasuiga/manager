@@ -213,12 +213,15 @@ export function beginMonthEvent(state: GameState) {
   state.eventChosen = null
   state.eventSkipped = false
 
-  // 即时事件：抽到即结算
+  // 即时事件：效果抽到即并入 monthMods，但 eventResolved 保持 false——
+  // UI（EventScreen）先展示这张事件，玩家点「继续」后才进入立项。
+  // 若在这里标记已解决，调用方（App 的自动推进）会在「已解决」状态下
+  // 再次抽卡，导致单月叠加多张即时事件，且界面只显示最后一张。
   if (ev.type === 'instant') {
     if (ev.mods) {
       state.monthMods = mergeMods(state.monthMods, ev.mods)
     }
-    state.eventResolved = true
+    pushLog(state, 'event', `事件【${ev.name}】`, [ev.text])
   }
 }
 

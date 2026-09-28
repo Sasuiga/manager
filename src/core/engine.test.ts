@@ -140,6 +140,67 @@ describe('引擎', () => {
     expect(a.ledgers.length).toBe(b.ledgers.length)
   })
 
+  it('每月事件只抽一次：beginMonthEvent 仅消耗一次抽卡', () => {
+    const s = E.newGame(20260101)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    const prev = s.rngState
+    E.beginMonthEvent(s)
+    // 手动复算一次抽取：池大小相同、只 int() 一次，rngState 必须恰好推进这一步
+    const pool = E.buildEventPool(s, Rng.fromState(prev))
+    const manual = Rng.fromState(prev)
+    manual.int(pool.length)
+    expect(s.rngState).toBe(manual.state)
+    expect(s.currentEvent).not.toBeNull()
+
+    // 即时事件：效果已并入 monthMods，但事件仍需 UI 展示，
+    // eventResolved 必须保持 false——否则调用方（App 自动推进）会再次抽卡
+    if (s.currentEvent!.type === 'instant') {
+      expect(s.eventResolved).toBe(false)
+      expect(Object.keys(s.monthMods).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('模拟 App 自动推进：每月恰好 1 张事件，同 seed 可复现', () => {
+    const run = (seed: number) => {
+      const g = E.newGame(seed)
+      E.startGame(g)
+      const ids: string[] = []
+      for (let m = 1; m <= 12; m++) {
+        if (g.result !== 'playing') break
+        if (g.challengeOffered.length) E.chooseChallenge(g, 0)
+        // App 逻辑：只在「董事会」阶段自动抽事件，'event' 阶段不重抽
+        if (g.phase === 'board') E.beginMonthEvent(g)
+        const ev = g.currentEvent!
+        ids.push(ev.id)
+        // 即时事件抽到即结算，但 eventResolved 仍为 false（等 UI 点「继续」）
+        if (ev.type === 'instant') {
+          expect(g.eventResolved).toBe(false)
+        } else if (ev.type === 'choice' && ev.options) {
+          let best = 0
+          for (let i = 0; i < ev.options.length; i++) {
+            const c = (ev.options[i].cost?.cash ?? 0) + (ev.options[i].cost?.ap ?? 0) * 50
+            const b = (ev.options[best].cost?.cash ?? 0) + (ev.options[best].cost?.ap ?? 0) * 50
+            if (c < b) best = i
+          }
+          if (!E.applyEventOption(g, best).ok) g.eventResolved = true // 模拟只关心推进
+        } else if (ev.type === 'chance') {
+          E.skipEvent(g)
+        }
+        E.enterDraw(g)
+        E.enterOperate(g)
+        E.settleMonth(g)
+        if (g.result !== 'playing') break
+        E.nextMonth(g)
+      }
+      return ids
+    }
+    const seq = run(9527)
+    expect(seq.length).toBeGreaterThan(0)
+    expect(seq.length).toBeLessThanOrEqual(12)
+    expect(run(9527)).toEqual(seq) // 同 seed 事件序列一致（无条件性重抽）
+  })
+
   it('资产负债表恒等式成立', () => {
     const s = playYear(31337)
     const b = E.balanceSheet(s)
