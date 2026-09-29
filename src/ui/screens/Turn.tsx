@@ -373,7 +373,7 @@ function BuyPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
   const mats = E.materialViews(gs)
-  /** 结算前现金（与预算页同一口径）：月初现金 − 纯消耗（采购计划/协议/加班/研发/利息/上月工资） */
+  /** 本期期末资金（回款前，与预算页同一口径）：期初现金 + 事件收益 − 已付/结算时付各项 */
   const presettle = E.preSettleCash(gs)
   const [buy, setBuy] = useState<{ id: string; lot: E.LotSize } | null>(null)
   const [pickLot, setPickLot] = useState<string | null>(null)
@@ -517,11 +517,11 @@ function BuyPage({ g }: { g: Game }) {
         <div className="card">
           <h3>采购计划汇总</h3>
           <div className="title-rule" />
-          <Row k="计划支出" v={wan(presettle.purchaseSpend)} />
-          <Row k="结算前现金" v={wan(presettle.cashAfter)} cls={presettle.cashAfter < 0 ? 'red' : ''} />
+          <Row k="计划支出" v={wan(presettle.purchasePlan)} />
+          <Row k="期末资金（回款前）" v={wan(presettle.cashAfter)} cls={presettle.cashAfter < 0 ? 'red' : ''} />
           <Row k="已选采购档" v={`${gs.lotsUsed} / ${d.buyLots}`} />
           {presettle.cashAfter < 0 ? (
-            <p className="hint">纯消耗（含协议/加班/研发/利息/上月工资）超出月初现金，计划超出资金能力；明细见「预算」页</p>
+            <p className="hint">纯消耗使期末资金（回款前）为负，计划超出资金能力；明细见「预算」页</p>
           ) : null}
         </div>
       ) : null}

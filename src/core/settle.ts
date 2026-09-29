@@ -866,6 +866,8 @@ export function advanceMonth(state: GameState, rng: Rng) {
     state.cash -= state.pendingCost
     state.pendingCost = 0
   }
+  /** 期初现金快照：本月月初真值（上期结算 + 挂账收付之后）；预算页「本期现金计划」桥接从它出发。 */
+  state.openingCash = state.cash
 
   for (const ag of state.agreements) ag.monthsLeft -= 1
   state.agreements = state.agreements.filter((a) => a.monthsLeft > 0)

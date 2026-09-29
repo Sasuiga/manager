@@ -4,8 +4,8 @@ import { settle } from './settle'
 import type { GameState } from './types'
 
 /**
- * 结算前现金（preSettleCash）的桥接不变量：
- * 结算前现金 + 回款区间 − 所得税区间 = 推演期末现金（low/high 各自精确成立），
+ * 本期期末资金（回款前，preSettleCash）的桥接不变量：
+ * 本期期末资金（回款前） + 回款区间 − 所得税区间 = 预计下期期初现金（low/high 各自精确成立），
  * 且协议自动采购的模拟金额与真实结算一致。
  */
 function bridge(state: GameState, run: ReturnType<typeof settle>): number {
@@ -73,5 +73,56 @@ describe('结算前现金（preSettleCash）', () => {
     expect(p.cashEnd.max).toBe(high.ledger.cashEnd)
     expect(p.tax.min).toBe(low.ledger.parts['所得税'] ?? 0)
     expect(p.tax.max).toBe(high.ledger.parts['所得税'] ?? 0)
+  })
+
+  it('完整模式：行动阶段实付/实收全分解，期初真值下桥接精确成立', () => {
+    const s = E.newGame(7, 'full') as GameState
+    E.startGame(s)
+    s.depts.buy.staff = 3
+    s.depts.buy.hired = 3
+    s.debt = 200
+    E.hire(s, 'ops') // 招聘费 50（行动阶段实付）
+    E.buyEquipment(s, 'eq-line') // 设备 50（资本化，行动阶段实付）
+    E.signAgreement(s, 'pkg', 3) // 协议手续费 10（杂项，行动阶段实付）
+    E.repay(s, 60) // 还款 60（资本性，行动阶段实付）
+    E.buyMaterial(s, 'pkg', 'mid') // 完整模式采购实付（行动阶段入账）
+
+    const p = E.preSettleCash(s)
+    // 行动阶段恒等式：期初现金 + 事件收益 − 各项已付 ≡ 当前现金（招聘费未蒸发在「期初」里）
+    expect(p.cashOpen + p.gainedMisc - (p.paidHire + p.paidMisc + p.paidCapex + p.paidRepay + p.paidPurchase)).toBe(s.cash)
+    expect(p.paidHire).toBe(50)
+    expect(p.paidCapex).toBe(50)
+    expect(p.paidRepay).toBe(60)
+    expect(p.paidMisc).toBe(10)
+    expect(p.paidPurchase).toBeGreaterThan(0)
+
+    // 期间桥接：本期期末资金（回款前）+ 回款 − 税 = 结算现金期末（= 下期期初）
+    const clone = () => JSON.parse(JSON.stringify(s)) as GameState
+    const low = settle(clone(), { spotDemandFactor: { low: 1, mid: 1, high: 1, special: 1 } })
+    expect(bridge(s, low)).toBe(low.ledger.cashEnd)
+  })
+
+  it('下期挂账负债：应付职工薪酬 = 本月工资计提，利息按当前借款估算，挂账收付转下月', () => {
+    const s = E.newGame(7, 'full') as GameState
+    E.startGame(s)
+    s.depts.make.staff = 4
+    s.depts.make.hired = 4
+    s.debt = 300
+    s.pendingCost = 100
+    s.pendingIncome = 60
+
+    const p = E.previewOperations(s)
+    const d = E.derive(s)
+    const wage =
+      d.salaryPer.ops * s.depts.ops.staff +
+      d.salaryPer.buy * s.depts.buy.staff +
+      d.salaryPer.make * s.depts.make.staff +
+      d.salaryPer.sell * s.depts.sell.staff +
+      d.salaryPer.rnd * s.depts.rnd.staff
+    expect(p.nextLiabilities.wagePayable).toBe(wage)
+    expect(p.nextLiabilities.interestEstimate).toBe(d.interest)
+    expect(p.nextLiabilities.pendingCost).toBe(100)
+    expect(p.nextLiabilities.pendingIncome).toBe(60)
+    expect(p.nextLiabilities.net).toBe(wage + d.interest + 100 - 60)
   })
 })

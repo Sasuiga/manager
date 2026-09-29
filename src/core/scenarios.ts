@@ -32,6 +32,7 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.climate = setup.climate
   state.cash = setup.cash
   state.paidIn = setup.cash
+  state.openingCash = setup.cash
   state.debt = 0
   state.retained = 0
   state.monthMods = setup.mods ?? {}

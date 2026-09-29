@@ -280,6 +280,7 @@ describe('核心模式采购计划', () => {
   it('生产可以使用计划到货；减少采购会保留生产计划，取消采购则清空生产计划', () => {
     const s = E.newGame(92, 'core')
     E.startGame(s)
+    s.cash = 2000 // 补足现金：大批采购金额超出 30w 初始资金，避免干扰计划机制测试
     E.hire(s, 'make')
     E.hire(s, 'make')
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
@@ -303,6 +304,7 @@ describe('核心模式采购计划', () => {
   it('清空生产计划会一并取消加班并同步已接订单', () => {
     const s = E.newGame(95, 'core')
     E.startGame(s)
+    s.cash = 2000 // 补足现金：大批采购金额超出 30w 初始资金，避免干扰计划机制测试
     E.hire(s, 'make')
     E.hire(s, 'make')
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
@@ -319,16 +321,18 @@ describe('核心模式采购计划', () => {
   it('正式结算按采购计划先入库，再执行生产与销售', () => {
     const s = E.newGame(93, 'core')
     E.startGame(s)
+    s.cash = 2000 // 补足现金：大批采购金额超出 30w 初始资金，避免干扰计划机制测试
     s.orders = []
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
     expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
     E.setPlan(s, 'low', Math.min(5, E.maxProducible(s, 'low')))
     const purchaseCost = E.plannedPurchaseCost(s)
+    const cash0 = s.cash
     const report = E.settleMonth(s)
 
     expect(report.production.produced).toBeGreaterThan(0)
     expect(s.monthLedger.filter((row) => row.dept === 'buy' && row.item.startsWith('采购'))).toHaveLength(2)
-    expect(report.ledger.cashBegin).toBe(1000 - purchaseCost)
+    expect(report.ledger.cashBegin).toBe(cash0 - purchaseCost)
     // 计划已执行：档位与档数清空，后续“库存 + 计划到货”不会重叠加计划量
     expect(Object.values(s.materials).every((m) => m.chosenLot === null)).toBe(true)
     expect(s.lotsUsed).toBe(0)
@@ -337,6 +341,7 @@ describe('核心模式采购计划', () => {
   it('核心模式生产不在确认时立即执行，结算时统一过账', () => {
     const s = E.newGame(96, 'core')
     E.startGame(s)
+    s.cash = 2000 // 补足现金：大批采购金额超出 30w 初始资金，避免干扰计划机制测试
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
     expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
     E.setPlan(s, 'low', 3)

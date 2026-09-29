@@ -1470,6 +1470,20 @@ export function applyEventOption(state: GameState, optionIndex: number): ActionR
         purchasedAt: state.month,
       })
       if (paid <= 0) state.miscIncome += bookValue
+      if (paid > 0) {
+        // 现金对价已在调用方扣减；资本支出记账（借 固定资产 / 贷 现金），预算页「设备购置」行以台账行为准
+        state.monthLedger.push({
+          dept: 'make',
+          item: `设备购置 ${opt.extra.includes('产能 15') ? '清算设备' : '机会设备'}`,
+          debit: '固定资产',
+          credit: '现金',
+          debitAmt: paid,
+          creditAmt: paid,
+          detail: [
+            `现金支出 ${(paid / 10).toFixed(2)}w 资本化为固定资产（事件对价，不计入当期损益）`,
+          ],
+        })
+      }
       state.flags['capexQ'] = (state.flags['capexQ'] ?? 0) + 1
     }
     if (opt.extra.includes('长期协议') || opt.extra.includes('锁定')) {
@@ -1579,6 +1593,20 @@ function applyModSideEffects(state: GameState, mods: MonthMods, equipmentConside
         purchasedAt: state.month,
       })
       if (equipmentConsideration <= 0) state.miscIncome += bookValue
+      if (equipmentConsideration > 0) {
+        // 现金对价已在调用方扣减；资本支出记账（借 固定资产 / 贷 现金），预算页「设备购置」行以台账行为准
+        state.monthLedger.push({
+          dept: 'make',
+          item: '设备购置 机会设备',
+          debit: '固定资产',
+          credit: '现金',
+          debitAmt: equipmentConsideration,
+          creditAmt: equipmentConsideration,
+          detail: [
+            `现金支出 ${(equipmentConsideration / 10).toFixed(2)}w 资本化为固定资产（事件对价，不计入当期损益）`,
+          ],
+        })
+      }
       state.flags['capexQ'] = (state.flags['capexQ'] ?? 0) + 1
     }
     if (note.includes('管理人员 +1') && state.depts.ops.staff < 5) {

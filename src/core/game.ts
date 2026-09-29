@@ -44,6 +44,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     nextClimateOdds: blankOdds(),
 
     cash: START_CASH,
+    openingCash: START_CASH,
     debt: 0,
     paidIn: START_CASH,
     ownerCapital: 0, // 新模型开局无初始设备，实物投入归零

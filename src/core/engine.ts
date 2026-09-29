@@ -22,7 +22,7 @@ export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityO
 export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct } from './settle'
 export type { SettleReport } from './settle'
 export { previewOperations, preSettleCash } from './preview'
-export type { OperatingPreview, ProductPreview, ValueRange, PreSettleCash } from './preview'
+export type { OperatingPreview, ProductPreview, ValueRange, PreSettleCash, NextPeriodLiabilities } from './preview'
 export { CORE_SCENARIOS, applyCoreScenario } from './scenarios'
 export type { CoreScenarioDef, CoreScenarioId } from './scenarios'
 export {

@@ -577,6 +577,8 @@ export interface GameState {
   nextClimateOdds: Record<Climate, number>
 
   cash: Money
+  /** 期初现金（本月月初真值 = 上期结算后，含上月挂账收款到账）；预算页「本期现金计划」桥接的期初口径 */
+  openingCash: Money
   debt: Money
   paidIn: Money
   /** 股东以实物投入的资产（开局的初始产线），计入所有者权益 */

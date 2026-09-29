@@ -276,7 +276,7 @@ export const BASE_SALES_RESOURCE = 10
 export const BASE_HAND = 5
 export const BASE_PLAYS = 2
 export const BASE_AP = 3
-export const START_CASH = 1000 // 100w
+export const START_CASH = 300 // 30w
 
 /** 采购档位：可选档数（§6.1.2）。 */
 export const BUY_LOT_SLOTS = [2, 3, 4, 5, 6, 7]

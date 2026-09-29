@@ -31,15 +31,33 @@ export interface ProductPreview {
 }
 
 /**
- * 结算前·纯消耗分解（确定性，不含销售回款与所得税）：
- * 从月初现金出发，按结算执行顺序逐项扣除，得到「回款尚未到账」时的现金。
- * 为负 = 计划的纯消耗超出月初资金能力。
+ * 本期现金计划分解（确定性，不含销售回款与所得税）：
+ * 从期初现金（本月月初真值）出发，按资金时间序逐项过账：
+ *   行动阶段实付：招聘费 / 杂项支出 / 设备购置 / 还款 / 采购与贸易商实付；
+ *   结算时付：采购计划（核心）/ 协议 / 加班 / 研发 / 利息 / 上月工资。
+ * 得到「本期期末资金（回款前）」——本期闭环的现金位置（不含结算边界回款到账）。
+ * 为负 = 计划超出资金能力。
+ *
+ * 勾稽不变量：cashOpen + gainedMisc − (paidHire + paidMisc + paidCapex + paidRepay + paidPurchase) ≡ state.cash
+ * （行动阶段所有现金收付均已计入以上科目或挂账字段，无双重计算）。
  */
 export interface PreSettleCash {
-  /** 月初现金余额 */
-  cashBegin: Money
-  /** 采购付款：核心模式为采购计划（结算时付），完整模式为已实付采购 */
-  purchaseSpend: Money
+  /** 期初现金（本月月初真值；含上期挂账收款到账） */
+  cashOpen: Money
+  /** 招聘费净额（招聘实付 − 裁员返还），行动阶段实付 */
+  paidHire: Money
+  /** 杂项支出（卡牌费/协议手续费/供应商开发/事件服务费），行动阶段实付 */
+  paidMisc: Money
+  /** 事件现金赠与（含赠与设备公允价值，非现金部分），行动阶段实收 */
+  gainedMisc: Money
+  /** 设备购置（资本化：商店 + 事件对价），行动阶段实付 */
+  paidCapex: Money
+  /** 还款（资本性支出），行动阶段实付 */
+  paidRepay: Money
+  /** 采购/贸易商采购实付（完整模式采购行动阶段入账；核心模式仅贸易商实付，普通采购为计划） */
+  paidPurchase: Money
+  /** 采购计划（核心模式结算时付；完整模式为 0） */
+  purchasePlan: Money
   /** 协议自动采购额（按结算执行同规则确定性模拟） */
   agreementSpend: Money
   /** 加班费 */
@@ -50,29 +68,39 @@ export interface PreSettleCash {
   interest: Money
   /** 上月工资实付（当月计提、次月实付） */
   wagePaid: Money
-  /** = cashBegin − 以上全部；为负 = 计划超出资金能力 */
+  /** = cashOpen + gainedMisc − (paidHire + paidMisc + paidCapex + paidRepay + paidPurchase + purchasePlan + agreementSpend + overtimePay + rndInvest + interest + wagePaid)；为负 = 计划超出资金能力 */
   cashAfter: Money
 }
 
 export function preSettleCash(state: GameState): PreSettleCash {
   const d = derive(state)
-  const purchaseSpend = state.mode === 'core'
-    ? plannedPurchaseCost(state)
-    : state.monthLedger
-      .filter((row) => row.dept === 'buy' && row.credit === '现金')
-      .reduce((sum, row) => sum + row.creditAmt, 0)
+  /** 行动阶段实付/实收：各已记入账目或台账，此处只汇总不重复记账。 */
+  type LedgerRow = (typeof state.monthLedger)[number]
+  const ledgerSpend = (match: (row: LedgerRow) => boolean): Money =>
+    state.monthLedger.filter(match).reduce((a, row) => a + row.creditAmt, 0)
+  const paidHire = Object.values(state.hireFeeBy).reduce((a, v) => a + v, 0)
+  const paidMisc = state.miscExpense
+  const gainedMisc = state.miscIncome
+  const paidCapex = ledgerSpend((row) => row.item.startsWith('设备购置'))
+  const paidRepay = ledgerSpend((row) => row.item === '还款')
+  /** 采购实付：普通采购（完整模式）+ 贸易商采购；协议手续费/供应商开发在 paidMisc，不重复计。 */
+  const paidPurchase = ledgerSpend(
+    (row) => row.dept === 'buy' && (row.item.startsWith('采购') || row.item.startsWith('贸易商采购')),
+  )
+  /** 采购计划：核心模式尚未付款（结算时付）；完整模式已实付，记在 paidPurchase。 */
+  const purchasePlan = state.mode === 'core' ? plannedPurchaseCost(state) : 0
   const overtimePay = state.plan.overtime && state.depts.make.staff >= 3 ? OVERTIME_COST : 0
   const rndInvest = Math.max(0, d.rndCostTotal)
   const interest = d.interest
   const wagePaid = wagePayableOf(state)
   /**
    * 协议自动采购的确定性模拟：与结算执行同规则（仓库容量上限 + 回款前现金检查，不足则整月跳过）。
-   * 核心模式采购计划尚未付款，现金基础先扣计划支出；完整模式采购已实付，不再重复扣。
+   * 核心模式采购计划尚未付款，现金基础先扣计划支出；完整模式采购已实付（在 paidPurchase），不再重复扣。
    *
    * 仓容口径：结算时采购计划先入库、协议后执行，因此协议的可用仓容要按「计划后库存」计算；
    * 完整模式采购已在行动时入库，直接按当前库存计算。
    */
-  const cashBase = state.cash - (state.mode === 'core' ? purchaseSpend : 0)
+  const cashBase = state.cash - purchasePlan
   let cash = cashBase
   let agreementSpend = 0
   for (const ag of state.agreements) {
@@ -88,19 +116,62 @@ export function preSettleCash(state: GameState): PreSettleCash {
     agreementSpend += unit * want
   }
   const cashAfter =
-    cashBase -
-    agreementSpend -
-    overtimePay -
-    rndInvest -
-    interest -
-    wagePaid
-  return { cashBegin: state.cash, purchaseSpend, agreementSpend, overtimePay, rndInvest, interest, wagePaid, cashAfter }
+    state.openingCash +
+    gainedMisc -
+    (paidHire +
+      paidMisc +
+      paidCapex +
+      paidRepay +
+      paidPurchase +
+      purchasePlan +
+      agreementSpend +
+      overtimePay +
+      rndInvest +
+      interest +
+      wagePaid)
+  return {
+    cashOpen: state.openingCash,
+    paidHire,
+    paidMisc,
+    gainedMisc,
+    paidCapex,
+    paidRepay,
+    paidPurchase,
+    purchasePlan,
+    agreementSpend,
+    overtimePay,
+    rndInvest,
+    interest,
+    wagePaid,
+    cashAfter,
+  }
+}
+
+/**
+ * 下期挂账负债（确定性部分）：本期方案已承诺、下期确定要动现金的项目。
+ * 应付职工薪酬 = 本月计提、下期结算实付（取预演结算后账面）；
+ * 借款利息按当前借款水平估算（下期借还会变，仅作参考）；
+ * 挂账收付为事件跨月挂账，下期期初直接收/付。
+ */
+export interface NextPeriodLiabilities {
+  /** 应付职工薪酬：本月计提额，下期结算实付 */
+  wagePayable: Money
+  /** 借款利息（按当前借款水平估算） */
+  interestEstimate: Money
+  /** 挂账支出（下期期初支付） */
+  pendingCost: Money
+  /** 挂账收入（下期期初到账） */
+  pendingIncome: Money
+  /** 净挂账负债 = wagePayable + interestEstimate + pendingCost − pendingIncome */
+  net: Money
 }
 
 export interface OperatingPreview {
   revenue: ValueRange
   grossProfit: ValueRange
   cashEnd: ValueRange
+  /** 下期挂账负债：供预算页估算下期资金缺口 */
+  nextLiabilities: NextPeriodLiabilities
   orderRevenue: Money
   spotRevenue: ValueRange
   cogs: ValueRange
@@ -134,7 +205,17 @@ export function previewOperations(state: GameState): OperatingPreview {
   const high = settle(cloneState(state), { spotDemandFactor: HIGH_FACTORS })
   const d = derive(state)
   const preSettle = preSettleCash(state)
-  const purchaseSpend = preSettle.purchaseSpend
+  const purchaseSpend = preSettle.purchasePlan + preSettle.paidPurchase
+
+  /** 下期挂账负债：应付职工薪酬取预演结算后的账面计提（本月工资，下月实付）。 */
+  const nextLiabilities: NextPeriodLiabilities = {
+    wagePayable: low.balance.wagePayable,
+    interestEstimate: d.interest,
+    pendingCost: state.pendingCost,
+    pendingIncome: state.pendingIncome,
+    net: 0,
+  }
+  nextLiabilities.net = nextLiabilities.wagePayable + nextLiabilities.interestEstimate + nextLiabilities.pendingCost - nextLiabilities.pendingIncome
 
   const orderRevenue = revenueOf(low.sales.orders)
   const lowSpotRevenue = revenueOf(low.sales.spots)
@@ -169,6 +250,7 @@ export function previewOperations(state: GameState): OperatingPreview {
     currentCash: state.cash,
     rnd: low.rnd,
     preSettle,
+    nextLiabilities,
     /** 所得税随回款区间浮动（无应税利润时为 0），只属于「结算后」段。 */
     tax: range(low.ledger.parts['所得税'] ?? 0, high.ledger.parts['所得税'] ?? 0),
     purchaseSpend,
