@@ -231,7 +231,7 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(E.hire(s, 'sell').ok).toBe(true)
     expect(s.orders.length).toBe(1) // 2 人解锁 1 单，当月立即补发
     expect(E.derive(s).orderCount).toBe(1)
-    expect(E.derive(s).salesResource).toBe(18) // 基础 10 + 2 人 × 4
+    expect(E.derive(s).salesResource).toBe(12) // 基础 4 + 2 人 × 4
     s.ap = 5
     expect(E.hire(s, 'sell').ok).toBe(true)
     expect(E.hire(s, 'sell').ok).toBe(true)
@@ -280,7 +280,7 @@ describe('核心模式采购计划', () => {
   it('生产可以使用计划到货；减少采购会保留生产计划，取消采购则清空生产计划', () => {
     const s = E.newGame(92, 'core')
     E.startGame(s)
-    s.cash = 2000 // 补足现金：大批采购金额超出 30w 初始资金，避免干扰计划机制测试
+    s.cash = 2000 // 补足现金：大批采购金额超出 50w 初始资金，避免干扰计划机制测试
     E.hire(s, 'make')
     E.hire(s, 'make')
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
@@ -304,7 +304,7 @@ describe('核心模式采购计划', () => {
   it('清空生产计划会一并取消加班并同步已接订单', () => {
     const s = E.newGame(95, 'core')
     E.startGame(s)
-    s.cash = 2000 // 补足现金：大批采购金额超出 30w 初始资金，避免干扰计划机制测试
+    s.cash = 2000 // 补足现金：大批采购金额超出 50w 初始资金，避免干扰计划机制测试
     E.hire(s, 'make')
     E.hire(s, 'make')
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
@@ -321,7 +321,7 @@ describe('核心模式采购计划', () => {
   it('正式结算按采购计划先入库，再执行生产与销售', () => {
     const s = E.newGame(93, 'core')
     E.startGame(s)
-    s.cash = 2000 // 补足现金：大批采购金额超出 30w 初始资金，避免干扰计划机制测试
+    s.cash = 2000 // 补足现金：大批采购金额超出 50w 初始资金，避免干扰计划机制测试
     s.orders = []
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
     expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
@@ -341,7 +341,7 @@ describe('核心模式采购计划', () => {
   it('核心模式生产不在确认时立即执行，结算时统一过账', () => {
     const s = E.newGame(96, 'core')
     E.startGame(s)
-    s.cash = 2000 // 补足现金：大批采购金额超出 30w 初始资金，避免干扰计划机制测试
+    s.cash = 2000 // 补足现金：大批采购金额超出 50w 初始资金，避免干扰计划机制测试
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
     expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
     E.setPlan(s, 'low', 3)

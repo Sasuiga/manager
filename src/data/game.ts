@@ -139,7 +139,7 @@ export const TIER_LABEL: Record<Tier, string> = { low: '低端', mid: '中端', 
 /**
  * 销售资源加点上限（§7.2.4）：每层最多可推 3 倍基础需求。
  * 低端 +15 / 中端 +12 / 高端 +6 / 特殊 +3，合计 36，
- * 与销售 5 人的资源池（38）大致会师，全游戏没有大段死点。
+ * 与销售 5 人的资源池（基础 4 + 人员 28 = 32）大致会师，全游戏没有大段死点。
  */
 export const SALES_PUSH_CAP: Record<Tier, number> = {
   low: 3 * BASE_DEMAND.low,
@@ -272,11 +272,11 @@ export const STAFF: Record<Dept, StaffDef> = {
 export const SALES_RESOURCE_STEPS = [0, 4, 4, 6, 6, 8]
 /** 每月确定性订单数（§7.2.6）：2 人解锁第 1 个订单槽，4 人解锁第 2 个。 */
 export const SALES_ORDER_COUNT = [0, 0, 1, 1, 2, 2]
-export const BASE_SALES_RESOURCE = 10
+export const BASE_SALES_RESOURCE = 4 // 基础销售资源池：开局 4 点（其余靠销售人员/事件/卡牌/知产扩充）
 export const BASE_HAND = 5
 export const BASE_PLAYS = 2
 export const BASE_AP = 3
-export const START_CASH = 300 // 30w
+export const START_CASH = 500 // 50w
 
 /** 采购档位：可选档数（§6.1.2）。 */
 export const BUY_LOT_SLOTS = [2, 3, 4, 5, 6, 7]
