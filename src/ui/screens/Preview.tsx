@@ -14,7 +14,7 @@ export function PreviewPage({ g, onSettle }: { g: Game; onSettle: () => void }) 
         <h3>{g.s.month}月经营预算</h3>
         <div className="title-rule" />
         <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          根据当前采购、生产与销售安排推演。现货成交将在结算时确定。
+          根据当前采购、生产与销售安排推演。现货成交按公开需求 100% 结算。
         </p>
       </div>
 
@@ -62,7 +62,7 @@ export function PreviewPage({ g, onSettle }: { g: Game; onSettle: () => void }) 
           <h3>研发进度</h3>
           <div className="title-rule" />
           <p className="card-desc" style={{ color: 'var(--muted)' }}>
-            结算时按 seed 判定成败，与现货区间无关。
+            结算时按 seed 判定成败。
           </p>
           {preview.rnd.map((r) => (
             <Row
@@ -104,7 +104,7 @@ export function PreviewPage({ g, onSettle }: { g: Game; onSettle: () => void }) 
       <div className="card">
         <button className="btn btn-primary" style={{ width: '100%' }} onClick={onSettle}>
           <span className="btn-main">确认本月方案并结算</span>
-          <span className="btn-sub">现货成交结果将在结算时确定</span>
+          <span className="btn-sub">现货成交按公开需求 100% 结算</span>
         </button>
       </div>
     </>

@@ -22,7 +22,7 @@ export interface ProductPreview {
   unitGrossProfit: number
   /** 订单收入（确定性：订单先于现货结算，两次推演结果相同） */
   orderRevenue: Money
-  /** 现货收入区间（核心模式现货成交不确定） */
+  /** 现货收入区间（现货成交已确定性化，min≡max） */
   spotRevenue: ValueRange
   /** 预计订单毛利 = 单件毛利 × 订单交付量（确定性） */
   orderGrossProfit: Money
@@ -193,16 +193,14 @@ export interface OperatingPreview {
   rnd: SettleReport['rnd']
 }
 
-const LOW_FACTORS: Record<Tier, number> = { low: 0.5, mid: 0.5, high: 0.5, special: 0.5 }
-const HIGH_FACTORS: Record<Tier, number> = { low: 1, mid: 1, high: 1, special: 1 }
-
 /**
  * 只读推演当前合法经营方案。通过克隆状态运行正式结算，保证预演与结算口径一致。
- * 核心模式现货需求区间为公开需求的 50%～100%。
+ * 现货需求按公开需求 100% 结算（核心模式与完整模式一致，结果确定，区间 min≡max）。
  */
 export function previewOperations(state: GameState): OperatingPreview {
-  const low = settle(cloneState(state), { spotDemandFactor: state.mode === 'core' ? LOW_FACTORS : HIGH_FACTORS })
-  const high = settle(cloneState(state), { spotDemandFactor: HIGH_FACTORS })
+  const report = settle(cloneState(state))
+  const low = report
+  const high = report
   const d = derive(state)
   const preSettle = preSettleCash(state)
   const purchaseSpend = preSettle.purchasePlan + preSettle.paidPurchase

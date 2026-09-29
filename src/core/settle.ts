@@ -70,7 +70,7 @@ export interface SettleReport {
 }
 
 export interface SettleOptions {
-  /** 核心模式现货需求倍率；预演用固定上下界，正式结算留空后按月随机。 */
+  /** 现货需求倍率（默认 1，即公开需求 100% 成交）；预演/测试可注入其他值模拟波动。 */
   spotDemandFactor?: Partial<Record<Tier, number>>
 }
 
@@ -230,15 +230,12 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   const spots: SaleRecord[] = []
   const filled: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
   /**
-   * 核心模式的现货成交具有不确定性：每层实际市场需求为公开上限的 50%～100%。
-   * 预演会分别传入 0.5 / 1 得到区间；正式结算按 seed、月份和产品层确定性抽取。
-   * 完整模式保持原有确定需求规则。
+   * 现货成交以公开需求的 100% 为上限，两模式一致（核心模式原有的 50%～100% 随机因子已移除）。
+   * spotDemandFactor 为预演/测试注入的倍率，默认 1。
    */
-  const spotRng = new Rng(state.seed + state.month * 65537 + 1709)
   const spotFactor: Record<Tier, number> = { low: 1, mid: 1, high: 1, special: 1 }
   for (const t of TIERS) {
-    spotFactor[t] = options.spotDemandFactor?.[t]
-      ?? (state.mode === 'core' ? 0.5 + spotRng.next() * 0.5 : 1)
+    spotFactor[t] = options.spotDemandFactor?.[t] ?? 1
   }
   /** lost 以本月实际现货需求为起点，订单交付会占用本层需求。 */
   const lost: Record<Tier, number> = {

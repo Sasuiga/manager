@@ -32,6 +32,9 @@ describe('核心循环预演', () => {
     expect(p.revenue.min).toBeLessThanOrEqual(p.revenue.max)
     expect(p.grossProfit.min).toBeLessThanOrEqual(p.grossProfit.max)
     expect(p.cashEnd.min).toBeLessThanOrEqual(p.cashEnd.max)
+    // 现货随机因子已移除：核心模式预演与完整模式一致，均为确定值（min≡max）
+    expect(p.spotQty.min).toBe(p.spotQty.max)
+    expect(p.revenue.min).toBe(p.revenue.max)
     expect(p.products.find((x) => x.tier === 'low')?.planned).toBe(8)
   })
 
@@ -354,8 +357,10 @@ describe('核心模式采购计划', () => {
     expect(s.products.low.qty).toBe(0) // 未入库
     expect(E.plannedTotal(s)).toBe(3) // 计划保留，结算时执行
 
-    E.settleMonth(s)
-    expect(s.products.low.qty).toBeGreaterThan(0)
+    const rep = E.settleMonth(s)
+    // 结算已执行生产（产出可能被 100% 现货需求全部售出，库存不保证 > 0）
+    expect(rep.production.lines.find((l) => l.tier === 'low')?.planned).toBe(3)
+    expect(rep.production.lines.find((l) => l.tier === 'low')?.produced).toBe(3)
   })
 
   it('预演读取采购计划，但不实际执行采购', () => {

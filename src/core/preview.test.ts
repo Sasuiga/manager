@@ -36,11 +36,12 @@ describe('结算前现金（preSettleCash）', () => {
 
       const p = E.previewOperations(s)
       const clone = () => JSON.parse(JSON.stringify(s)) as GameState
+      /** 预演现为确定性结算（因子 1）；注入 0.5 / 1.0 分别验证桥接不变量。 */
       const low = settle(clone(), { spotDemandFactor: { low: 0.5, mid: 0.5, high: 0.5, special: 0.5 } })
       const high = settle(clone(), { spotDemandFactor: { low: 1, mid: 1, high: 1, special: 1 } })
       expect(bridge(s, low), `${def.id} low`).toBe(low.ledger.cashEnd)
       expect(bridge(s, high), `${def.id} high`).toBe(high.ledger.cashEnd)
-      expect(p.cashEnd.min, `${def.id} cashEnd min`).toBe(low.ledger.cashEnd)
+      expect(p.cashEnd.min, `${def.id} cashEnd min`).toBe(high.ledger.cashEnd)
       expect(p.cashEnd.max, `${def.id} cashEnd max`).toBe(high.ledger.cashEnd)
       expect(p.preSettle.agreementSpend, `${def.id} 协议`).toBe(
         low.autoPurchase.reduce((a, x) => a + x.total, 0),
@@ -64,14 +65,15 @@ describe('结算前现金（preSettleCash）', () => {
 
     const p = E.previewOperations(s)
     const clone = () => JSON.parse(JSON.stringify(s)) as GameState
+    /** 预演现为确定性结算（因子 1）；注入 0.5 / 1.0 分别验证桥接不变量。 */
     const low = settle(clone(), { spotDemandFactor: { low: 0.5, mid: 0.5, high: 0.5, special: 0.5 } })
     const high = settle(clone(), { spotDemandFactor: { low: 1, mid: 1, high: 1, special: 1 } })
     expect(p.revenue.max, '应有回款').toBeGreaterThan(0)
     expect(bridge(s, low)).toBe(low.ledger.cashEnd)
     expect(bridge(s, high)).toBe(high.ledger.cashEnd)
-    expect(p.cashEnd.min).toBe(low.ledger.cashEnd)
+    expect(p.cashEnd.min).toBe(high.ledger.cashEnd)
     expect(p.cashEnd.max).toBe(high.ledger.cashEnd)
-    expect(p.tax.min).toBe(low.ledger.parts['所得税'] ?? 0)
+    expect(p.tax.min).toBe(high.ledger.parts['所得税'] ?? 0)
     expect(p.tax.max).toBe(high.ledger.parts['所得税'] ?? 0)
   })
 
