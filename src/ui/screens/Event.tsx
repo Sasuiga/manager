@@ -1,5 +1,5 @@
 import * as E from '../../core/engine'
-import { CLIMATE_HINTS, TIERS, TIER_LABEL } from '../../data/game'
+import { CLIMATE_HINTS } from '../../data/game'
 import { Icon } from '../icons'
 import { Corners } from '../ornaments'
 import { Row } from '../Sheet'
@@ -81,19 +81,13 @@ export function EventScreen({ g }: { g: Game }) {
           <p className="event-body">{ev.text}</p>
         </div>
 
-        {/* 即时事件：无选项 */}
+        {/* 即时事件：无选项，效果已由事件正文说明（面板展示的绝对值含气候/人员等其它来源，易误导，已移除） */}
         {ev.type === 'instant' ? (
           <div style={{ marginTop: 'var(--s5)' }}>
-            <div className="section-label">即刻效果</div>
-            <div className="card">
-              <InstantEffect g={g} />
-            </div>
-            <div style={{ marginTop: 'var(--s5)' }}>
-              <button className="btn btn-primary" onClick={enter}>
-                <span className="btn-main">继续</span>
-                <span className="btn-sub">{s.mode === 'core' ? '进入本月经营' : '进入本月立项'}</span>
-              </button>
-            </div>
+            <button className="btn btn-primary" onClick={enter}>
+              <span className="btn-main">继续</span>
+              <span className="btn-sub">{s.mode === 'core' ? '进入本月经营' : '进入本月立项'}</span>
+            </button>
           </div>
         ) : null}
 
@@ -164,28 +158,3 @@ export function EventScreen({ g }: { g: Game }) {
   )
 }
 
-/** 即时事件的效果来自 monthMods，这里翻译成人话。 */
-function InstantEffect({ g }: { g: Game }) {
-  const d = E.derive(g.s)
-  const notes = d.notes ?? []
-  const rows: [string, string][] = []
-
-  if (d.demand) {
-    const parts = TIERS.map((t) => `${TIER_LABEL[t]} ${d.demand[t]}`).join(' · ')
-    rows.push(['本月需求', parts])
-  }
-  if (d.capacity) rows.push(['本月产能', `${d.capacity}`])
-  if (d.buyLots) rows.push(['采购档数', `${d.buyLots}`])
-
-  return (
-    <div className="stack-sm">
-      {rows.map(([k, v]) => (
-        <Row key={k} k={k} v={v} />
-      ))}
-      {notes.map((n) => (
-        <Row key={n} k={n} v="" />
-      ))}
-      {!rows.length && !notes.length ? <span className="muted sm">本月无额外修正。</span> : null}
-    </div>
-  )
-}
