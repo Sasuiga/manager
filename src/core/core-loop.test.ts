@@ -750,12 +750,14 @@ describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
     expect(run(777)).toEqual(seq) // 同 seed 事件序列可复现
   })
 
-  it('场景基线：applyCoreScenario 清空事件，预设订单不被事件确认时重复生成', () => {
+  it('场景基线：applyCoreScenario 保留所抽事件（即时修正重并），预设订单不被事件确认时重复生成', () => {
     const s = E.newGame(3303, 'core')
     E.startGame(s)
     E.applyCoreScenario(s, 'order_heavy')
     expect(s.phase).toBe('event')
-    expect(s.currentEvent).toBeNull() // 事件屏显示「本月无事件」
+    expect(s.currentEvent?.id).toBe('R1') // 保留本月事件（seed 固定，即场景的一部分）
+    expect(s.monthMods.demand?.low).toBe(1) // 即时事件修正在基线重置后重新并入
+    expect(s.monthMods.demand?.mid).toBe(1)
     const preset = s.orders.length
     expect(preset).toBeGreaterThan(0)
     s.eventResolved = true

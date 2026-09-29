@@ -23,6 +23,17 @@ export function EventScreen({ g }: { g: Game }) {
   const s = g.s
   const ev = s.currentEvent
 
+  const enter = () => {
+    s.eventResolved = true
+    E.enterDraw(s)
+    g.mutate(() => {})
+  }
+
+  /**
+   * 防御分支：当前流程凡进事件阶段必有且仅有一张事件
+   * （场景也保留所抽事件，不再清空为「本月无事件」）；
+   * 若仍遇到 !ev，按钮保持可用，避免玩家卡死。
+   */
   if (!ev) {
     return (
       <div className="title-wrap">
@@ -30,19 +41,13 @@ export function EventScreen({ g }: { g: Game }) {
           <Corners />
           <p className="muted">本月无事件。</p>
           <div style={{ marginTop: 'var(--s5)' }}>
-            <button className="btn btn-primary" onClick={() => enter()}>
+            <button className="btn btn-primary" onClick={enter}>
               <span className="btn-main">{s.mode === 'core' ? '进入经营' : '进入立项'}</span>
             </button>
           </div>
         </div>
       </div>
     )
-  }
-
-  const enter = () => {
-    s.eventResolved = true
-    E.enterDraw(s)
-    g.mutate(() => {})
   }
 
   const polarityClass =
