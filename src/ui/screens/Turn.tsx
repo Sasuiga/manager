@@ -171,7 +171,8 @@ export function TurnScreen({
 }) {
   const s = g.s
   const d = E.derive(s)
-  const visibleDepts: E.Dept[] = s.mode === 'core' ? ['buy', 'make', 'sell', 'rnd'] : DEPTS
+  // 完整 / 核心模式均展示全部五部门：核心模式同样含管理部门（管理人员招聘 + 提案实施）
+  const visibleDepts: E.Dept[] = DEPTS
 
   /** 轨道红点：有未处理事项时亮起。 */
   const dots: Record<E.Dept, boolean> = {

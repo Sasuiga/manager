@@ -42,7 +42,7 @@ export function EventScreen({ g }: { g: Game }) {
           <p className="muted">本月无事件。</p>
           <div style={{ marginTop: 'var(--s5)' }}>
             <button className="btn btn-primary" onClick={enter}>
-              <span className="btn-main">{s.mode === 'core' ? '进入经营' : '进入立项'}</span>
+              <span className="btn-main">进入立项</span>
             </button>
           </div>
         </div>
@@ -86,7 +86,7 @@ export function EventScreen({ g }: { g: Game }) {
           <div style={{ marginTop: 'var(--s5)' }}>
             <button className="btn btn-primary" onClick={enter}>
               <span className="btn-main">继续</span>
-              <span className="btn-sub">{s.mode === 'core' ? '进入本月经营' : '进入本月立项'}</span>
+              <span className="btn-sub">进入本月立项</span>
             </button>
           </div>
         ) : null}

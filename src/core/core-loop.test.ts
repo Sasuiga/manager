@@ -679,7 +679,7 @@ describe('统一成本口径（采购计划 → 单位成本 → 单件毛利 �
 })
 
 describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
-  it('池过滤：融资未落地剔 8 张（两模式），核心再剔卡牌参数 2 张', () => {
+  it('池过滤：融资未落地剔 8 张（两模式）；卡牌参数事件两模式均保留（核心也有立项抽卡阶段）', () => {
     const fullPool = new Set(E.buildEventPool(E.newGame(1), Rng.fromState(1)).map((e) => e.id))
     const corePool = new Set(E.buildEventPool(E.newGame(1, 'core'), Rng.fromState(1)).map((e) => e.id))
     for (const id of ['R4', 'P5', 'O4', 'S3', 'D4', 'X3', 'R6', 'S9']) {
@@ -687,8 +687,8 @@ describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
       expect(corePool.has(id), id).toBe(false)
     }
     for (const id of ['R5', 'O5']) {
-      expect(fullPool.has(id), `${id} 完整模式有卡牌，保留`).toBe(true)
-      expect(corePool.has(id), `${id} 核心无抽卡阶段，剔除`).toBe(false)
+      expect(fullPool.has(id), `${id} 完整模式有提案阶段，保留`).toBe(true)
+      expect(corePool.has(id), `${id} 核心同样有立项（抽卡）阶段，保留`).toBe(true)
     }
     for (const id of ['R1', 'R2', 'R9', 'R10', 'P1', 'P2', 'P9', 'P10', 'S6', 'S7', 'X7', 'X9']) {
       expect(corePool.has(id), `${id} 落在三环/人员/研发参数，保留`).toBe(true)
@@ -710,7 +710,7 @@ describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
     expect(E.canHire(s, 'sell').ok).toBe(false) // 名额已耗、AP 为 0
   })
 
-  it('核心 12 月流程：每月恰好 1 张事件（全类型），确认后直接进经营，恒等式全程成立', () => {
+  it('核心 12 月流程：每月恰好 1 张事件（全类型），经立项阶段后进经营，恒等式全程成立', () => {
     const run = (seed: number) => {
       const s = E.newGame(seed, 'core')
       E.startGame(s)
@@ -738,8 +738,12 @@ describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
             }
           }
           s.eventResolved = true
-          E.enterDraw(s) // 核心：跳过抽卡直接进经营
-          expect(s.phase, `m${m}`).toBe('operate')
+          E.enterDraw(s) // 核心与完整模式同样经过立项（抽卡）阶段
+          expect(s.phase, `m${m}`).toBe('draw')
+          if (s.drawn.length > 0) {
+            for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid)
+            E.confirmDraw(s)
+          }
         }
         E.enterOperate(s)
         E.settleMonth(s)
@@ -768,6 +772,44 @@ describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
     s.eventResolved = true
     E.enterDraw(s)
     expect(s.orders.length).toBe(preset) // 订单已预设，不重复生成
+    expect(s.phase).toBe('draw') // 核心同样经过立项（抽卡）阶段
+  })
+})
+
+describe('核心模式立项（抽卡）阶段', () => {
+  it('事件 → 立项（抽 N 选 M）→ 经营：每月固定流转，手牌可打出', () => {
+    const s = E.newGame(777, 'core')
+    E.startGame(s)
+    expect(s.phase).toBe('event')
+    s.eventResolved = true
+    E.enterDraw(s)
+    expect(s.phase).toBe('draw')
+    expect(s.drawn.length).toBeGreaterThan(0) // 待选区已有 N 张
+    for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid)
+    expect(E.confirmDraw(s).ok).toBe(true)
+    expect(s.hand.length).toBeGreaterThan(0)
+    E.enterOperate(s)
     expect(s.phase).toBe('operate')
+    // 打出一张可玩的牌：打牌数 −1、进入已实施列表
+    const card = s.hand.find((c) => E.canPlay(s, c).ok)
+    expect(card, '手牌中应有可打出的牌').toBeTruthy()
+    const playsBefore = s.plays
+    expect(E.playCard(s, card!.uid).ok).toBe(true)
+    expect(s.plays).toBe(playsBefore - 1)
+    expect(s.playedThisMonth.length).toBe(1)
+  })
+
+  it('卡牌效果并入月度修正：打出 C1 批量采购后原料价格降 1 档', () => {
+    const s = E.newGame(777, 'core')
+    E.startGame(s)
+    s.eventResolved = true
+    E.enterDraw(s)
+    E.enterOperate(s)
+    const c1 = { uid: 'C1#test', defId: 'C1', empowered: false }
+    s.hand.push(c1)
+    const before = E.derive(s).materials.pkg.tierShift
+    expect(E.playCard(s, c1.uid).ok).toBe(true)
+    const after = E.derive(s).materials.pkg.tierShift
+    expect(after).toBe(before - 1) // 批量采购：本月采购价格降 1 档
   })
 })

@@ -103,10 +103,9 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
   const weights: { ev: GameEventDef; w: number }[] = []
   for (const ev of EVENTS) {
     // 事件效果落地过滤：修正必须落在玩家当前能响应的参数上。
-    // 融资层未落地（无借/还入口，debt≡0）：利率/额度类事件全模式剔除；
-    // 核心模式尚无抽卡阶段：卡牌参数事件仅核心剔除（融资层落地后摘掉 needs 标记）。
+    // 融资层未落地（无借/还入口，debt≡0）：利率/额度类事件全模式剔除（融资层落地后摘掉 needs 标记）；
+    // 两种模式都有立项（抽卡）阶段：卡牌参数事件（抽卡/手牌/打牌修正）全模式保留。
     if (ev.needs?.includes('finance')) continue
-    if (state.mode === 'core' && ev.needs?.includes('cards')) continue
     const evIdx = CLIMATE_ORDER.indexOf(ev.climate)
     const dist = Math.min((evIdx - idx + 6) % 6, (idx - evIdx + 6) % 6)
     let w = 1
@@ -121,7 +120,7 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
 export function startGame(state: GameState) {
   if (state.mode === 'core') {
     state.boardPrompted = false
-    // 全类型事件（池已按模式过滤）：确认后 enterDraw 跳过抽卡直接进经营
+    // 全类型事件（池已按模式过滤）：确认后 enterDraw 进入立项（抽卡）阶段，再进经营
     beginMonthEvent(state)
     return
   }
@@ -243,7 +242,7 @@ function drawEvent(state: GameState, rng: Rng): GameEventDef {
 /**
  * 事件确认后进入抽卡阶段：每月开始独立的一次活动，先于经营布局。
  * 月度同步（AP/打牌数/手牌/抽牌参数）与渠道订单都在这里完成。
- * 核心模式（抽卡阶段尚未引入，卡片层落地后去掉此分支）：跳过抽卡，直接进经营。
+ * 完整 / 核心模式均经立项（抽卡）阶段后进入经营。
  */
 export function enterDraw(state: GameState) {
   const d = derive(state)
@@ -258,10 +257,6 @@ export function enterDraw(state: GameState) {
   state.acceptedOrders = []
   // 本月订单（渠道带来）：场景预设的订单（applyCoreScenario）不重复生成
   if (state.orders.length === 0) generateMonthlyOrders(state)
-  if (state.mode === 'core') {
-    state.phase = 'operate'
-    return
-  }
   state.phase = 'draw'
   // 开局（第 1 月）起始手牌已由 newGame 预置，跳过再抽一次
   if (state.drawn.length > 0) return
@@ -322,7 +317,7 @@ export function nextMonth(state: GameState) {
   state.rngState = rng.state
   if (state.mode === 'core') {
     state.boardPrompted = false
-    // 核心模式：事件阶段全类型（池已过滤），确认后 enterDraw 跳过抽卡直接进经营
+    // 核心模式：事件阶段全类型（池已过滤），确认后 enterDraw 进入立项（抽卡）阶段，再进经营
     beginMonthEvent(state)
     return
   }

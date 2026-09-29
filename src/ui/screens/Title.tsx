@@ -27,7 +27,7 @@ export function TitleScreen({ onStart }: { onStart: (seed: number, mode: E.GameM
         <div style={{ marginTop: 'var(--s6)' }} className="stack">
           <button className="btn btn-primary" onClick={() => start('core')}>
             <span className="btn-main">自由核心实验</span>
-            <span className="btn-sub">随机市场 · 仅采购、生产与销售</span>
+            <span className="btn-sub">随机市场 · 三环经营 + 提案卡牌</span>
           </button>
           <div className="section-label" style={{ marginTop: 'var(--s3)' }}>固定经营场景</div>
           <div className="grid-2">
