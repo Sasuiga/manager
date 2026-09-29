@@ -1,5 +1,5 @@
 import * as E from '../core/engine'
-import { CLIMATE_NAMES } from '../data/game'
+import { CLIMATE_NAMES, MOMENTUM_NAMES } from '../data/game'
 import { Icon } from './icons'
 import { wan } from './format'
 import type { Game } from './useGame'
@@ -60,6 +60,7 @@ export function Hud({
         </div>
         <div className="hstack" style={{ gap: 'var(--s2)' }}>
           <span className="hud-climate">{CLIMATE_NAMES[s.climate as keyof typeof CLIMATE_NAMES]}</span>
+          <span className="faint xs">动能 {MOMENTUM_NAMES[s.momentum]}</span>
         </div>
       </div>
 

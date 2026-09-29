@@ -6,6 +6,7 @@ import {
   CLIMATE_ORDER,
   MATERIALS,
   MGMT_CARD_UNLOCK,
+  MOMENTUM_ODDS,
   NEW_MATERIALS,
   RND_PROJECTS,
   TAX_RATE,
@@ -870,15 +871,16 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.agreements = state.agreements.filter((a) => a.monthsLeft > 0)
   for (const id of Object.keys(state.materials)) state.materials[id].chosenLot = null
 
-  // 季度切换：气候与经济动能
+  // 季度切换：先按当前气候掷经济动能（MOMENTUM_ODDS），动能决定方向，步长独立掷
   if ((state.month - 1) % 3 === 0) {
-    const dirRoll = rng.next()
-    const dir = dirRoll < 0.7 ? 1 : dirRoll < 0.9 ? 0 : -1
+    // 概率表三项和为 1：前两项掷出则分别为扩张/停滞，剩余概率即收缩
+    const [pExpand, pStall] = MOMENTUM_ODDS[state.climate]
+    const mRoll = rng.next()
+    state.momentum = mRoll < pExpand ? 'expand' : mRoll < pExpand + pStall ? 'stall' : 'contract'
+    const dir = state.momentum === 'expand' ? 1 : state.momentum === 'contract' ? -1 : 0
     const stepRoll = rng.next()
     const step = stepRoll < 0.7 ? 1 : stepRoll < 0.9 ? 0 : 2
-    void step
-    const move = dir * (stepRoll < 0.7 ? 1 : stepRoll < 0.9 ? 0 : 2)
-    state.momentum = dir === 1 ? 'expand' : dir === -1 ? 'contract' : 'stall'
+    const move = dir * step
     const idx = CLIMATE_ORDER.indexOf(state.climate)
     const nextIdx = ((idx + move) % 6 + 6) % 6
     state.climate = CLIMATE_ORDER[nextIdx]
@@ -891,12 +893,19 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.phase = 'event'
 }
 
+/**
+ * 下一季度转移的预测概率，与实际转移分布一致：
+ * 动能概率（MOMENTUM_ODDS[气候]）× 步长分布（70%×1 / 20%×0 / 10%×2）。
+ */
 function forecastOdds(idx: number): Record<string, number> {
   const names = CLIMATE_ORDER
   const out: Record<string, number> = { recovery: 0, boom: 0, overheat: 0, stagflation: 0, recession: 0, depression: 0 }
-  out[names[(idx + 1) % 6]] = 0.7
-  out[names[idx]] = 0.2
-  out[names[(idx + 2) % 6]] = 0.1
+  const [pE, pS, pC] = MOMENTUM_ODDS[names[idx]]
+  out[names[(idx + 1) % 6]] = pE * 0.7
+  out[names[(idx + 2) % 6]] = pE * 0.1
+  out[names[(idx + 5) % 6]] = pC * 0.7
+  out[names[(idx + 4) % 6]] = pC * 0.1
+  out[names[idx]] = pS + 0.2 * (pE + pC)
   return out
 }
 
