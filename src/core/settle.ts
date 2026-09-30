@@ -518,6 +518,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   }
   state.miscExpense = 0
   state.miscIncome = 0
+  state.eventCashGift = 0
   state.hireFeeBy = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
   state.ledgers.push(ledger)
   const balance = balanceSheet(state)

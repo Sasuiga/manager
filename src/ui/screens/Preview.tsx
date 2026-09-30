@@ -46,17 +46,6 @@ export function PreviewPage({ g, onSettle }: { g: Game; onSettle: () => void }) 
         </p>
       </div>
 
-      <div className="card">
-        <h3>本月安排</h3>
-        <div className="title-rule" />
-        <Row k="采购支出" v={wan(preview.purchaseSpend)} />
-        <Row k="计划生产" v={`${preview.plannedProduction} 件`} />
-        <Row k="产能分配" v={`${preview.capacityUsed} / ${preview.capacityTotal}`} />
-        <Row k="订单交付" v={`${preview.orderQty} 件`} />
-        <Row k="现货预计成交" v={numberRange(preview.spotQty, '件')} />
-        <Row k="销售资源分配" v={`${preview.salesResourceUsed} / ${preview.salesResourceTotal}`} />
-      </div>
-
       {preview.rnd.length ? (
         <div className="card">
           <h3>研发进度</h3>
@@ -77,26 +66,6 @@ export function PreviewPage({ g, onSettle }: { g: Game; onSettle: () => void }) 
               }
               cls={r.success ? 'green' : r.success === false ? 'red' : ''}
             />
-          ))}
-        </div>
-      ) : null}
-
-      {preview.products.length ? (
-        <div className="stack-sm">
-          <div className="section-label">分产品结果</div>
-          {preview.products.map((product) => (
-            <div className="card" key={product.tier}>
-              <div className="hstack-between">
-                <h3>{TIER_LABEL[product.tier]}</h3>
-                <span className="tag">{product.planned} 件</span>
-              </div>
-              <div className="title-rule" />
-              <Row k="计划生产" v={`${product.planned} 件`} />
-              <Row k="订单交付" v={`${product.orderQty} 件`} />
-              <Row k="现货预计成交" v={numberRange(product.spotQty, '件')} />
-              <Row k="预计收入" v={moneyRange(product.revenue)} />
-              <Row k="预计毛利" v={moneyRange(product.grossProfit)} />
-            </div>
           ))}
         </div>
       ) : null}
@@ -144,6 +113,7 @@ function PreSettleCashBreakdown({ preview }: { preview: E.OperatingPreview }) {
       <div className="section-label">本期 · 现金计划（回款前）</div>
       <Row k="期初现金（= 上期结算后）" v={wan(ps.cashOpen)} />
       {ps.gainedMisc > 0 ? <Row k="+ 事件收益（已收）" v={wan(ps.gainedMisc)} /> : null}
+      {ps.eventCashIn > 0 ? <Row k="+ 事件现金（纾困贷款 · 下月偿还）" v={wan(ps.eventCashIn)} /> : null}
       {ps.paidHire > 0 ? <Row k="− 招聘费（已付）" v={wan(ps.paidHire)} /> : null}
       {ps.paidMisc > 0 ? <Row k="− 杂项支出（已付）" v={wan(ps.paidMisc)} /> : null}
       {ps.paidCapex > 0 ? <Row k="− 设备购置（已付）" v={wan(ps.paidCapex)} /> : null}
@@ -191,8 +161,4 @@ function PreSettleCashBreakdown({ preview }: { preview: E.OperatingPreview }) {
 
 function moneyRange(v: E.ValueRange): string {
   return v.min === v.max ? wan(v.min) : `${wan(v.min)} ～ ${wan(v.max)}`
-}
-
-function numberRange(v: E.ValueRange, suffix = ''): string {
-  return v.min === v.max ? `${v.min}${suffix}` : `${v.min}～${v.max}${suffix}`
 }

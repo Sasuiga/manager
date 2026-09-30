@@ -1750,7 +1750,15 @@ function applyModSideEffects(state: GameState, mods: MonthMods, equipmentConside
       state.pendingIncome += 60
       state.miscIncome += 60
     }
-    if (note.includes('现金 +10w')) state.cash += 100
+    if (note.includes('现金 +10w')) {
+      /**
+       * 政府纾困（无息贷款）：当月收到现金，负债侧由下方 pendingCost 挂账，
+       * 资产与负债同步增加、损益中性——不进 miscIncome（否则权益多增、恒等式失衡），
+       * 记入 eventCashGift 供预算桥接展示本笔流入。
+       */
+      state.cash += 100
+      state.eventCashGift += 100
+    }
     /**
      * 「下月偿还 10w」描述的是这笔无息贷款形成的负债：
      * 收到现金的同月同时确认等额应付，次月偿还时冲销。

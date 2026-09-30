@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as E from './engine'
 import { settle } from './settle'
+import { EVENTS } from '../data/game'
 import type { GameState } from './types'
 
 /**
@@ -90,8 +91,8 @@ describe('结算前现金（preSettleCash）', () => {
     E.buyMaterial(s, 'pkg', 'mid') // 完整模式采购实付（行动阶段入账）
 
     const p = E.preSettleCash(s)
-    // 行动阶段恒等式：期初现金 + 事件收益 − 各项已付 ≡ 当前现金（招聘费未蒸发在「期初」里）
-    expect(p.cashOpen + p.gainedMisc - (p.paidHire + p.paidMisc + p.paidCapex + p.paidRepay + p.paidPurchase)).toBe(s.cash)
+    // 行动阶段恒等式：期初现金 + 事件收益 + 事件现金（不计损益） − 各项已付 ≡ 当前现金（招聘费未蒸发在「期初」里）
+    expect(p.cashOpen + p.gainedMisc + p.eventCashIn - (p.paidHire + p.paidMisc + p.paidCapex + p.paidRepay + p.paidPurchase)).toBe(s.cash)
     expect(p.paidHire).toBe(50)
     expect(p.paidCapex).toBe(50)
     expect(p.paidRepay).toBe(60)
@@ -126,5 +127,28 @@ describe('结算前现金（preSettleCash）', () => {
     expect(p.nextLiabilities.pendingCost).toBe(100)
     expect(p.nextLiabilities.pendingIncome).toBe(60)
     expect(p.nextLiabilities.net).toBe(wage + d.interest + 100 - 60)
+  })
+
+  it('X10 政府纾困：事件现金流入进桥接（不计损益，恒等式不破）', () => {
+    const s = E.newGame(13, 'core') as GameState
+    E.startGame(s)
+    const cashBefore = s.cash
+    s.currentEvent = EVENTS.find((e) => e.id === 'X10')!
+    s.ap = 1
+    E.acceptChance(s)
+    expect(s.cash).toBe(cashBefore + 100)
+    expect(s.pendingCost).toBe(100) // 下月偿还挂账（负债侧）
+
+    const p = E.preSettleCash(s)
+    expect(p.eventCashIn).toBe(100)
+    expect(p.gainedMisc).toBe(0) // 损益中性，不进 miscIncome
+    // 桥接不变量：期初 + 事件收益 + 事件现金 − 已付 ≡ 当前现金
+    expect(
+      p.cashOpen + p.gainedMisc + p.eventCashIn - (p.paidHire + p.paidMisc + p.paidCapex + p.paidRepay + p.paidPurchase),
+    ).toBe(s.cash)
+    // 预算页桥接总额（含全部扣减项）也等于当前现金
+    expect(p.cashAfter + (p.paidHire + p.paidMisc + p.paidCapex + p.paidRepay + p.paidPurchase)).toBe(
+      p.cashOpen + p.gainedMisc + p.eventCashIn,
+    )
   })
 })

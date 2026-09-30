@@ -38,7 +38,7 @@ export interface ProductPreview {
  * 得到「本期期末资金（回款前）」——本期闭环的现金位置（不含结算边界回款到账）。
  * 为负 = 计划超出资金能力。
  *
- * 勾稽不变量：cashOpen + gainedMisc − (paidHire + paidMisc + paidCapex + paidRepay + paidPurchase) ≡ state.cash
+ * 勾稽不变量：cashOpen + gainedMisc + eventCashIn − (paidHire + paidMisc + paidCapex + paidRepay + paidPurchase) ≡ state.cash
  * （行动阶段所有现金收付均已计入以上科目或挂账字段，无双重计算）。
  */
 export interface PreSettleCash {
@@ -50,6 +50,8 @@ export interface PreSettleCash {
   paidMisc: Money
   /** 事件现金赠与（含赠与设备公允价值，非现金部分），行动阶段实收 */
   gainedMisc: Money
+  /** 事件直接收到、不计损益的现金（如 X10 政府纾困无息贷款：负债侧已挂 pendingCost），行动阶段实收 */
+  eventCashIn: Money
   /** 设备购置（资本化：商店 + 事件对价），行动阶段实付 */
   paidCapex: Money
   /** 还款（资本性支出），行动阶段实付 */
@@ -68,7 +70,7 @@ export interface PreSettleCash {
   interest: Money
   /** 上月工资实付（当月计提、次月实付） */
   wagePaid: Money
-  /** = cashOpen + gainedMisc − (paidHire + paidMisc + paidCapex + paidRepay + paidPurchase + purchasePlan + agreementSpend + overtimePay + rndInvest + interest + wagePaid)；为负 = 计划超出资金能力 */
+  /** = cashOpen + gainedMisc + eventCashIn − (paidHire + paidMisc + paidCapex + paidRepay + paidPurchase + purchasePlan + agreementSpend + overtimePay + rndInvest + interest + wagePaid)；为负 = 计划超出资金能力 */
   cashAfter: Money
 }
 
@@ -81,6 +83,7 @@ export function preSettleCash(state: GameState): PreSettleCash {
   const paidHire = Object.values(state.hireFeeBy).reduce((a, v) => a + v, 0)
   const paidMisc = state.miscExpense
   const gainedMisc = state.miscIncome
+  const eventCashIn = state.eventCashGift
   const paidCapex = ledgerSpend((row) => row.item.startsWith('设备购置'))
   const paidRepay = ledgerSpend((row) => row.item === '还款')
   /** 采购实付：普通采购（完整模式）+ 贸易商采购；协议手续费/供应商开发在 paidMisc，不重复计。 */
@@ -117,7 +120,8 @@ export function preSettleCash(state: GameState): PreSettleCash {
   }
   const cashAfter =
     state.openingCash +
-    gainedMisc -
+    gainedMisc +
+    eventCashIn -
     (paidHire +
       paidMisc +
       paidCapex +
@@ -134,6 +138,7 @@ export function preSettleCash(state: GameState): PreSettleCash {
     paidHire,
     paidMisc,
     gainedMisc,
+    eventCashIn,
     paidCapex,
     paidRepay,
     paidPurchase,
