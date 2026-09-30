@@ -2,6 +2,7 @@ import {
   ACHIEVEMENT_BY_ID,
   BOMS,
   CARD_BY_ID,
+  CLIMATE_MATERIAL,
   CLIMATE_NAMES,
   CLIMATE_ORDER,
   MATERIALS,
@@ -250,6 +251,43 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   // 2.1 订单：独立定价，先于现货结算并占用本层需求。
   //   · 强制订单（事件/卡牌产生）：到月必交，库存不足部分失效。
   //   · 自然订单（销售渠道）：玩家当月点「接单」才结算；未接/已取消的当月失效。
+
+  /**
+   * 2.0 库存清理（P10 卡牌）：成品库存最多的产品按账面单价出售固定件数，
+   * 资产转现金、不进损益（不进销售收入/成本，避免按成本价成交产生 0 毛利的伪收入）。
+   */
+  const stockClear = state.monthFlags.includes('clearStock15')
+    ? { empowered: true }
+    : state.monthFlags.includes('clearStock')
+      ? { empowered: false }
+      : null
+  if (stockClear) {
+    let target: Tier = 'low'
+    for (const t of TIERS) if (state.products[t].qty > state.products[target].qty) target = t
+    const p = state.products[target]
+    if (p.qty > 0) {
+      const n = stockClear.empowered ? (p.qty >= 15 ? 15 : 10) : p.qty >= 10 ? 10 : 5
+      const unit = p.value / p.qty
+      const proceeds = unit * n
+      p.value = Math.max(0, p.value - proceeds)
+      p.qty -= n
+      state.cash += proceeds
+      state.monthLedger.push({
+        dept: 'sell',
+        item: `库存清理 ${BOMS[target].name} ×${n}`,
+        debit: '现金',
+        credit: `存货 ${BOMS[target].name}`,
+        debitAmt: Math.round(proceeds),
+        creditAmt: Math.round(proceeds),
+        detail: [
+          `按账面单价 ${(unit / 10).toFixed(2)}w × ${n} 件`,
+          '资产转现金，不计销售收入/成本，不影响损益',
+        ],
+      })
+      warnings.push(`库存清理：${BOMS[target].name} ${n} 件按账面价出售（P10，不影响损益）`)
+    }
+  }
+
   const remainingOrders: typeof state.orders = []
   const accepted = new Set(state.acceptedOrders)
   for (const o of state.orders) {
@@ -837,6 +875,8 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.monthLedger = []
   state.declinedOrders = []
   state.acceptedOrders = []
+  // C9 期货先取出（应用在本函数末段、气候更新之后；此处只清状态）
+  const pendingFutures = state.futures
   state.futures = {}
   state.ipChangedThisMonth = false
   state.rndStartsThisMonth = []
@@ -884,6 +924,19 @@ export function advanceMonth(state: GameState, rng: Rng) {
     const nextIdx = ((idx + move) % 6 + 6) % 6
     state.climate = CLIMATE_ORDER[nextIdx]
     state.nextClimateOdds = forecastOdds(nextIdx)
+  }
+
+  /**
+   * C9 期货：锁定上月档位。本月（新季度）气候档位高于锁定时，按锁定档位采购；
+   * 只锁气候部分（事件/人员修正在事件阶段发生，锁不住属预期）。
+   */
+  if (Object.keys(pendingFutures).length > 0) {
+    const adj: Record<string, { supply: number; tierShift: number }> = {}
+    for (const [id, locked] of Object.entries(pendingFutures)) {
+      const shiftNow = CLIMATE_MATERIAL[state.climate].tierShift[id] ?? 0
+      if (shiftNow > locked) adj[id] = { supply: 0, tierShift: locked - shiftNow }
+    }
+    if (Object.keys(adj).length > 0) state.monthMods = mergeMods(state.monthMods, { materials: adj })
   }
 
   // 管理卡随人数解锁补入牌库

@@ -170,7 +170,8 @@ export function mergeMods(...list: (MonthMods | undefined)[]): MonthMods {
 /** 把一张卡的 CardPlayEffect 转成 MonthMods。 */
 export function cardEffectToMods(e: CardPlayEffect): { mods: MonthMods; flags: string[] } {
   const mods: MonthMods = {}
-  if (e.buyTierShift) mods.allTierShift = (mods.allTierShift ?? 0) + e.buyTierShift
+  // buyTierShift 的卡牌修正在**采购时**生效（buyCardShift：采购价 / 贸易商价），
+  // 不并入展示价格档位（allTierShift），否则与 lotPrice 里的 buyCardShift 重复降档。
   if (e.buySupply) mods.allSupply = (mods.allSupply ?? 0) + e.buySupply
   if (e.buyLots) mods.buyLots = (mods.buyLots ?? 0) + e.buyLots
   if (e.capacity) mods.capacity = (mods.capacity ?? 0) + e.capacity
@@ -376,7 +377,7 @@ export function derive(state: GameState): DerivedTotals {
   const rndCostTotal = rndCost * rndActiveCount
 
   // ── 运营 ──
-  const apMax = BASE_AP + Math.max(0, staffCount.ops - 1) + (mods.ap ?? 0)
+  const apMax = BASE_AP + Math.max(0, staffCount.ops - 1) + (mods.ap ?? 0) + (state.monthFlags.includes('m2solo') ? 1 : 0)
   const playsMax = (staffCount.ops >= 4 ? 3 : BASE_PLAYS) + (mods.plays ?? 0)
   let handMax = BASE_HAND
   if (staffCount.ops >= 3) handMax += 1

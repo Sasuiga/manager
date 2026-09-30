@@ -19,7 +19,7 @@ import type { Climate, GameEventDef, GameState, GoalDef, GoalTrack, Ledger, Mone
 export * from './types'
 export { derive, mergeMods, unitCost, rndProjectOutcome } from './derive'
 export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityOf, buildDeck, wagePayableOf } from './game'
-export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct } from './settle'
+export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct, materialPriceAt } from './settle'
 export type { SettleReport } from './settle'
 export { previewOperations, preSettleCash } from './preview'
 export type { OperatingPreview, ProductPreview, ValueRange, PreSettleCash, NextPeriodLiabilities } from './preview'
@@ -55,6 +55,9 @@ export {
   traderOffer,
   buyFromTrader,
   traderQuota,
+  urgentBuy,
+  clearanceBuy,
+  swapMaterials,
   signAgreement,
   cancelAgreement,
   agreementSlots,
@@ -111,6 +114,8 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
     let w = 1
     if (dist === 0) w = isEnd ? 9 : 8
     else if (dist === 1) w = 2
+    // 负面事件权重 ×1.5：避免正面事件刷满现金流，给资金断裂风险留空间
+    if (ev.polarity === 'bad') w = Math.round(w * 1.5)
     weights.push({ ev, w })
   }
   return weights.flatMap(({ ev, w }) => Array<GameEventDef>(w).fill(ev))

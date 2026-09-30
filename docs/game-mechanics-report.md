@@ -61,7 +61,7 @@
 
 ## 2. 单位系统与数字约定
 
-- **货币单位 = 「角」**（`Money` 类型，1w = 10）。全部内部运算是整数「角」，展示层统一经 `wan()`（`src/ui/format.ts:12`）换算为 `x.xxw`（两位小数）。数据文件 `src/data/game.ts` 中所有货币常量都是角：如 `START_CASH = 1000`（10w）、`OVERTIME_COST = 5`（0.5w）、`RND_COST_PER_PROJECT = 30`（3w）。
+- **货币单位 = 「角」**（`Money` 类型，1w = 10）。全部内部运算是整数「角」，展示层统一经 `wan()`（`src/ui/format.ts:12`）换算为 `x.xxw`（两位小数）。数据文件 `src/data/game.ts` 中所有货币常量都是角：如 `START_CASH = 400`（40w）、`OVERTIME_COST = 5`（0.5w）、`RND_COST_PER_PROJECT = 30`（3w）。
 - **RNG**：mulberry32（`src/core/rng.ts`），状态可序列化。同一 seed 一局完全可复现。多处用 `Rng.fromState(seed + month * 常数)` 派生独立子流，保证某类随机（订单量、现货系数、事件池、目标）与主随机流互不干扰。
 - **预览与结算同源**：界面上所有「预计值」由 `derive()`（`src/core/derive.ts:268`）与结算共用同一套公式，预算页（`preview.ts`）通过**克隆状态跑两遍真实 `settle()`** 得到区间，保证预演数字与实际结算口径一致（`src/core/preview.ts:132`）。
 - **库存计价**：原料与成品一律**移动加权平均**。账面只存 `qty` 与 `value` 两个字段，单价 = `value / qty` 现算（`src/core/types.ts:55-60`），避免取整漂移。生产领料、销售成本结转、成品入库全部与账面 `value` 严格勾稽（会计恒等式审计见 `src/core/audit.test.ts`，全年最大偏差要求为 0）。
@@ -222,8 +222,8 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 
 | 层 | 极低 | 低 | 基准 | 高 | 极高 |
 |---|---|---|---|---|---|
-| 低端 标准品 | 4w | 5w | 6w | 7w | 8w |
-| 中端 精工件 | 8w | 10w | 12w | 14w | 16w |
+| 低端 标准品 | 3.5w | 4.5w | 5.5w | 6.5w | 7.5w |
+| 中端 精工件 | 7.5w | 9w | 10.5w | 12.5w | 14.5w |
 | 高端 精密件 | 16w | 20w | 24w | 28w | 32w |
 | 特殊 特种件 | 24w | 30w | 36w | 42w | 48w |
 
@@ -431,7 +431,7 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 
 | 项目 | 需求进度 | 基础成功率 | 完成效果 |
 |---|---|---|---|
-| 中端 BOM | 15 | 95%（封顶 100%，教学） | 解锁中端产品（解锁当月即可排产——结算研发段在生产段之前） |
+| 中端 BOM | 10 | 95%（封顶 100%，教学） | 解锁中端产品（解锁当月即可排产——结算研发段在生产段之前） |
 | 高端 BOM | 50 | 60% | 解锁高端 + 揭示新材料（合金/芯片外：微机电、复合材进入已知材料，需供应商开发才有供给） |
 | 特殊 BOM | 50 | 45% | 解锁特殊 + 揭示新材料 |
 | IP 技能树 21 节点 | 阶段 1: 15（80%）；阶段 2: 30（70%）；阶段 3: 50（60%） | 同上 | 确定性授予对应知产（下表） |
@@ -658,7 +658,7 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 ```
 
 - 折旧：每台 `min(月折旧, 原值 − 累计折旧)`，提足即停（账面不穿负）。
-- 利息：`max(0, round(debt × rate) − I5)`，`rate = max(0, 0.8% + 事件利率修正×0.1% − J7×0.1%)`。**当前 UI 无借款入口 → debt 恒 0、利息恒 0**（§18）。
+- 利息：`max(0, round(debt × rate) − I5)`，`rate = max(0, 1.2% + 事件利率修正×0.1% − J7×0.1%)`。**当前 UI 无借款入口 → debt 恒 0、利息恒 0**（§18）。
 
 ### 14.3 资产负债表（`balanceSheet`，game.ts:252）
 
@@ -773,7 +773,7 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 
 ### A. 玩家界面没有入口（引擎完整）
 
-1. **借款 / 还款**（`borrow/repay`，actions.ts:1366/1390）：UI 无任何按钮 → 正常游玩 `debt` 恒 0，借款额度（20w 基础 + J7）、利率（0.8% + 事件修正）、利息全是死数。测试脚本（route/balance）在用，所以引擎路径活跃。
+1. **借款 / 还款**（`borrow/repay`，actions.ts:1366/1390）：UI 无任何按钮 → 正常游玩 `debt` 恒 0，借款额度（20w 基础 + J7）、利率（1.2% + 事件修正）、利息全是死数。测试脚本（route/balance）在用，所以引擎路径活跃。
 2. **裁员**（`fire`，actions.ts:113）：S4 事件设 `canFire` 标记但无 UI 按钮，只能 dev console 调用。
 3. **C6 紧急采购 / C7 原料替换 / C9 期货 / C10 清仓**：打出卡只设置 `flags`（cardUrgent/swap/cardFutures/cardClearance），注释说「结算/界面阶段处理」——但该界面从未实现，四张卡当前**零效果**（C9 的 `state.futures` 永远为空对象）。
 4. **P1「产能全用完额外 +1」**（fullLoadCard）、**P3「付 2w 改 +5」**（overtimeCard）、**P10 库存清理**（clearStock/clearStock15）：flag 置了没人读。
@@ -815,7 +815,7 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 | 采购档数/数量/价格 | `src/core/actions.ts:458-496` | lotQty（25/50/100% + 取整规则）、lotPrice（小 +1 大 −1 档）、buyCardShift |
 | 订单数量/价格/生成 | `src/core/engine.ts:272` + `derive.ts:359-362` | generateMonthlyOrders（8~12 件、已解锁层随机）、orderPriceShift 基 1 |
 | 现货随机区间 | `src/core/settle.ts:236-241` | 0.5 + rng×0.5（核心）；因子上下界在 preview.ts:125-126 |
-| 工资/利息/税 | `src/core/derive.ts:341-353` + settle | STAFF.salary、I10、rate 0.8%+修正、TAX_RATE 10% |
+| 工资/利息/税 | `src/core/derive.ts:341-353` + settle | STAFF.salary、I10、rate 1.2%+修正、TAX_RATE 10% |
 | 研发进度/成功率/费用 | `src/core/derive.ts:600` + data | 每人 +5/+5%、封顶 90%（中端 100）、3w/在研项目 |
 | 结算顺序 | `src/core/settle.ts:76` | §0 协议 → §1 研发 → §2 生产 → §3 销售 → §4 过账 → §5 目标 → §6 终局 |
 | 预演区间 | `src/core/preview.ts:125-132` | LOW_FACTORS 0.5 / HIGH_FACTORS 1.0 |

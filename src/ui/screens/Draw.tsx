@@ -162,7 +162,7 @@ export function DrawScreen({ g }: { g: Game }) {
                         </span>
                         <span className={`tag${on ? ' gold' : ''}`}>{on ? '已选' : '选择'}</span>
                       </span>
-                      <span className="card-desc">{def.text}</span>
+                      <span className="card-desc">{c.empowered && def.empowered ? def.empowered : def.text}</span>
                     </span>
                   </button>
                 )
@@ -244,7 +244,7 @@ export function DrawScreen({ g }: { g: Game }) {
                           <span className={`tag${discarded ? ' gold' : ''}`}>{discarded ? '将弃' : '选择'}</span>
                         ) : null}
                       </span>
-                      <span className="card-desc">{def.text}</span>
+                      <span className="card-desc">{c.empowered && def.empowered ? def.empowered : def.text}</span>
                       {view === 'hand' && !discardMode ? (
                         <span className="card-cost">
 {E.cardPlayCost(s, def) > 0 ? `实施费用 ${wan(E.cardPlayCost(s, def))}` : '实施费用：无'}

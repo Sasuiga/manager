@@ -2,6 +2,7 @@ import { useState, Fragment } from 'react'
 import * as E from '../../core/engine'
 import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS } from '../../data/game'
 import type { CardCtx } from '../../data/game'
+import type { CardInstance } from '../../core/types'
 import type { Tier } from '../../core/types'
 import { Icon, type IconName } from '../icons'
 import { Medallion } from '../ornaments'
@@ -221,6 +222,12 @@ export function TurnScreen({
 function OpsPage({ g }: { g: Game }) {
   const s = g.s
   const [view, setView] = useState<'discard' | null>(null)
+  /** M3 复制手牌：先选要复制的目标手牌，再打出 */
+  const [m3, setM3] = useState<string | null>(null)
+  const descOf = (c: CardInstance) => {
+    const def = CARD_BY_ID[c.defId]
+    return c.empowered && def?.empowered ? def.empowered : def?.text ?? ''
+  }
 
   return (
     <>
@@ -264,7 +271,7 @@ function OpsPage({ g }: { g: Game }) {
                         {c.empowered ? <span className="tag gold" style={{ marginLeft: 6 }}>强化</span> : null}
                       </span>
                     </span>
-                    <span className="card-desc">{def.text}</span>
+                    <span className="card-desc">{descOf(c)}</span>
                     <span className="card-cost">
 {cost > 0 ? `实施费用 ${wan(cost)}` : '实施费用：无'}
                     </span>
@@ -274,7 +281,17 @@ function OpsPage({ g }: { g: Game }) {
                       className="btn btn-mini"
                       style={{ width: 'auto' }}
                       disabled={!playable.ok}
-                      onClick={() => g.act((st) => E.playCard(st, c.uid))}
+                      onClick={() => {
+                        if (def.id === 'M3') {
+                          if (s.hand.length <= 1) {
+                            g.setToast('无其他手牌可复制')
+                            return
+                          }
+                          setM3(c.uid)
+                          return
+                        }
+                        g.act((st) => E.playCard(st, c.uid))
+                      }}
                     >
                       <span className="btn-main xs">实施</span>
                       {!playable.ok ? <span className="btn-sub xs">{playable.msg}</span> : null}
@@ -317,8 +334,8 @@ function OpsPage({ g }: { g: Game }) {
                       <div key={c.uid} className={`card-item d-${def.kind}`}>
                         <span className="spine" />
                         <span className="card-body">
-                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}</span>
-                          <span className="card-desc">{def.text}</span>
+                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}{c.empowered ? '（强化）' : ''}</span>
+                          <span className="card-desc">{c.empowered && def.empowered ? def.empowered : def.text}</span>
                         </span>
                       </div>
                     )
@@ -345,8 +362,8 @@ function OpsPage({ g }: { g: Game }) {
                       <div key={c.uid} className={`card-item d-${def.kind}`}>
                         <span className="spine" />
                         <span className="card-body">
-                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}</span>
-                          <span className="card-desc">{def.text}</span>
+                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}{c.empowered ? '（强化）' : ''}</span>
+                          <span className="card-desc">{c.empowered && def.empowered ? def.empowered : def.text}</span>
                         </span>
                       </div>
                     )
@@ -364,7 +381,51 @@ function OpsPage({ g }: { g: Game }) {
           </div>
         </Sheet>
       ) : null}
+
+      {/* M3 复制手牌：选择要复制的目标手牌 */}
+      {m3 ? (
+        <M3TargetSheet g={g} cardUid={m3} onClose={() => setM3(null)} />
+      ) : null}
     </>
+  )
+}
+
+/** M3 复制手牌的目标选择弹框：选一张手牌，确认后打出 M3 并复制。 */
+function M3TargetSheet({ g, cardUid, onClose }: { g: Game; cardUid: string; onClose: () => void }) {
+  const s = g.s
+  const targets = s.hand.filter((c) => c.uid !== cardUid)
+  return (
+    <Sheet title="复制手牌" sub="选择要复制的手牌" onClose={onClose}>
+      <div className="info">
+        复制的牌立即加入手牌，保留原牌的效果与强化状态；打出 M3 消耗 1 次实施数。
+      </div>
+      <div className="stack">
+        {targets.map((c) => {
+          const def = CARD_BY_ID[c.defId]
+          return (
+            <button
+              key={c.uid}
+              className={`card-item d-${def.kind}`}
+              onClick={() => {
+                const r = g.act((st) => E.playCard(st, cardUid, { targetUid: c.uid }))
+                if (!r.ok) g.setToast(r.msg)
+                onClose()
+              }}
+            >
+              <span className="spine" />
+              <span className="card-body">
+                <span className="card-name">
+                  【{DEPT_SHORT[def.kind]}】{def.name}
+                  {c.empowered ? <span className="tag gold" style={{ marginLeft: 6 }}>强化</span> : null}
+                </span>
+                <span className="card-desc">{c.empowered && def.empowered ? def.empowered : def.text}</span>
+              </span>
+            </button>
+          )
+        })}
+        {targets.length === 0 ? <p className="muted sm">没有可复制的手牌。</p> : null}
+      </div>
+    </Sheet>
   )
 }
 
@@ -380,6 +441,12 @@ function BuyPage({ g }: { g: Game }) {
   const [pickLot, setPickLot] = useState<string | null>(null)
   const [trader, setTrader] = useState(false)
   const [agreement, setAgreement] = useState(false)
+  const [urgent, setUrgent] = useState(false)
+  const [clearance, setClearance] = useState(false)
+  const [swap, setSwap] = useState(false)
+  const urgentOn = gs.monthFlags.includes('urgent') || gs.monthFlags.includes('urgentMid')
+  const clearanceOn = gs.monthFlags.includes('clearance') || gs.monthFlags.includes('clearanceMid')
+  const swapOn = gs.monthFlags.includes('swap') || gs.monthFlags.includes('swapPlus')
 
   return (
     <>
@@ -545,6 +612,24 @@ function BuyPage({ g }: { g: Game }) {
               {gs.depts.buy.staff < 3 ? '需采购 3 人解锁' : '1 AP + 1w'}
             </span>
           </button>
+          {urgentOn ? (
+            <button className="btn btn-mini" onClick={() => setUrgent(true)}>
+              <span className="btn-main">紧急采购</span>
+              <span className="btn-sub">卡牌【紧急采购】· 每原料 1 次 · 不占档数</span>
+            </button>
+          ) : null}
+          {clearanceOn ? (
+            <button className="btn btn-mini" onClick={() => setClearance(true)}>
+              <span className="btn-main">清仓采购</span>
+              <span className="btn-sub">卡牌【清仓】· 每原料 1 次 · 不占档数</span>
+            </button>
+          ) : null}
+          {swapOn ? (
+            <button className="btn btn-mini" onClick={() => setSwap(true)}>
+              <span className="btn-main">原料替换</span>
+              <span className="btn-sub">卡牌【原料替换】· 每月 1 次 · 不占档数</span>
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -600,6 +685,9 @@ function BuyPage({ g }: { g: Game }) {
         />
       ) : null}
       {trader ? <TraderSheet g={g} onClose={() => setTrader(false)} /> : null}
+      {urgent ? <UrgentClearanceSheet g={g} mode="urgent" onClose={() => setUrgent(false)} /> : null}
+      {clearance ? <UrgentClearanceSheet g={g} mode="clearance" onClose={() => setClearance(false)} /> : null}
+      {swap ? <SwapSheet g={g} onClose={() => setSwap(false)} /> : null}
       {agreement ? <AgreementSheet g={g} onClose={() => setAgreement(false)} /> : null}
     </>
   )
@@ -793,6 +881,121 @@ function TraderSheet({ g, onClose }: { g: Game; onClose: () => void }) {
           )
         })}
         {offers.length === 0 ? <p className="muted sm">本月没有贸易商上门。</p> : null}
+      </div>
+    </Sheet>
+  )
+}
+
+/** C6 紧急采购 / C10 清仓：每类原料 1 次、不占档数的额外购买机会。 */
+function UrgentClearanceSheet({ g, mode, onClose }: { g: Game; mode: 'urgent' | 'clearance'; onClose: () => void }) {
+  const gs = g.s
+  const d = E.derive(gs)
+  const mats = E.materialViews(gs)
+  const mid = gs.monthFlags.includes(mode === 'urgent' ? 'urgentMid' : 'clearanceMid')
+  const shift = mode === 'urgent' ? (mid ? 1 : 2) : -2
+  const label = mode === 'urgent' ? '紧急采购' : '清仓采购'
+  const cardName = mode === 'urgent' ? '紧急采购' : '清仓'
+  return (
+    <Sheet title={label} sub={`卡牌【${cardName}】· ${mid ? '中批' : '小批'} · 不占档数`} onClose={onClose}>
+      <div className="info">
+        每类原料限 1 次；价格{shift > 0 ? '+' : ''}{shift} 档（在当前档位基础上计算）。
+      </div>
+      <div className="stack">
+        {mats.filter((m) => m.supply > 0).map((m) => {
+          const used = gs.extraBuys.filter((e) => e.kind === mode && e.materialId === m.id).length
+          const soldOut = used >= 1
+          const qty = E.lotQty(gs, m.id, mid ? 'mid' : 'small')
+          const unit = E.materialPriceAt(m.id, (d.materials[m.id]?.tierShift ?? 0) + shift)
+          const total = qty * unit
+          return (
+            <div key={m.id} className="card">
+              <Row k={m.name} v={`${qty} 件 · ${wan(unit)}/件`} />
+              <Row k="合计" v={wan(total)} />
+              <div style={{ marginTop: 'var(--s3)' }}>
+                <button
+                  className="btn btn-mini"
+                  disabled={soldOut || total > gs.cash || qty <= 0}
+                  onClick={() => {
+                    const r = g.act((st) => (mode === 'urgent' ? E.urgentBuy(st, m.id) : E.clearanceBuy(st, m.id)))
+                    if (!r.ok) g.setToast(r.msg)
+                  }}
+                >
+                  <span className="btn-main">{soldOut ? '本月已用' : total > gs.cash ? '现金不足' : '购买'}</span>
+                </button>
+              </div>
+            </div>
+          )
+        })}
+        {mats.filter((m) => m.supply > 0).length === 0 ? <p className="muted sm">本月没有可供原料。</p> : null}
+      </div>
+    </Sheet>
+  )
+}
+
+/** C7 原料替换：出售 5 单位（账面价）→ 购入 5/7 单位（当前价），每月 1 次。 */
+function SwapSheet({ g, onClose }: { g: Game; onClose: () => void }) {
+  const gs = g.s
+  const d = E.derive(gs)
+  const mats = E.materialViews(gs)
+  const plus = gs.monthFlags.includes('swapPlus')
+  const used = gs.extraBuys.some((e) => e.kind === 'swap')
+  const [sellId, setSellId] = useState<string>('')
+  const [buyId, setBuyId] = useState<string>('')
+  const sell = mats.find((m) => m.id === sellId)
+  const buy = mats.find((m) => m.id === buyId)
+  const sellState = sellId ? gs.materials[sellId] : undefined
+  const sellQty = sell ? Math.min(5, sell.qty) : 0
+  const buyQty = buy ? Math.min(plus ? 7 : 5, d.materials[buy.id]?.supply ?? 0) : 0
+  const sellUnit = sellState && sellState.qty > 0 ? sellState.value / sellState.qty : 0
+  const buyUnit = buy ? E.materialPriceAt(buy.id, (d.materials[buy.id]?.tierShift ?? 0)) : 0
+  const sellTotal = sellUnit * sellQty
+  const buyTotal = buyUnit * buyQty
+  const valid = !used && sell && buy && sell.id !== buy.id && sellQty > 0 && buyQty > 0 && gs.cash + sellTotal >= buyTotal
+  return (
+    <Sheet title="原料替换" sub={`卡牌【原料替换】· 每月 1 次 · 不占档数`} onClose={onClose}>
+      <div className="info">
+        出售 5 单位（不足 5 按全部库存）按账面单价收款，购入{plus ? 7 : 5}单位按当前档位价付款；资产互换、不进损益。
+      </div>
+      {used ? <p className="muted sm">本月已使用。</p> : null}
+      <div className="section-label">出售（按账面单价）</div>
+      <div className="stack-sm">
+        {mats.filter((m) => m.qty > 0).map((m) => (
+          <button key={m.id} className={`btn btn-mini${sellId === m.id ? ' on selected' : ''}`}
+            disabled={m.id === buyId}
+            onClick={() => setSellId(m.id)}>
+            <span className="btn-main xs">{m.name}</span>
+            <span className="btn-sub xs">库存 {m.qty} · 账面 {wan(m.avgCost)}/件 · 售 {Math.min(5, m.qty)} 件</span>
+          </button>
+        ))}
+        {mats.filter((m) => m.qty > 0).length === 0 ? <p className="muted sm">无库存原料可出售。</p> : null}
+      </div>
+      <div className="section-label" style={{ marginTop: 'var(--s3)' }}>购入（按当前档位价）</div>
+      <div className="stack-sm">
+        {mats.filter((m) => (d.materials[m.id]?.supply ?? 0) > 0).map((m) => (
+          <button key={m.id} className={`btn btn-mini${buyId === m.id ? ' on selected' : ''}`}
+            disabled={m.id === sellId}
+            onClick={() => setBuyId(m.id)}>
+            <span className="btn-main xs">{m.name}</span>
+            <span className="btn-sub xs">供 {d.materials[m.id]?.supply ?? 0} · 入 {Math.min(plus ? 7 : 5, d.materials[m.id]?.supply ?? 0)} 件 · {wan(E.materialPriceAt(m.id, (d.materials[m.id]?.tierShift ?? 0)))}/件</span>
+          </button>
+        ))}
+        {mats.filter((m) => (d.materials[m.id]?.supply ?? 0) > 0).length === 0 ? <p className="muted sm">本月无可供原料。</p> : null}
+      </div>
+      <div className="card" style={{ marginTop: 'var(--s3)' }}>
+        <Row k="出售所得" v={sell ? wan(sellTotal) : '—'} />
+        <Row k="购入支出" v={buy ? wan(buyTotal) : '—'} />
+        <Row k="现金净额" cls={(sellTotal - buyTotal) >= 0 ? 'green' : 'red'} v={sell && buy ? wan(sellTotal - buyTotal) : '—'} />
+      </div>
+      <div style={{ marginTop: 'var(--s3)' }}>
+        <button className="btn btn-primary" disabled={!valid}
+          onClick={() => {
+            const r = g.act((st) => E.swapMaterials(st, sellId, buyId))
+            if (!r.ok) g.setToast(r.msg)
+            else onClose()
+          }}>
+          <span className="btn-main">确认替换</span>
+          <span className="btn-sub">出售 {sellQty} 件 · 购入 {buyQty} 件</span>
+        </button>
       </div>
     </Sheet>
   )
