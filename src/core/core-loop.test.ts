@@ -195,12 +195,12 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(d.orderCount).toBe(0)
   })
 
-  it('生产 2 人解锁后产能 5→10→17（每人 +1），工资按人计提', () => {
+  it('生产 2 人解锁后产能 5→8→13（每人 +1），工资按人计提', () => {
     const s = fresh()
     expect(E.hire(s, 'make').ok).toBe(true)
-    expect(E.derive(s).capacity).toBe(10)
+    expect(E.derive(s).capacity).toBe(8)
     expect(E.hire(s, 'make').ok).toBe(true)
-    expect(E.derive(s).capacity).toBe(17)
+    expect(E.derive(s).capacity).toBe(13)
     expect(E.derive(s).salaryTotal).toBe(16) // 2 人 × 0.8w
     expect(s.ap).toBe(1)
   })
@@ -242,7 +242,7 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(s.orders.length).toBe(2) // 第 2 单当月立即补发
   })
 
-  it('3 名生产解锁加班：加班费 = 2× 生产工资，发生时直接支付', () => {
+  it('3 名生产解锁加班：加班费 = 2× 生产工资，发生时直接支付，选定后不可取消', () => {
     const s = fresh(902)
     s.monthMods = {} // 排除本月事件修正，只验证加班解锁本身
     s.currentEvent = null
@@ -252,16 +252,16 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(E.hire(s, 'make').ok).toBe(true)
     const cashBefore = s.cash
     expect(E.toggleOvertime(s).ok).toBe(true)
-    // 每人 6（基础 5 + 2 人解锁 1，无设备）：加班增益 = 3 × 6
-    expect(E.planCapacity(s)).toBe(5 + 3 * 6 + 3 * 6)
+    // 每人 4（基础 3 + 2 人解锁 1，无设备）：加班增益 = 3 × 4
+    expect(E.planCapacity(s)).toBe(5 + 3 * 4 + 3 * 4)
     // 加班费 = 2 × 0.8w × 3 人 = 4.8w：安排即扣现金（非结算/计提）
     expect(E.preSettleCash(s).overtimePay).toBe(48)
     expect(s.overtimePaid).toBe(48)
     expect(s.cash).toBe(cashBefore - 48)
-    // 取消：全额退还
+    // 再点：一经选定即锁定，不可取消、费用不退
     expect(E.toggleOvertime(s).ok).toBe(true)
-    expect(s.overtimePaid).toBe(0)
-    expect(s.cash).toBe(cashBefore)
+    expect(s.overtimePaid).toBe(48)
+    expect(s.cash).toBe(cashBefore - 48)
   })
 
   it('预演包含当月招聘的效果：招 2 名生产后产能上限提升', () => {
@@ -314,7 +314,7 @@ describe('核心模式采购计划', () => {
     expect(s.materials.pkg.chosenLot).toBe(null)
   })
 
-  it('清空生产计划会一并取消加班并同步已接订单', () => {
+  it('清空生产计划不影响已选定的加班，并同步已接订单', () => {
     const s = E.newGame(95, 'core')
     E.startGame(s)
     s.cash = 2000 // 补足现金：大批采购金额超出 40w 初始资金，避免干扰计划机制测试
@@ -328,7 +328,8 @@ describe('核心模式采购计划', () => {
     const r = E.setPurchasePlan(s, 'resin', 'small')
     expect(r.ok).toBe(true)
     expect(E.plannedTotal(s)).toBe(0)
-    expect(s.plan.overtime).toBe(false)
+    // 加班一经选定即锁定：清空排产量后加班标志仍在（费用也不退）
+    expect(s.plan.overtime).toBe(true)
   })
 
   it('正式结算按采购计划先入库，再执行生产与销售', () => {

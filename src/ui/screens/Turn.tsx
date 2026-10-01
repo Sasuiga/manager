@@ -63,7 +63,7 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
       lines.push(`合计 ${wan(r.debitAmt || r.creditAmt)}`)
       return lines
     }
-    if (r.item.includes('加班')) return ['加班费 = 2× 本月生产工资计提额，安排时发生即支付（取消/清计划全额退还，需生产 ≥ 3 人；效果 = 本月产能 +1× 员工产能，含设备加成）']
+    if (r.item.includes('加班')) return ['加班费 = 2× 本月生产工资计提额，安排时发生即支付（选定后不可取消、费用不退还，需生产 ≥ 3 人；效果 = 本月产能 +1× 员工产能，含设备加成）']
     if (r.item.includes('研发')) return [`每个项目每月 ${wan(RND_COST_PER_PROJECT)}`, '本月推进 1 个项目']
     if (r.item.includes('提案')) return ['提案实施费用合计（含卡牌费用），计入管理费用']
     if (r.item.includes('借款利息')) return ['借款余额 × 月利率，计入财务费用']
@@ -221,7 +221,9 @@ export function TurnScreen({
 
 function OpsPage({ g }: { g: Game }) {
   const s = g.s
+  const d = E.derive(s)
   const [view, setView] = useState<'discard' | null>(null)
+  const [loan, setLoan] = useState<'borrow' | 'repay' | null>(null)
   /** M3 复制手牌：先选要复制的目标手牌，再打出 */
   const [m3, setM3] = useState<string | null>(null)
   const descOf = (c: CardInstance) => {
@@ -309,6 +311,35 @@ function OpsPage({ g }: { g: Game }) {
         ) : null}
       </div>
 
+      {/* 融资：额度内以 1w 为单位借/还，利息按月末余额 × 月利率进财务费用 */}
+      <div className="card">
+        <div className="hstack-between">
+          <h3>融资</h3>
+          <span className="xs faint mono">额度 {wan(d.creditLine)}</span>
+        </div>
+        <div className="title-rule" />
+        <Row k="借款余额" v={wan(s.debt)} />
+        <Row k="可用额度" v={wan(d.creditAvailable)} cls={d.creditAvailable > 0 ? 'gold' : ''} />
+        <Row k="月利率" v={`${(d.rate * 100).toFixed(1)}%`} />
+        {s.debt > 0 ? <Row k="本月利息" v={wan(d.interest)} /> : null}
+        <div className="stack" style={{ marginTop: 'var(--s3)' }}>
+          <button
+            className="btn btn-mini"
+            disabled={d.noBorrow || d.creditAvailable < 10}
+            onClick={() => setLoan('borrow')}
+          >
+            <span className="btn-main">借款</span>
+            <span className="btn-sub">
+              {d.noBorrow ? '本月无法新增借款' : d.creditAvailable < 10 ? '可用额度不足 1w' : `可用 ${wan(d.creditAvailable)} · 以 1w 为单位`}
+            </span>
+          </button>
+          <button className="btn btn-mini" disabled={s.debt <= 0} onClick={() => setLoan('repay')}>
+            <span className="btn-main">还款</span>
+            <span className="btn-sub">{s.debt > 0 ? `余额 ${wan(s.debt)} · 现金 ${wan(s.cash)}` : '暂无借款'}</span>
+          </button>
+        </div>
+      </div>
+
       {view === 'discard' ? (
         <Sheet
           title="已实施提案"
@@ -386,6 +417,9 @@ function OpsPage({ g }: { g: Game }) {
       {m3 ? (
         <M3TargetSheet g={g} cardUid={m3} onClose={() => setM3(null)} />
       ) : null}
+
+      {/* 融资·借/还款：选档式金额菜单（同「选择采购档位」样式），选定即执行 */}
+      {loan ? <LoanSheet g={g} mode={loan} onClose={() => setLoan(null)} /> : null}
     </>
   )
 }
@@ -1234,7 +1268,7 @@ function MakePage({ g }: { g: Game }) {
       </div>
 
       <div className="card">
-        <h3>{gs.mode === 'core' ? '加班' : '加班与设备'}</h3>
+        <h3>产能补充</h3>
         <div className="title-rule" />
         <div className="stack">
           <button
@@ -1245,16 +1279,14 @@ function MakePage({ g }: { g: Game }) {
             <span className="btn-main">{gs.plan.overtime ? '本月已安排加班' : '安排加班'}</span>
             <span className="btn-sub">
               {gs.depts.make.staff < 3 ? '需生产 3 人解锁' : gs.plan.overtime
-                ? `已付 ${wan(gs.overtimePaid)}（2× 生产工资，取消可退还）· 本月产能 +${otGain}`
+                ? `已付 ${wan(gs.overtimePaid)}（2× 生产工资，选定后不可取消、费用不退）· 本月产能 +${otGain}`
                 : `发生支付 ${wan(otCost)}（2× 生产工资）· 本月产能 +${otGain}`}
             </span>
           </button>
-          {gs.mode === 'full' ? (
-            <button className="btn btn-mini" onClick={() => setEquip(true)}>
-              <span className="btn-main">购买设备</span>
-              <span className="btn-sub">扩充产能与借款额度</span>
-            </button>
-          ) : null}
+          <button className="btn btn-mini" onClick={() => setEquip(true)}>
+            <span className="btn-main">生产设备购置</span>
+            <span className="btn-sub">扩充产能与借款额度 · 每名生产人员产能 +{EQUIP_CAP_PER_WORKER}</span>
+          </button>
         </div>
       </div>
 
@@ -1278,7 +1310,8 @@ function MakePage({ g }: { g: Game }) {
 
       {/* 确认生产安排：按 BOM 立即扣料入库，「原料→存货」记账到部门账务（仅完整模式） */}
       {gs.mode === 'full' && confirm ? <ProductionConfirmSheet g={g} planned={plannedTotal} onDone={() => setConfirm(false)} /> : null}
-      {equip ? <EquipmentSheet g={g} onClose={() => setEquip(false)} /> : null}
+      {/* 生产设备购置：弹窗选档（同采购选档样式），选定即购 */}
+      {equip ? <EquipmentPickSheet g={g} onClose={() => setEquip(false)} /> : null}
     </>
   )
 }
@@ -1329,35 +1362,71 @@ function ProductionConfirmSheet({ g, planned, onDone }: { g: Game; planned: numb
   )
 }
 
-function EquipmentSheet({ g, onClose }: { g: Game; onClose: () => void }) {
+/** 生产设备购置弹窗：设备商店三档选项（同「选择采购档位」选单样式），选定即购，现金不足不可选。 */
+/** 生产设备购置弹窗：先展示当前持有设备，再给出购买选项（同「选择采购档位」选单样式），选定即购。 */
+function EquipmentPickSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const gs = g.s
+  // 持有设备按名称合并（同名多台只列一行）
+  const owned = new Map<string, { count: number; net: number; cost: number }>()
+  for (const e of gs.equipment) {
+    const cur = owned.get(e.name) ?? { count: 0, net: 0, cost: 0 }
+    cur.count += 1
+    cur.net += Math.max(0, e.cost - e.accumulated)
+    cur.cost += e.cost
+    owned.set(e.name, cur)
+  }
   return (
-    <Sheet title="购买设备" sub="每名生产人员产能 +4 · 月折旧进生产费用 · 借款额度随融资层生效" onClose={onClose}>
-      <div className="stack">
-        {EQUIPMENT_SHOP.map((e) => (
-          <div key={e.id} className="card">
-            <div className="hstack-between">
-              <span className="mat-name">{e.name}</span>
-              <span className="tag gold">{wan(e.price)}</span>
+    <Sheet
+      title="生产设备购置"
+      sub={`每名生产人员产能 +${EQUIP_CAP_PER_WORKER} · 月折旧进生产费用 · 借款额度随融资层生效`}
+      onClose={onClose}
+    >
+      <div className="card">
+        <div className="section-label">当前设备</div>
+        {gs.equipment.length === 0 ? (
+          <p className="muted sm">暂未持有设备：购买后每名生产人员产能 +{EQUIP_CAP_PER_WORKER}。</p>
+        ) : (
+          <>
+            <div className="stack-sm">
+              {[...owned.entries()].map(([name, o]) => (
+                <Row key={name} k={`${name} × ${o.count}`} v={`净 ${wan(o.net)} / 原值 ${wan(o.cost)}`} />
+              ))}
             </div>
-            <div className="title-rule" />
-            <Row k="产能" v={`+${EQUIP_CAP_PER_WORKER}/人（× 生产人数）`} />
-            <Row k="月折旧" v={wan(e.depreciation)} />
-            <Row k="借款额度" v={`+${wan(e.creditLine)}`} />
-            <div style={{ marginTop: 'var(--s3)' }}>
-              <button
-                className="btn btn-mini"
-                disabled={gs.cash < e.price}
-                onClick={() => g.act((st) => E.buyEquipment(st, e.id))}
-              >
-                <span className="btn-main">购买</span>
-                <span className="btn-sub">{gs.cash < e.price ? '现金不足' : `支付 ${wan(e.price)}`}</span>
-              </button>
-            </div>
-          </div>
-        ))}
+            <Row
+              k="合计"
+              v={`${gs.equipment.length} 台 · 每名生产人员产能 +${gs.equipment.length * EQUIP_CAP_PER_WORKER}`}
+              bold
+            />
+          </>
+        )}
       </div>
-      <div className="hint">设备折旧在提足原值后停止，不会把账面价值压成负数。</div>
+
+      <div className="card" style={{ marginTop: 'var(--s3)' }}>
+        <div className="section-label">购买设备</div>
+        <div className="stack">
+          {EQUIPMENT_SHOP.map((e) => (
+            <button
+              key={e.id}
+              className="btn btn-mini"
+              disabled={gs.cash < e.price}
+              onClick={() => {
+                const r = g.act((st) => E.buyEquipment(st, e.id))
+                if (r.ok) {
+                  g.setToast(`已购置 ${e.name}`)
+                  onClose()
+                }
+              }}
+            >
+              <span className="btn-main xs">{e.name} · {wan(e.price)}</span>
+              <span className="btn-sub xs">
+                产能 +{EQUIP_CAP_PER_WORKER}/人（× 生产人数） · 月折旧 {wan(e.depreciation)} · 借款额度 +{wan(e.creditLine)}
+                {gs.cash < e.price ? ' · 现金不足' : ''}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="hint">设备折旧在提足原值后停止，不会把账面价值压成负数；本月可多次购置，生产页「设备清单」同步展示。</div>
     </Sheet>
   )
 }
@@ -2073,6 +2142,68 @@ function IpSheet({ g, onClose }: { g: Game; onClose: () => void }) {
         })}
       </div>
       {gs.ipChangedThisMonth ? <div className="info">本月已完成一次更换，下月可再调整。</div> : null}
+    </Sheet>
+  )
+}
+
+/** 借/还款金额选择：预设档 + 用满额度/还清（同「选择采购档位」选单样式），选定即执行。 */
+function LoanSheet({ g, mode, onClose }: { g: Game; mode: 'borrow' | 'repay'; onClose: () => void }) {
+  const s = g.s
+  const d = E.derive(s)
+  const presets = [10, 50, 100, 200] // 1w / 5w / 10w / 20w
+  const full = mode === 'borrow' ? d.creditAvailable : s.debt
+  const reasonOf = (a: number): string | null => {
+    if (mode === 'borrow') {
+      if (d.noBorrow) return '本月无法新增借款'
+      if (a > d.creditAvailable) return '超出可用额度'
+    } else {
+      if (a > s.debt) return '超出借款余额'
+      if (a > s.cash) return '现金不足'
+    }
+    return null
+  }
+  const run = (a: number) => {
+    const r = g.act((st) => (mode === 'borrow' ? E.borrow(st, a) : E.repay(st, a)))
+    if (r.ok) {
+      g.setToast(r.msg ?? (mode === 'borrow' ? '借款已到账' : '还款完成'))
+      onClose()
+    }
+  }
+  const option = (a: number, label: string, note: string) => {
+    const reason = reasonOf(a)
+    return (
+      <button key={`${label}${a}`} className="btn btn-mini" disabled={reason !== null} onClick={() => run(a)}>
+        <span className="btn-main xs">{label}</span>
+        <span className="btn-sub xs">
+          {note}
+          {reason ? ` · ${reason}` : ''}
+        </span>
+      </button>
+    )
+  }
+  const note = (a: number) =>
+    mode === 'borrow' ? `现金 +${wan(a)} · 负债 +${wan(a)}` : `现金 −${wan(a)} · 负债 −${wan(a)}`
+  return (
+    <Sheet
+      title={mode === 'borrow' ? '借款' : '还款'}
+      sub={
+        mode === 'borrow'
+          ? `可用额度 ${wan(d.creditAvailable)} · 月利率 ${(d.rate * 100).toFixed(1)}%`
+          : `余额 ${wan(s.debt)} · 现金 ${wan(s.cash)}`
+      }
+      onClose={onClose}
+    >
+      <div className="stack">
+        {presets.map((a) => option(a, `${mode === 'borrow' ? '借款' : '还款'} ${wan(a)}`, note(a)))}
+        {full > 0 && !presets.includes(full)
+          ? option(full, mode === 'borrow' ? `用满额度 ${wan(full)}` : `还清 ${wan(full)}`, note(full))
+          : null}
+      </div>
+      <div className="hint">
+        {mode === 'borrow'
+          ? '借款以 1w 为单位，到账即计负债；利息按月末借款余额 × 月利率按月确认，计入财务费用。'
+          : '还款即时扣减现金，负债同步减少；利息仍按当月末余额计提。'}
+      </div>
     </Sheet>
   )
 }

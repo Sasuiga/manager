@@ -232,7 +232,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '生产人员',
     hireFees: [0], // 生产人员无阶梯招聘费，仅消耗 AP
     salary: 8,
-    base: ['每人产能 +5'],
+    base: ['每人产能 +3'],
     unlocks: [
       { at: 2, text: '每名工人产能 +1' },
       { at: 3, text: '解锁加班：付 2× 生产工资，当月产能 +1× 员工产能' },
@@ -284,11 +284,11 @@ export const BUY_LOT_SLOTS = [2, 3, 4, 5, 6, 7]
 /** 老板自产产能（玩家亲自下场的固定贡献，无工人也生效）。 */
 export const OWNER_CAPACITY = 5
 /** 每名工人的基础产能。 */
-export const MAKER_CAP_BASE = 5
+export const MAKER_CAP_BASE = 3
 /** 每台设备给每名工人额外提供的产能（设备层恢复前的占位值；IP I2/J1 的空转授予同口径）。 */
 export const EQUIP_CAP_PER_WORKER = 4
 
-/** 加成计算：每名工人的产能（基础 5；生产 2 人 +1、4 人 +1 解锁；每台设备 +4）。 */
+/** 加成计算：每名工人的产能（基础 3；生产 2 人 +1、4 人 +1 解锁；每台设备 +4）。 */
 export function makerCapacityPerStaff(staff: number, equipmentCount = 0): number {
   let v = MAKER_CAP_BASE
   if (staff >= 2) v += 1
@@ -298,9 +298,7 @@ export function makerCapacityPerStaff(staff: number, equipmentCount = 0): number
 }
 
 export const EQUIPMENT_SHOP: { id: string; name: string; capacity: number; depreciation: Money; creditLine: Money; price: Money; desc: string }[] = [
-  { id: 'eq-line', name: '标准产线', capacity: 10, depreciation: 20, creditLine: 50, price: 50, desc: '每名生产人员产能 +4 · 月折旧 2w · 额度 5w' },
-  { id: 'eq-precision', name: '精密产线', capacity: 16, depreciation: 35, creditLine: 80, price: 90, desc: '每名生产人员产能 +4 · 月折旧 3.5w · 额度 8w' },
-  { id: 'eq-auto', name: '自动化产线', capacity: 24, depreciation: 50, creditLine: 120, price: 150, desc: '每名生产人员产能 +4 · 月折旧 5w · 额度 12w' },
+  { id: 'eq-line', name: '标准设备', capacity: 10, depreciation: 20, creditLine: 50, price: 50, desc: '每名生产人员产能 +4 · 月折旧 2w · 额度 5w' },
 ]
 
 /**
@@ -400,7 +398,7 @@ export const IP_BY_ID: Record<string, IpDef> = Object.fromEntries(IP_DEFS.map((i
 // 6. 财务参数
 // ════════════════════════════════════════════════════════════
 
-export const BASE_CREDIT_LINE: Money = 200 // 20w 基础借款额度
+export const BASE_CREDIT_LINE: Money = 50 // 5w 基础借款额度
 export const MONTHLY_RATE = 0.012 // 月利率 1.2%
 export const RATE_SHIFT_UNIT: Money = 10 // 利率档位：每档 1w
 export const TAX_RATE = 0.1 // 所得税，亏损不计

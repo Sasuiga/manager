@@ -762,7 +762,7 @@ function plannedMaterialNeed(state: GameState, materialId: string): number {
 /**
  * 修改采购计划时的生产联动规则：
  * 该原料已被生产占用（库存 + 新计划量不够 BOM 需求）时，
- * 原生产计划（含加班标志）会被整体清空，让玩家以新采购重新排产。
+ * 原排产量会被整体清空，让玩家以新采购重新排产（加班一经选定即锁定，不受清计划影响）。
  * 生产计划为空时不触发任何联动。
  */
 export function purchasePlanClearsProduction(state: GameState, materialId: string, lot: LotSize | null): boolean {
@@ -775,16 +775,7 @@ export function purchasePlanClearsProduction(state: GameState, materialId: strin
 
 export function clearProductionPlan(state: GameState): void {
   for (const tier of TIERS) state.plan.quantities[tier] = 0
-  state.plan.overtime = false
-  returnOvertimePay(state)
-}
-
-/** 取消加班（toggle 关 / 清生产计划）：退还发生时已付的加班费。 */
-function returnOvertimePay(state: GameState): void {
-  if (state.overtimePaid > 0) {
-    state.cash += state.overtimePaid
-    state.overtimePaid = 0
-  }
+  // 加班一经选定即锁定：清空排产量不影响加班标志与已付加班费
 }
 
 /**
@@ -1262,19 +1253,16 @@ export function toggleOvertime(state: GameState): ActionResult {
   const staff = state.depts.make.staff
   if (staff < 3) return fail('需要生产 3 人解锁')
   if (state.plan.overtime) {
-    state.plan.overtime = false
-    const refund = state.overtimePaid
-    returnOvertimePay(state)
-    return { ok: true, msg: refund > 0 ? `已取消加班（退还加班费 ${(refund / 10).toFixed(2)}w）` : '已取消加班' }
+    return { ok: true, msg: '加班已选定，本月内不可取消（费用不退还）' }
   }
   const cost = overtimeCostOf(derive(state).salaryPer.make, staff)
   if (state.cash < cost) return fail('现金不足')
-  // 发生时直接支付（非工资式计提下月实付）：安排即扣现金，取消/清计划全额退还
+  // 发生时直接支付（非工资式计提下月实付）：安排即扣现金，选定后不可取消、费用不退（清生产计划不影响）
   state.plan.overtime = true
   state.overtimePaid = cost
   state.cash -= cost
   const gain = overtimeGainOf(staff, state.equipment.length)
-  return { ok: true, msg: `加班已安排（发生支付 2× 生产工资 ${(cost / 10).toFixed(2)}w，取消可退还；本月产能 +${gain}）` }
+  return { ok: true, msg: `加班已安排（发生支付 2× 生产工资 ${(cost / 10).toFixed(2)}w，选定后不可取消、费用不退；本月产能 +${gain}）` }
 }
 
 // ════════════════════════════════════════════════════════════

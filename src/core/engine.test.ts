@@ -45,24 +45,21 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
     }
     E.enterOperate(s)
 
-    // ── 借款：先垫现金缓冲，再招聘/采购（现金 < 30w 时借到 30w） ──
+    // ── 借款：现金 < 30w 时借到可用额度上限（基础额度 5w），再招聘/采购 ──
     if (s.cash < 300) {
       const d0 = E.derive(s)
       const amt = Math.min(d0.creditAvailable, 300)
       if (amt > 0) E.borrow(s, amt - (amt % 10))
     }
 
-    // ── 招聘：优先采购与销售，前几个月各补到 2 人 ──
-    const order: E.Dept[] = ['buy', 'sell', 'make', 'ops', 'rnd']
-    for (const dept of order) {
-      for (let k = 0; k < 2; k++) {
-        if (s.depts[dept].staff >= 2) break
-        if (!E.canHire(s, dept).ok) break
-        if (s.cash < 300) break
-        E.hire(s, dept)
-      }
+    // ── 招聘：只招销售 2 人（订单槽 + 销售资源；采购 2 档无需人，生产靠老板自产 5 点产能）；现金不到 45w 先不招人，留给采购缓冲 ──
+    for (let k = 0; k < 2; k++) {
+      if (s.depts.sell.staff >= 2) break
+      if (!E.canHire(s, 'sell').ok) break
+      if (s.cash < 450) break
+      E.hire(s, 'sell')
     }
-    if (s.depts.rnd.staff < 1 && s.cash > 300 && E.canHire(s, 'rnd').ok) E.hire(s, 'rnd')
+
 
     // 弃到上限
     while (s.hand.length > s.handMax) E.discardCard(s, s.hand[s.hand.length - 1].uid)
@@ -71,31 +68,39 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
     let guard = 0
     for (const card of [...s.hand]) {
       if (guard++ > 8) break
+      // C5 长期协议：免费签约但带来每月到货负债，5w 额度下不划算，跳过
+      if (card.defId === 'C5') continue
       if (!E.canPlay(s, card).ok) continue
       E.playCard(s, card.uid)
     }
 
-    // ── 采购：凑够本月要生产的量（先保证覆盖需求，不够再买买得起的最大档） ──
     const need = (id: string, want: number) => Math.max(0, want - (s.materials[id]?.qty ?? 0))
-    const planQty = 12
+    const planQty = 5
+    // ── 采购：小档优先；只在「正常价位」（小档单价 ≤ 基础价 × 1.2）买入，价格尖峰月攒钱；买后保留 4w 现金缓冲 ──
     for (const [id, want] of [
       ['pkg', need('pkg', planQty * 2)],
       ['resin', need('resin', planQty)],
     ] as [string, number][]) {
       if (want <= 0 || s.materials[id].chosenLot) continue
+      const base = MATERIALS.find((x) => x.id === id)!.basePrice
+      const smallPrice = E.lotPrice(s, id, 'small')
+      if (smallPrice > base * 1.2) continue
+      const smallCost = E.lotQty(s, id, 'small') * smallPrice
+      if (smallCost > 0 && s.cash - smallCost < 40) continue
       let bought = false
-      for (const lot of ['large', 'mid', 'small'] as E.LotSize[]) {
+      for (const lot of ['small', 'mid', 'large'] as E.LotSize[]) {
         const qty = E.lotQty(s, id, lot)
         const price = E.lotPrice(s, id, lot)
-        if (qty > 0 && qty >= want && qty * price <= s.cash) {
+        if (qty > 0 && qty >= want && qty * price <= s.cash - 40) {
           if (E.buyMaterial(s, id, lot).ok) { bought = true; break }
         }
       }
       if (!bought) {
-        for (const lot of ['large', 'mid', 'small'] as E.LotSize[]) {
+        // 小档优先：基础借款额度只有 5w，重仓大档会拖死早期现金
+        for (const lot of ['small', 'mid', 'large'] as E.LotSize[]) {
           const qty = E.lotQty(s, id, lot)
           const price = E.lotPrice(s, id, lot)
-          if (qty > 0 && qty * price <= s.cash) {
+          if (qty > 0 && qty * price <= s.cash - 40) {
             if (E.buyMaterial(s, id, lot).ok) break
           }
         }
@@ -106,9 +111,9 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
     const maxQ = E.maxProducible(s, 'low')
     E.setPlan(s, 'low', Math.min(maxQ, planQty))
 
-    // ── 销售资源分配 ──
+    // ── 销售资源分配 ──（无条件分配：结算时生产入库后销售才发生，库存 0 也不能漏掉分配）
     const d = E.derive(s)
-    if (s.products.low.qty > 0) E.setAlloc(s, 'low', d.salesResource)
+    E.setAlloc(s, 'low', d.salesResource)
 
     // ── 研发 ──
     if (s.depts.rnd.staff >= 1) {
@@ -116,7 +121,7 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
       if (!s.rnd[target].done) E.setRndAssign(s, target, s.depts.rnd.staff)
     }
 
-    // ── 借款：现金 < 30w 时补足到 30w 缓冲（借款在采购之后、结算前） ──
+    // ── 借款：现金 < 30w 时借满可用额度（采购之后、结算前） ──
     if (s.cash < 300) {
       const d2 = E.derive(s)
       const amt = Math.min(d2.creditAvailable, 300)
@@ -343,7 +348,7 @@ describe('引擎', () => {
     }
 
     for (let m = 1; m <= 12; m++) {
-      if (s.phase === 'board') E.beginMonthEvent(s) // 季度首月：董事会后抽事件
+      if (s.phase === 'board') E.beginMonthEvent(s)
       const ev = s.currentEvent
       if (ev) {
         if (ev.type === 'choice' && ev.options) E.applyEventOption(s, 0)

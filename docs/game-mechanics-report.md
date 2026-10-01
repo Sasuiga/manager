@@ -156,7 +156,7 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 #### 生产部
 - **产能分配**：本月产能 `cap`、已安排、剩余三个数（`planCapacity` = d.capacity + 加班增益（人数 × 每人产能）；actions.ts:964）。每个已解锁产品线一行：可产上限 `maxBy[t]`（受产能池剩余 + 该线 BOM 原料剩余双重约束，含其他线已排产占用，actions.ts:972-991）、排产数量（+ / − / 拉满）。
 - **生产单位成本**（`productionUnitCosts`，actions.ts:667）：每线 = 材料成本（BOM 消耗 × 采购计划后原料均价 × 降本系数）+ 固定分摊（生产工资 + 折旧 + 加班费 ÷ 本月总排产量，排产为 0 则不分摊）。销售页的「单件毛利」与预算页的「预计毛利」都用这个数。
-- **加班**（生产 ≥3 人解锁，按钮 Turn.tsx:1010）：勾选后本月产能 +1× 员工产能（人数 × 每人产能，含设备加成）、**安排时发生即付** 2× 生产工资计提（`state.overtimePaid` 锁定，取消/清生产计划全额退还；actions.ts `toggleOvertime`/`clearProductionPlan`）。
+- **加班**（生产 ≥3 人解锁，按钮 Turn.tsx:1010）：勾选后本月产能 +1× 员工产能（人数 × 每人产能，含设备加成）、**安排时发生即付** 2× 生产工资计提（`state.overtimePaid` 锁定；一经选定不可取消、费用不退还，清生产计划不影响；月初清零；actions.ts `toggleOvertime`/`clearProductionPlan`）。
 - **设备**（完整模式）：三种产线（见 §7.4）。
 - 完整模式有「确认生产安排」按钮（立即扣料入库）；核心模式没有（结算统一执行）。
 
@@ -297,7 +297,7 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 ### 7.1 产能（`derive.ts:338` + `makerCapacityPerStaff`，data/game.ts:292 / derive.ts:550）
 
 ```
-每人产能 = 5 + (生产≥2人 ? 1 : 0) + (生产≥4人 ? 1 : 0) + 设备数 × 4
+每人产能 = 3 + (生产≥2人 ? 1 : 0) + (生产≥4人 ? 1 : 0) + 设备数 × 4
 本月产能 = max(0, 5[老板自产] + 生产人数 × 每人产能 + 事件/卡牌产能修正)
 排产可用产能 = 本月产能 + (加班 且 生产≥3人 ? 10 : 0)      （planCapacity，actions.ts:964 / settle.ts:566）
 ```
@@ -331,16 +331,14 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 
 | 设备 | 价格 | 月折旧 | 标注产能 | 标注借款额度 |
 |---|---|---|---|---|
-| 标准产线 | 5w | 0.2w | 10（旧模型，未使用） | 5w（未使用，见 §18） |
-| 精密产线 | 9w | 0.35w | 16（未使用） | 8w（未使用） |
-| 自动化产线 | 15w | 0.5w | 24（未使用） | 12w（未使用） |
+| 标准设备 | 5w | 0.2w | 10（旧模型，未使用） | 5w（未使用，见 §18） |
 
 新产能模型下设备只通过「每台 +2 每人产能」生效（`makerPerStaff`）；购置资本化为固定资产（不进当期损益），折旧逐月进生产费用（提足原值即停）；事件 P6/D9/X9 也会白送或低价送设备（按对价入账，免费则按公允价值 5w 确认营业外收入，actions.ts:1453-1470）。
 「安置 1 人」的描述文案是旧槽位模型遗留，新模型无槽位概念。
 
 ### 7.5 加班（`toggleOvertime`，actions.ts:1120）
 
-生产 ≥3 人解锁；勾选 = 本月产能 +1× 员工产能（人数 × 每人产能，含解锁加成与设备加成；不含老板基线与卡牌/事件定额修正，进入 planCapacity 与预演）。费用 = 2× 本月生产工资计提（`overtimeCostOf`，含事件/卡牌薪酬修正），**安排时发生即付**（`toggleOvertime` 扣 `state.cash` 并锁定 `state.overtimePaid`；取消 / 清生产计划全额退还；月初清零）；损益在结算过账段进生产费用（不再在结算 §2 段重复扣现金）。完整/核心模式都有（核心模式 UI 也显示加班卡，Turn.tsx:1010）。
+生产 ≥3 人解锁；勾选 = 本月产能 +1× 员工产能（人数 × 每人产能，含解锁加成与设备加成；不含老板基线与卡牌/事件定额修正，进入 planCapacity 与预演）。费用 = 2× 本月生产工资计提（`overtimeCostOf`，含事件/卡牌薪酬修正），**安排时发生即付**（`toggleOvertime` 扣 `state.cash` 并锁定 `state.overtimePaid`；一经选定不可取消、费用不退还，清生产计划不影响；月初清零）；损益在结算过账段进生产费用（不再在结算 §2 段重复扣现金）。完整/核心模式都有（核心模式 UI 也显示加班卡，Turn.tsx:1010）。
 
 ---
 
@@ -400,7 +398,7 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 |---|---|---|---|
 | 运营 | 1w | AP 上限 +1/人（下月） | 2 抽卡选 3→4；3 手牌 5→6；4 打牌 2→3 + 卡牌强化生效；5 抽卡选 4→5、手牌 6→7 |
 | 采购 | 1w | 档数 +1/人（BUY_LOT_SLOTS） | 2 贸易商 +1 品种；3 长期协议；4 原料降 1 档；5 协议 2 名额 + 6 个月锁定 |
-| 生产 | 0.5w | 每人产能 +5 | 2 每人产能 +1；3 加班（2× 生产工资，+1× 员工产能）；4 每人产能再 +1；5 流水线（每 5 件 +1 件） |
+| 生产 | 0.5w | 每人产能 +3 | 2 每人产能 +1；3 加班（2× 生产工资，+1× 员工产能）；4 每人产能再 +1；5 流水线（每 5 件 +1 件） |
 | 销售 | 1.5w | 销售资源阶梯 4/4/6/6/8（累计 4/8/14/20/28，data/game.ts:272） | 2 订单槽 1；3 资源 +4→+6；4 订单槽 2；5 +6→+8 + 成本转移 |
 | 研发 | 2w | 每人 +5 进度/月、+5% 成功率（封顶 90%） | 3 知产槽 2；5 知产槽 3（核心模式无槽位，拥有即生效） |
 
@@ -675,7 +673,7 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 
 - `borrow`（actions.ts:1366）：1w 为单位，≤ 可用额度，`noBorrow`（X3 信贷冻结）禁止；现金 +、debt +。
 - `repay`：≤ debt 且 ≤ 现金。
-- 额度 = round((20w + J7 20w) × 事件额度系数)；**设备的标注额度与 R6 事件的「额度 +5w」都未接入**（§18）。
+- 额度 = round((5w + J7 20w) × 事件额度系数)；**设备的标注额度与 R6 事件的「额度 +5w」都未接入**（§18）。
 - 测试脚本（route/balance）里用借还稳现金流，所以引擎路径本身是活的，只是玩家界面没有按钮。
 
 ### 14.5 报表与下钻
@@ -773,14 +771,14 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 
 ### A. 玩家界面没有入口（引擎完整）
 
-1. **借款 / 还款**（`borrow/repay`，actions.ts:1366/1390）：UI 无任何按钮 → 正常游玩 `debt` 恒 0，借款额度（20w 基础 + J7）、利率（1.2% + 事件修正）、利息全是死数。测试脚本（route/balance）在用，所以引擎路径活跃。
+1. **借款 / 还款**（`borrow/repay`，actions.ts:1366/1390）：入口已落在运营部页「融资」卡片（借/还金额选档弹窗，同采购选档样式）；额度（5w 基础 + J7）、利率（1.2% + 事件修正）、利息随之生效。
 2. **裁员**（`fire`，actions.ts:113）：S4 事件设 `canFire` 标记但无 UI 按钮，只能 dev console 调用。
 3. **C6 紧急采购 / C7 原料替换 / C9 期货 / C10 清仓**：打出卡只设置 `flags`（cardUrgent/swap/cardFutures/cardClearance），注释说「结算/界面阶段处理」——但该界面从未实现，四张卡当前**零效果**（C9 的 `state.futures` 永远为空对象）。
 4. **P1「产能全用完额外 +1」**（fullLoadCard）、**P3「付 2w 改 +5」**（overtimeCard）、**P10 库存清理**（clearStock/clearStock15）：flag 置了没人读。
 5. **C8「上月也打降 2 档」**：读 `flags['lastC8']`（actions.ts:495）但无人写入 → 条件永不成立。
 6. **J5 专利壁垒（每季度复制 1 张已打牌）**：derive 聚合了 `cardCopy`（derive.ts:254）无消费端。
 7. **R6 事件的「借款额度 +5w」**：写 `flags['extraCredit']`（actions.ts:1608）derive 不读。
-8. **设备的标注借款额度**（5w/8w/12w）：存进 Equipment.creditLine 但 derive 的额度公式只用 `BASE + J7`（注释「留给融资线」）。
+8. **设备的标注借款额度**（标准设备 5w）：存进 Equipment.creditLine 但 derive 的额度公式只用 `BASE + J7`（注释「留给融资线」）。
 9. **nextClimateOdds 预测概率**：值已与真实转移分布对齐（§5.1 ③，动能概率×步长分布），但 UI 仍不展示；动能 momentum 已在 HUD 显示并作为季度切换的输入（见 §5.1）。
 10. **boardPrompted 标志**：只写不读（types.ts:671）。
 11. **creditInfo 导出**（game.ts:199）：HUD 没用它。
@@ -809,7 +807,7 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 | 想改的东西 | 文件 | 位置 |
 |---|---|---|
 | 原料/产品/事件/目标/卡牌/IP/人员所有数值 | `src/data/game.ts` | MATERIALS(29)、CLIMATE_MATERIAL(71)、CLIMATE_DEMAND(122)、BOMS(157)、PRODUCT_PRICE(168)、STAFF(203)、SALES_PUSH_CAP/COST(144/155)、BUY_LOT_SLOTS(282)、EQUIPMENT_SHOP(300)、RND_PROJECTS(313)、IP_DEFS(353)、财务参数(385-392)、EVENTS(400)、目标池(588-730)、CARDS(733-1048) |
-| 产能公式 | `src/data/game.ts` + `derive.ts` | OWNER_CAPACITY=5、MAKER_CAP_BASE=5、+1/+1 解锁、设备 +4（makerCapacityPerStaff，data:292 / derive:550）；加班 overtimeCostOf/overtimeGainOf（2× 生产工资 / +1× 员工产能） |
+| 产能公式 | `src/data/game.ts` + `derive.ts` | OWNER_CAPACITY=5、MAKER_CAP_BASE=3、+1/+1 解锁、设备 +4（makerCapacityPerStaff，data:292 / derive:550）；加班 overtimeCostOf/overtimeGainOf（2× 生产工资 / +1× 员工产能） |
 | 需求公式（基础/气候拆分/加点/上限） | `src/core/derive.ts:303-325` | BASE_DEMAND、CLIMATE_DEMAND 60/40 拆分、SALES_PUSH_CAP/COST |
 | 价格档位表 | `src/data/game.ts:54,168` | priceOf / productPrice（两张表） |
 | 采购档数/数量/价格 | `src/core/actions.ts:458-496` | lotQty（25/50/100% + 取整规则）、lotPrice（小 +1 大 −1 档）、buyCardShift |

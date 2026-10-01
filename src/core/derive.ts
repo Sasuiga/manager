@@ -335,7 +335,7 @@ export function derive(state: GameState): DerivedTotals {
   const price: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const t of TIERS) price[t] = productPriceRaw(t, priceShift[t])
 
-  // ── 产能：老板自产 + 工人数 × 每人产能（基础 5，2 人/4 人解锁各 +1，每台设备 +4） ──
+  // ── 产能：老板自产 + 工人数 × 每人产能（基础 3，2 人/4 人解锁各 +1，每台设备 +4） ──
   const capacity = Math.max(0, OWNER_CAPACITY + staffCount.make * makerPerStaff(staffCount.make, state.equipment.length) + (mods.capacity ?? 0))
 
   // ── 薪酬 ──

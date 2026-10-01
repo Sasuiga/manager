@@ -42,7 +42,7 @@ function play(seed: number, cfg = { make: 3, sell: 3, buy: 2, rnd: 1, ops: 1, mi
       let g = 0
       while (s.depts[dept].staff < want && E.canHire(s, dept).ok && s.cash > 300 && g++ < 6) E.hire(s, dept)
     }
-    if (cfg.mid && m >= 3 && s.equipment.length < 2 && s.cash > 400 && s.ap >= 1) E.buyEquipment(s, 'eq-precision')
+    if (cfg.mid && m >= 3 && s.equipment.length < 2 && s.cash > 400 && s.ap >= 1) E.buyEquipment(s, 'eq-line')
 
     while (s.hand.length > s.handMax) E.discardCard(s, s.hand[s.hand.length - 1].uid)
     for (const c of [...s.hand]) if (E.canPlay(s, c).ok) E.playCard(s, c.uid)
