@@ -1,6 +1,6 @@
 import { useState, Fragment } from 'react'
 import * as E from '../../core/engine'
-import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS } from '../../data/game'
+import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, EQUIP_CAP_PER_WORKER, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS, overtimeCostOf, overtimeGainOf } from '../../data/game'
 import type { CardCtx } from '../../data/game'
 import type { CardInstance } from '../../core/types'
 import type { Tier } from '../../core/types'
@@ -63,7 +63,7 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
       lines.push(`合计 ${wan(r.debitAmt || r.creditAmt)}`)
       return lines
     }
-    if (r.item.includes('加班')) return ['加班费固定 0.5w（需生产 ≥ 3 人）']
+    if (r.item.includes('加班')) return ['加班费 = 2× 本月生产工资计提额（需生产 ≥ 3 人；效果 = 本月产能 +1× 员工产能，含设备加成）']
     if (r.item.includes('研发')) return [`每个项目每月 ${wan(RND_COST_PER_PROJECT)}`, '本月推进 1 个项目']
     if (r.item.includes('提案')) return ['提案实施费用合计（含卡牌费用），计入管理费用']
     if (r.item.includes('借款利息')) return ['借款余额 × 月利率，计入财务费用']
@@ -1107,6 +1107,8 @@ function MakePage({ g }: { g: Game }) {
   const plannedTotal = E.plannedTotal(gs)
   const remainingCap = Math.max(0, cap - plannedTotal)
   const ucost = E.productionUnitCosts(gs)
+  const otCost = gs.plan.overtime ? overtimeCostOf(E.derive(gs).salaryPer.make, gs.depts.make.staff) : 0
+  const otGain = overtimeGainOf(gs.depts.make.staff, gs.equipment.length)
   const [equip, setEquip] = useState(false)
   const [confirm, setConfirm] = useState(false)
 
@@ -1242,7 +1244,7 @@ function MakePage({ g }: { g: Game }) {
           >
             <span className="btn-main">{gs.plan.overtime ? '本月已安排加班' : '安排加班'}</span>
             <span className="btn-sub">
-              {gs.depts.make.staff < 3 ? '需生产 3 人解锁' : '0.5w · 本月产能 +10'}
+              {gs.depts.make.staff < 3 ? '需生产 3 人解锁' : `付 ${wan(otCost)}（2× 生产工资）· 本月产能 +${otGain}`}
             </span>
           </button>
           {gs.mode === 'full' ? (
@@ -1328,7 +1330,7 @@ function ProductionConfirmSheet({ g, planned, onDone }: { g: Game; planned: numb
 function EquipmentSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const gs = g.s
   return (
-    <Sheet title="购买设备" sub="增加产能、安置工人、提升借款额度" onClose={onClose}>
+    <Sheet title="购买设备" sub="每名生产人员产能 +4 · 月折旧进生产费用 · 借款额度随融资层生效" onClose={onClose}>
       <div className="stack">
         {EQUIPMENT_SHOP.map((e) => (
           <div key={e.id} className="card">
@@ -1337,7 +1339,7 @@ function EquipmentSheet({ g, onClose }: { g: Game; onClose: () => void }) {
               <span className="tag gold">{wan(e.price)}</span>
             </div>
             <div className="title-rule" />
-            <Row k="产能" v={`+${e.capacity}`} />
+            <Row k="产能" v={`+${EQUIP_CAP_PER_WORKER}/人（× 生产人数）`} />
             <Row k="月折旧" v={wan(e.depreciation)} />
             <Row k="借款额度" v={`+${wan(e.creditLine)}`} />
             <div style={{ marginTop: 'var(--s3)' }}>

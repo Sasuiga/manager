@@ -12,6 +12,8 @@ import {
   RND_PROJECTS,
   TAX_RATE,
   TIERS,
+  overtimeCostOf,
+  overtimeGainOf,
 } from '../data/game'
 import { derive, mergeMods, rndProjectOutcome } from './derive'
 import { balanceSheet, equipmentNet, equityOf, inventoryValue, wagePayableOf } from './game'
@@ -220,10 +222,11 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   }
   for (const tier of TIERS) state.plan.quantities[tier] = 0
   const producedUnitCost = produced > 0 ? Math.round(producedValue / produced) : 0
-  // 加班费（现金）
-  if (state.plan.overtime && state.depts.make.staff >= 3) {
-    state.cash -= 5
-    warnings.push('已支付加班费 0.5w')
+  // 加班费（现金）：2× 生产工资计提额，一次性支付
+  const overtimePay = overtimeCostOf(d.salaryPer.make, state.depts.make.staff)
+  if (state.plan.overtime && overtimePay > 0) {
+    state.cash -= overtimePay
+    warnings.push(`已支付加班费 ${(overtimePay / 10).toFixed(2)}w（2× 生产工资）`)
   }
 
   // ══════════ 3. 销售 ══════════
@@ -405,7 +408,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   }
 
   // 加班费已在生产阶段扣过现金，这里只作为费用进入损益
-  const overtimeCost = state.plan.overtime && state.depts.make.staff >= 3 ? 5 : 0
+  const overtimeCost = state.plan.overtime ? overtimeCostOf(d.salaryPer.make, state.depts.make.staff) : 0
   const projectCost = Math.max(0, d.rndCostTotal)
 
   /**
@@ -603,7 +606,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
 function planCapacity(state: GameState): number {
   const d = derive(state)
   let cap = d.capacity
-  if (state.plan.overtime && state.depts.make.staff >= 3) cap += 10
+  if (state.plan.overtime) cap += overtimeGainOf(state.depts.make.staff, state.equipment.length)
   return Math.max(0, cap)
 }
 

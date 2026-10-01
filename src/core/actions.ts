@@ -5,11 +5,12 @@ import {
   CARDS,
   DEPT_NAMES,
   EQUIPMENT_SHOP,
+  EQUIP_CAP_PER_WORKER,
   IP_BY_ID,
   MATERIALS,
   NEW_MATERIALS,
-  OVERTIME_CAPACITY,
-  OVERTIME_COST,
+  overtimeCostOf,
+  overtimeGainOf,
   RND_PROJECTS,
   SALES_ORDER_COUNT,
   STAFF,
@@ -703,7 +704,7 @@ export function productionUnitCosts(state: GameState): ProductionUnitCosts {
   const d = derive(state)
   const labor = d.salaryPer.make * state.depts.make.staff
   const depreciation = state.equipment.reduce((sum, e) => sum + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0)
-  const overtime = state.plan.overtime && state.depts.make.staff >= 3 ? OVERTIME_COST : 0
+  const overtime = state.plan.overtime ? overtimeCostOf(d.salaryPer.make, state.depts.make.staff) : 0
   const fixedTotal = labor + depreciation + overtime
   const planned = TIERS.reduce((sum, t) => sum + state.plan.quantities[t], 0)
   const allocated = planned > 0 ? fixedTotal / planned : 0
@@ -1072,8 +1073,11 @@ export function buyEquipment(state: GameState, shopId: string): ActionResult {
       `月折旧 ${(shop.depreciation / 10).toFixed(2)}w 为非现金费用，逐月进生产费用`,
     ],
   })
-  pushLog(state, 'action', `购置设备【${shop.name}】`, [`${(shop.price / 10).toFixed(2)}w`, shop.desc])
-  return { ok: true, msg: `产能 +${shop.capacity}` }
+  pushLog(state, 'action', `购置设备【${shop.name}】`, [
+    `${(shop.price / 10).toFixed(2)}w`,
+    `每名生产人员产能 +${EQUIP_CAP_PER_WORKER}${state.depts.make.staff > 0 ? `（现有 ${state.depts.make.staff} 人：本月产能 +${state.depts.make.staff * EQUIP_CAP_PER_WORKER}）` : '（暂无生产人员，产能不增益）'}`,
+  ])
+  return { ok: true, msg: `每名生产人员产能 +${EQUIP_CAP_PER_WORKER}` }
 }
 
 /** 设置单条产品线的排产量；所有产品线共享同一个产能池。 */
@@ -1092,7 +1096,7 @@ export function plannedTotal(state: GameState): number {
 export function planCapacity(state: GameState): number {
   const d = derive(state)
   let cap = d.capacity
-  if (state.plan.overtime && state.depts.make.staff >= 3) cap += OVERTIME_CAPACITY
+  if (state.plan.overtime) cap += overtimeGainOf(state.depts.make.staff, state.equipment.length)
   return cap
 }
 
@@ -1246,14 +1250,17 @@ export function confirmProduction(state: GameState): ActionResult {
 }
 
 export function toggleOvertime(state: GameState): ActionResult {
-  if (state.depts.make.staff < 3) return fail('需要生产 3 人解锁')
+  const staff = state.depts.make.staff
+  if (staff < 3) return fail('需要生产 3 人解锁')
   if (state.plan.overtime) {
     state.plan.overtime = false
     return { ok: true, msg: '已取消加班' }
   }
-  if (state.cash < OVERTIME_COST) return fail('现金不足')
+  const cost = overtimeCostOf(derive(state).salaryPer.make, staff)
+  if (state.cash < cost) return fail('现金不足')
   state.plan.overtime = true
-  return { ok: true, msg: `加班已安排（结算时扣 ${(OVERTIME_COST / 10).toFixed(2)}w）` }
+  const gain = overtimeGainOf(staff, state.equipment.length)
+  return { ok: true, msg: `加班已安排（结算时付 2× 生产工资 ${(cost / 10).toFixed(2)}w，本月产能 +${gain}）` }
 }
 
 // ════════════════════════════════════════════════════════════

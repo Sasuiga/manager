@@ -433,5 +433,5 @@ export function cumulative(ledgers: Ledger[]) {
   )
 }
 
-export { OVERTIME_COST, STAFF, RND_PROJECTS, CARD_BY_ID, EQUIPMENT_SHOP, IP_BY_ID } from '../data/game'
+export { STAFF, RND_PROJECTS, CARD_BY_ID, EQUIPMENT_SHOP, IP_BY_ID } from '../data/game'
 export { DEPT_NAMES, DEPT_SHORT, TIER_LABEL, TIERS, PRODUCT_PRICE } from '../data/game'
