@@ -107,6 +107,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     extraBuys: [],
     lotsUsed: 0,
     plan: { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false },
+    overtimePaid: 0,
     pendingIncome: 0,
     pendingCost: 0,
     eventCashGift: 0,

@@ -704,7 +704,7 @@ export function productionUnitCosts(state: GameState): ProductionUnitCosts {
   const d = derive(state)
   const labor = d.salaryPer.make * state.depts.make.staff
   const depreciation = state.equipment.reduce((sum, e) => sum + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0)
-  const overtime = state.plan.overtime ? overtimeCostOf(d.salaryPer.make, state.depts.make.staff) : 0
+  const overtime = state.overtimePaid
   const fixedTotal = labor + depreciation + overtime
   const planned = TIERS.reduce((sum, t) => sum + state.plan.quantities[t], 0)
   const allocated = planned > 0 ? fixedTotal / planned : 0
@@ -776,6 +776,15 @@ export function purchasePlanClearsProduction(state: GameState, materialId: strin
 export function clearProductionPlan(state: GameState): void {
   for (const tier of TIERS) state.plan.quantities[tier] = 0
   state.plan.overtime = false
+  returnOvertimePay(state)
+}
+
+/** 取消加班（toggle 关 / 清生产计划）：退还发生时已付的加班费。 */
+function returnOvertimePay(state: GameState): void {
+  if (state.overtimePaid > 0) {
+    state.cash += state.overtimePaid
+    state.overtimePaid = 0
+  }
 }
 
 /**
@@ -1254,13 +1263,18 @@ export function toggleOvertime(state: GameState): ActionResult {
   if (staff < 3) return fail('需要生产 3 人解锁')
   if (state.plan.overtime) {
     state.plan.overtime = false
-    return { ok: true, msg: '已取消加班' }
+    const refund = state.overtimePaid
+    returnOvertimePay(state)
+    return { ok: true, msg: refund > 0 ? `已取消加班（退还加班费 ${(refund / 10).toFixed(2)}w）` : '已取消加班' }
   }
   const cost = overtimeCostOf(derive(state).salaryPer.make, staff)
   if (state.cash < cost) return fail('现金不足')
+  // 发生时直接支付（非工资式计提下月实付）：安排即扣现金，取消/清计划全额退还
   state.plan.overtime = true
+  state.overtimePaid = cost
+  state.cash -= cost
   const gain = overtimeGainOf(staff, state.equipment.length)
-  return { ok: true, msg: `加班已安排（结算时付 2× 生产工资 ${(cost / 10).toFixed(2)}w，本月产能 +${gain}）` }
+  return { ok: true, msg: `加班已安排（发生支付 2× 生产工资 ${(cost / 10).toFixed(2)}w，取消可退还；本月产能 +${gain}）` }
 }
 
 // ════════════════════════════════════════════════════════════

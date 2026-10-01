@@ -624,6 +624,8 @@ export interface GameState {
   lotsUsed: number
   /** 本月生产计划：各产品线共享同一产能池。 */
   plan: { quantities: Record<Tier, number>; overtime: boolean }
+  /** 加班费（发生时直接支付：安排时扣现金、取消/清计划全额退还、月初清零；口径 = 2× 本月生产工资计提额，非工资式下月实付） */
+  overtimePaid: Money
   /**
    * 本月部门账务（手工记账：采购入库、生产领料/成品入库、销售收入与成本结转）。
    * 各行只作展示，不参与损益计算（采购与领料是资产内部转换），

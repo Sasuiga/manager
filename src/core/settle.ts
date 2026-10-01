@@ -12,7 +12,6 @@ import {
   RND_PROJECTS,
   TAX_RATE,
   TIERS,
-  overtimeCostOf,
   overtimeGainOf,
 } from '../data/game'
 import { derive, mergeMods, rndProjectOutcome } from './derive'
@@ -222,12 +221,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   }
   for (const tier of TIERS) state.plan.quantities[tier] = 0
   const producedUnitCost = produced > 0 ? Math.round(producedValue / produced) : 0
-  // 加班费（现金）：2× 生产工资计提额，一次性支付
-  const overtimePay = overtimeCostOf(d.salaryPer.make, state.depts.make.staff)
-  if (state.plan.overtime && overtimePay > 0) {
-    state.cash -= overtimePay
-    warnings.push(`已支付加班费 ${(overtimePay / 10).toFixed(2)}w（2× 生产工资）`)
-  }
+  // 加班费：发生时（安排加班）已直接扣现金（state.overtimePaid），结算不再重复扣；损益在过账段确认
 
   // ══════════ 3. 销售 ══════════
   const orders: SaleRecord[] = []
@@ -408,7 +402,8 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   }
 
   // 加班费已在生产阶段扣过现金，这里只作为费用进入损益
-  const overtimeCost = state.plan.overtime ? overtimeCostOf(d.salaryPer.make, state.depts.make.staff) : 0
+  // 加班费（发生时已直接支付，此处确认损益；金额 = 安排时锁定的 2× 生产工资）
+  const overtimeCost = state.overtimePaid
   const projectCost = Math.max(0, d.rndCostTotal)
 
   /**
@@ -875,6 +870,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.lotsUsed = 0
   state.extraBuys = []
   state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false }
+  state.overtimePaid = 0
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   state.monthLedger = []
   state.declinedOrders = []

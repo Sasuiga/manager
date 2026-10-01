@@ -29,7 +29,6 @@ import {
   SALES_RESOURCE_STEPS,
   STAFF,
   TIERS,
-  overtimeCostOf,
   priceOf,
 } from '../data/game'
 import type { CardPlayEffect, Dept, GameState, MonthMods, ResearchProjectDef, Tier } from './types'
@@ -393,8 +392,8 @@ export function derive(state: GameState): DerivedTotals {
   const noBorrow = !!mods.noBorrow
 
   // ── 各部门费用明细 ──
-  // 加班费 = 2× 生产人员本月工资计提（含事件/卡牌薪酬修正；<3 人为 0）
-  const overtimeCost = state.plan.overtime ? overtimeCostOf(salaryPer.make, state.depts.make.staff) : 0
+  // 加班费：发生时已直接支付（state.overtimePaid，安排时锁定 = 2× 生产工资），账务/损益按锁定额展示
+  const overtimeCost = state.overtimePaid
   let makeDepreciation = 0
   for (const e of state.equipment) {
     makeDepreciation += Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated))

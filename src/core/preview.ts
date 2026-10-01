@@ -1,4 +1,4 @@
-import { TIERS, overtimeCostOf } from '../data/game'
+import { TIERS } from '../data/game'
 import { derive } from './derive'
 import { plannedPurchaseCost, plannedPurchaseLine, productionUnitCosts } from './actions'
 import { wagePayableOf } from './game'
@@ -92,7 +92,8 @@ export function preSettleCash(state: GameState): PreSettleCash {
   )
   /** 采购计划：核心模式尚未付款（结算时付）；完整模式已实付，记在 paidPurchase。 */
   const purchasePlan = state.mode === 'core' ? plannedPurchaseCost(state) : 0
-  const overtimePay = state.plan.overtime ? overtimeCostOf(d.salaryPer.make, state.depts.make.staff) : 0
+  /** 加班费：安排时已发生支付（state.overtimePaid），桥接按锁定额计。 */
+  const overtimePay = state.overtimePaid
   const rndInvest = Math.max(0, d.rndCostTotal)
   const interest = d.interest
   const wagePaid = wagePayableOf(state)
