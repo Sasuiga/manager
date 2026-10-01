@@ -45,13 +45,20 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
     }
     E.enterOperate(s)
 
+    // ── 借款：先垫现金缓冲，再招聘/采购（现金 < 30w 时借到 30w） ──
+    if (s.cash < 300) {
+      const d0 = E.derive(s)
+      const amt = Math.min(d0.creditAvailable, 300)
+      if (amt > 0) E.borrow(s, amt - (amt % 10))
+    }
+
     // ── 招聘：优先采购与销售，前几个月各补到 2 人 ──
     const order: E.Dept[] = ['buy', 'sell', 'make', 'ops', 'rnd']
     for (const dept of order) {
       for (let k = 0; k < 2; k++) {
         if (s.depts[dept].staff >= 2) break
         if (!E.canHire(s, dept).ok) break
-        if (s.cash < 400) break
+        if (s.cash < 300) break
         E.hire(s, dept)
       }
     }
@@ -68,20 +75,30 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
       E.playCard(s, card.uid)
     }
 
-    // ── 采购：凑够本月要生产的量 ──
+    // ── 采购：凑够本月要生产的量（先保证覆盖需求，不够再买买得起的最大档） ──
     const need = (id: string, want: number) => Math.max(0, want - (s.materials[id]?.qty ?? 0))
     const planQty = 12
     for (const [id, want] of [
       ['pkg', need('pkg', planQty * 2)],
       ['resin', need('resin', planQty)],
     ] as [string, number][]) {
-      if (want <= 0) continue
-      if (s.materials[id].chosenLot) continue
+      if (want <= 0 || s.materials[id].chosenLot) continue
+      let bought = false
       for (const lot of ['large', 'mid', 'small'] as E.LotSize[]) {
         const qty = E.lotQty(s, id, lot)
         const price = E.lotPrice(s, id, lot)
-        if (qty <= 0 || qty * price > s.cash) continue
-        if (E.buyMaterial(s, id, lot).ok) break
+        if (qty > 0 && qty >= want && qty * price <= s.cash) {
+          if (E.buyMaterial(s, id, lot).ok) { bought = true; break }
+        }
+      }
+      if (!bought) {
+        for (const lot of ['large', 'mid', 'small'] as E.LotSize[]) {
+          const qty = E.lotQty(s, id, lot)
+          const price = E.lotPrice(s, id, lot)
+          if (qty > 0 && qty * price <= s.cash) {
+            if (E.buyMaterial(s, id, lot).ok) break
+          }
+        }
       }
     }
 
@@ -99,10 +116,10 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
       if (!s.rnd[target].done) E.setRndAssign(s, target, s.depts.rnd.staff)
     }
 
-    // ── 借款：现金不够时借一点 ──
-    if (s.cash < 200) {
+    // ── 借款：现金 < 30w 时补足到 30w 缓冲（借款在采购之后、结算前） ──
+    if (s.cash < 300) {
       const d2 = E.derive(s)
-      const amt = Math.min(d2.creditAvailable, 200)
+      const amt = Math.min(d2.creditAvailable, 300)
       if (amt > 0) E.borrow(s, amt - (amt % 10))
     }
 
@@ -399,12 +416,14 @@ describe('引擎', () => {
     E.enterOperate(s)
     const d0 = E.derive(s)
     expect(d0.demand).toEqual(d0.demandBase) // 未加点时两者相等
+    // 基础池 0 点：招 1 名销售（池 +4）后再验证成本梯度与上限
+    expect(E.hire(s, 'sell').ok).toBe(true)
     // 成本梯度：低 1 / 中 2 / 高 4 / 特 6 点每需求；push = min(floor(分配/成本), 上限)
     const cases: [E.Tier, number, number][] = [
-      ['low', 5, 5], // 5 点 ÷ 1 = 5（未超上限 15）
-      ['mid', 10, 5], // 10 点 ÷ 2 = 5（未超上限 12）
+      ['low', 4, 4], // 4 点 ÷ 1 = 4（销售池 4 点，未超上限 15）
+      ['mid', 4, 2], // 池内 4 点 ÷ 2 = 2（未超上限 12）
       ['mid', 3, 1], // 零头：3 点 ÷ 2 = 1 需求，余 1 点不计
-      ['high', 99, 2], // 资源池 10 点封顶 → 10 ÷ 4 = 2（未超上限 6）
+      ['high', 99, 1], // 资源池 4 点封顶 → 4 ÷ 4 = 1（未超上限 6）
     ]
     for (const [tier, want, expectPush] of cases) {
       s.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
@@ -724,9 +743,9 @@ describe('引擎', () => {
     s.monthMods = {}
     E.enterDraw(s)
     E.enterOperate(s)
-    s.depts.make.staff = 2 // 2 × 0.5w = 1w 月工资
+    s.depts.make.staff = 2 // 2 × 0.8w = 1.6w 月工资
     const wage = E.derive(s).salaryTotal
-    expect(wage).toBe(10)
+    expect(wage).toBe(16)
 
     // 当月部门账：工资计提行（借 制造费用 / 贷 应付职工薪酬），不动现金
     const acc = E.derive(s).deptLedger['make'].find((l) => l.item === '工资计提')

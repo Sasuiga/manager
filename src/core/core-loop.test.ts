@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as E from './engine'
+import { Rng } from './rng'
+import { EVENT_BY_ID } from '../data/game'
 
 function preparedCoreState() {
   const s = E.newGame(20260923, 'core')
@@ -30,6 +32,9 @@ describe('核心循环预演', () => {
     expect(p.revenue.min).toBeLessThanOrEqual(p.revenue.max)
     expect(p.grossProfit.min).toBeLessThanOrEqual(p.grossProfit.max)
     expect(p.cashEnd.min).toBeLessThanOrEqual(p.cashEnd.max)
+    // 现货随机因子已移除：核心模式预演与完整模式一致，均为确定值（min≡max）
+    expect(p.spotQty.min).toBe(p.spotQty.max)
+    expect(p.revenue.min).toBe(p.revenue.max)
     expect(p.products.find((x) => x.tier === 'low')?.planned).toBe(8)
   })
 
@@ -196,7 +201,7 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(E.derive(s).capacity).toBe(10)
     expect(E.hire(s, 'make').ok).toBe(true)
     expect(E.derive(s).capacity).toBe(17)
-    expect(E.derive(s).salaryTotal).toBe(10) // 2 人 × 0.5w
+    expect(E.derive(s).salaryTotal).toBe(16) // 2 人 × 0.8w
     expect(s.ap).toBe(1)
   })
 
@@ -229,7 +234,7 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(E.hire(s, 'sell').ok).toBe(true)
     expect(s.orders.length).toBe(1) // 2 人解锁 1 单，当月立即补发
     expect(E.derive(s).orderCount).toBe(1)
-    expect(E.derive(s).salesResource).toBe(18) // 基础 10 + 2 人 × 4
+    expect(E.derive(s).salesResource).toBe(8) // 基础 0 + 2 人 × 4
     s.ap = 5
     expect(E.hire(s, 'sell').ok).toBe(true)
     expect(E.hire(s, 'sell').ok).toBe(true)
@@ -239,6 +244,8 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
 
   it('3 名生产解锁加班：产能计划含 +10', () => {
     const s = fresh(902)
+    s.monthMods = {} // 排除本月事件修正，只验证加班解锁本身
+    s.currentEvent = null
     s.ap = 5
     expect(E.hire(s, 'make').ok).toBe(true)
     expect(E.hire(s, 'make').ok).toBe(true)
@@ -276,6 +283,7 @@ describe('核心模式采购计划', () => {
   it('生产可以使用计划到货；减少采购会保留生产计划，取消采购则清空生产计划', () => {
     const s = E.newGame(92, 'core')
     E.startGame(s)
+    s.cash = 2000 // 补足现金：大批采购金额超出 40w 初始资金，避免干扰计划机制测试
     E.hire(s, 'make')
     E.hire(s, 'make')
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
@@ -299,6 +307,7 @@ describe('核心模式采购计划', () => {
   it('清空生产计划会一并取消加班并同步已接订单', () => {
     const s = E.newGame(95, 'core')
     E.startGame(s)
+    s.cash = 2000 // 补足现金：大批采购金额超出 40w 初始资金，避免干扰计划机制测试
     E.hire(s, 'make')
     E.hire(s, 'make')
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
@@ -315,16 +324,18 @@ describe('核心模式采购计划', () => {
   it('正式结算按采购计划先入库，再执行生产与销售', () => {
     const s = E.newGame(93, 'core')
     E.startGame(s)
+    s.cash = 2000 // 补足现金：大批采购金额超出 40w 初始资金，避免干扰计划机制测试
     s.orders = []
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
     expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
     E.setPlan(s, 'low', Math.min(5, E.maxProducible(s, 'low')))
     const purchaseCost = E.plannedPurchaseCost(s)
+    const cash0 = s.cash
     const report = E.settleMonth(s)
 
     expect(report.production.produced).toBeGreaterThan(0)
     expect(s.monthLedger.filter((row) => row.dept === 'buy' && row.item.startsWith('采购'))).toHaveLength(2)
-    expect(report.ledger.cashBegin).toBe(1000 - purchaseCost)
+    expect(report.ledger.cashBegin).toBe(cash0 - purchaseCost)
     // 计划已执行：档位与档数清空，后续“库存 + 计划到货”不会重叠加计划量
     expect(Object.values(s.materials).every((m) => m.chosenLot === null)).toBe(true)
     expect(s.lotsUsed).toBe(0)
@@ -333,6 +344,7 @@ describe('核心模式采购计划', () => {
   it('核心模式生产不在确认时立即执行，结算时统一过账', () => {
     const s = E.newGame(96, 'core')
     E.startGame(s)
+    s.cash = 2000 // 补足现金：大批采购金额超出 40w 初始资金，避免干扰计划机制测试
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
     expect(E.buyMaterial(s, 'resin', 'large').ok).toBe(true)
     E.setPlan(s, 'low', 3)
@@ -345,8 +357,10 @@ describe('核心模式采购计划', () => {
     expect(s.products.low.qty).toBe(0) // 未入库
     expect(E.plannedTotal(s)).toBe(3) // 计划保留，结算时执行
 
-    E.settleMonth(s)
-    expect(s.products.low.qty).toBeGreaterThan(0)
+    const rep = E.settleMonth(s)
+    // 结算已执行生产（产出可能被 100% 现货需求全部售出，库存不保证 > 0）
+    expect(rep.production.lines.find((l) => l.tier === 'low')?.planned).toBe(3)
+    expect(rep.production.lines.find((l) => l.tier === 'low')?.produced).toBe(3)
   })
 
   it('预演读取采购计划，但不实际执行采购', () => {
@@ -408,7 +422,7 @@ describe('研发放置与 IP 技能树', () => {
     expect(E.rndProjectOutcome(d, special, 5).rate).toBeCloseTo(0.7)
   })
 
-  it('1 人 3 个月解锁中端（教学路径），进度不足不判定', () => {
+  it('1 人 2 个月解锁中端（教学路径），进度不足不判定', () => {
     const s = rndState(211)
     s.depts.rnd.staff = 1
     E.setRndAssign(s, 'bom-mid', 1)
@@ -418,12 +432,10 @@ describe('研发放置与 IP 技能树', () => {
     E.nextMonth(s)
     E.setRndAssign(s, 'bom-mid', 1)
     rep = E.settleMonth(s)
-    expect(rep.rnd[0].success).toBeNull()
-    expect(s.rnd['bom-mid'].progress).toBe(10)
-    E.nextMonth(s)
-    E.setRndAssign(s, 'bom-mid', 1)
-    rep = E.settleMonth(s)
     expect(rep.rnd[0].success).toBe(true)
+    // 10/10 达成：成功判定，进度复位、配方解锁
+    expect(s.rnd['bom-mid'].done).toBe(true)
+    expect(s.rnd['bom-mid'].progress).toBe(0)
     expect(s.products.mid.built).toBe(true)
   })
 
@@ -510,7 +522,10 @@ describe('研发放置与 IP 技能树', () => {
     expect(s.flags['rndConfirmed']).toBe(0)
     expect(s.rnd['bom-mid'].assigned).toBe(2)
     E.settleMonth(s)
-    expect(s.rnd['bom-mid'].progress).toBe(10)
+    // 2 人置中端：10/10 达成并判定成功（95% + 10% 封顶 100%），完成即复位进度、释放人员
+    expect(s.rnd['bom-mid'].done).toBe(true)
+    expect(s.rnd['bom-mid'].progress).toBe(0)
+    expect(s.rnd['bom-mid'].assigned).toBe(0)
   })
 
   it('确认校验：跨项目池总量 / 前置锁定', () => {
@@ -666,5 +681,330 @@ describe('统一成本口径（采购计划 → 单位成本 → 单件毛利 �
     // 仅低端有排产：汇总等于单品
     expect(p.grossProfit.min).toBe(lo.grossProfit.min)
     expect(p.grossProfit.max).toBe(lo.grossProfit.max)
+  })
+})
+
+describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
+  it('池过滤：融资未落地剔 8 张（两模式）；卡牌参数事件两模式均保留（核心也有立项抽卡阶段）', () => {
+    const fullPool = new Set(E.buildEventPool(E.newGame(1), Rng.fromState(1)).map((e) => e.id))
+    const corePool = new Set(E.buildEventPool(E.newGame(1, 'core'), Rng.fromState(1)).map((e) => e.id))
+    for (const id of ['R4', 'P5', 'O4', 'S3', 'D4', 'X3', 'R6', 'S9']) {
+      expect(fullPool.has(id), `${id} 依赖借款参数（debt≡0 落空）`).toBe(false)
+      expect(corePool.has(id), id).toBe(false)
+    }
+    for (const id of ['R5', 'O5']) {
+      expect(fullPool.has(id), `${id} 完整模式有提案阶段，保留`).toBe(true)
+      expect(corePool.has(id), `${id} 核心同样有立项（抽卡）阶段，保留`).toBe(true)
+    }
+    for (const id of ['R1', 'R2', 'R9', 'R10', 'P1', 'P2', 'P9', 'P10', 'S6', 'S7', 'X7', 'X9']) {
+      expect(corePool.has(id), `${id} 落在三环/人员/研发参数，保留`).toBe(true)
+    }
+  })
+
+  it('P10 猎头：机会事件消费端——本月可额外招聘 1 人不耗 AP', () => {
+    const s = E.newGame(1, 'core')
+    E.startGame(s)
+    s.phase = 'event'
+    s.currentEvent = EVENT_BY_ID['P10']
+    s.cash = 500
+    E.acceptChance(s)
+    expect(s.monthFlags.includes('extraHire')).toBe(true)
+    s.ap = 0
+    expect(E.hire(s, 'buy').ok).toBe(true) // extraHire 免 AP
+    expect(s.monthFlags.includes('extraHire')).toBe(false) // 一次性名额
+    s.cash = 500
+    expect(E.canHire(s, 'sell').ok).toBe(false) // 名额已耗、AP 为 0
+  })
+
+  it('核心 12 月流程：每月恰好 1 张事件（全类型），经立项阶段后进经营，恒等式全程成立', () => {
+    const run = (seed: number) => {
+      const s = E.newGame(seed, 'core')
+      E.startGame(s)
+      const ids: string[] = []
+      const r2 = (n: number) => Math.round(n * 100) / 100
+      for (let m = 1; m <= 12; m++) {
+        if (s.result !== 'playing') break
+        if (s.phase === 'event' && !s.eventResolved) {
+          const ev = s.currentEvent
+          if (ev) {
+            ids.push(ev.id)
+            if (ev.type === 'choice' && ev.options) {
+              let best = 0
+              for (let i = 0; i < ev.options.length; i++) {
+                const c = (ev.options[i].cost?.cash ?? 0) + (ev.options[i].cost?.ap ?? 0) * 50
+                const b = (ev.options[best].cost?.cash ?? 0) + (ev.options[best].cost?.ap ?? 0) * 50
+                if (c < b) best = i
+              }
+              if (!E.applyEventOption(s, best).ok) s.eventResolved = true
+            } else if (ev.type === 'chance' && ev.chance) {
+              const cashCost = ev.chance.cost.cash ?? 0
+              const apCost = ev.chance.cost.ap ?? 0
+              if (s.cash >= cashCost && s.ap >= apCost) E.acceptChance(s)
+              else E.skipEvent(s)
+            }
+          }
+          s.eventResolved = true
+          E.enterDraw(s) // 核心与完整模式同样经过立项（抽卡）阶段
+          expect(s.phase, `m${m}`).toBe('draw')
+          if (s.drawn.length > 0) {
+            for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid)
+            E.confirmDraw(s)
+          }
+        }
+        E.enterOperate(s)
+        E.settleMonth(s)
+        const b = E.balanceSheet(s)
+        expect(r2(b.totalAssets - b.debt - b.wagePayable - b.equity), `m${m} 恒等式`).toBe(0)
+        if (s.result !== 'playing') break
+        E.nextMonth(s)
+      }
+      return ids
+    }
+    const seq = run(777)
+    expect(seq.length).toBeGreaterThanOrEqual(8)
+    expect(run(777)).toEqual(seq) // 同 seed 事件序列可复现
+  })
+
+  it('场景基线：applyCoreScenario 保留所抽事件（即时修正重并），预设订单不被事件确认时重复生成', () => {
+    const s = E.newGame(3303, 'core')
+    E.startGame(s)
+    E.applyCoreScenario(s, 'order_heavy')
+    expect(s.phase).toBe('event')
+    expect(s.currentEvent?.id).toBe('R1') // 保留本月事件（seed 固定，即场景的一部分）
+    expect(s.monthMods.demand?.low).toBe(1) // 即时事件修正在基线重置后重新并入
+    expect(s.monthMods.demand?.mid).toBe(1)
+    const preset = s.orders.length
+    expect(preset).toBeGreaterThan(0)
+    s.eventResolved = true
+    E.enterDraw(s)
+    expect(s.orders.length).toBe(preset) // 订单已预设，不重复生成
+    expect(s.phase).toBe('draw') // 核心同样经过立项（抽卡）阶段
+  })
+})
+
+describe('核心模式立项（抽卡）阶段', () => {
+  it('事件 → 立项（抽 N 选 M）→ 经营：每月固定流转，手牌可打出', () => {
+    const s = E.newGame(777, 'core')
+    E.startGame(s)
+    expect(s.phase).toBe('event')
+    s.eventResolved = true
+    E.enterDraw(s)
+    expect(s.phase).toBe('draw')
+    expect(s.drawn.length).toBeGreaterThan(0) // 待选区已有 N 张
+    for (const c of s.drawn.slice(0, s.drawM)) E.toggleDrawn(s, c.uid)
+    expect(E.confirmDraw(s).ok).toBe(true)
+    expect(s.hand.length).toBeGreaterThan(0)
+    E.enterOperate(s)
+    expect(s.phase).toBe('operate')
+    // 打出一张可玩的牌：打牌数 −1、进入已实施列表
+    const card = s.hand.find((c) => E.canPlay(s, c).ok)
+    expect(card, '手牌中应有可打出的牌').toBeTruthy()
+    const playsBefore = s.plays
+    expect(E.playCard(s, card!.uid).ok).toBe(true)
+    expect(s.plays).toBe(playsBefore - 1)
+    expect(s.playedThisMonth.length).toBe(1)
+  })
+
+  it('卡牌采购价修正：打出 C1 批量采购后采购价降 1 档（展示档位不含卡牌修正，避免与 buyCardShift 重复）', () => {
+    const s = E.newGame(777, 'core')
+    E.startGame(s)
+    s.eventResolved = true
+    E.enterDraw(s)
+    E.enterOperate(s)
+    const c1 = { uid: 'C1#test', defId: 'C1', empowered: false }
+    s.hand.push(c1)
+    const tierBefore = E.derive(s).materials.pkg.tierShift
+    const before = E.lotPrice(s, 'pkg', 'mid')
+    expect(E.playCard(s, c1.uid).ok).toBe(true)
+    const after = E.lotPrice(s, 'pkg', 'mid')
+    // 批量采购：采购价降 1 档（在采购时生效）
+    expect(after).toBe(E.materialPriceAt('pkg', tierBefore - 1))
+    expect(after).toBeLessThan(before)
+    // 展示档位（市场水平）不含卡牌修正，保持原值（卡牌修正只在 buyCardShift 落地）
+    expect(E.derive(s).materials.pkg.tierShift).toBe(tierBefore)
+  })
+})
+
+describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）', () => {
+  function operateState(seed = 777) {
+    const s = E.newGame(seed, 'core')
+    E.startGame(s)
+    s.eventResolved = true
+    E.enterDraw(s)
+    E.enterOperate(s)
+    return s
+  }
+
+  it('C6 紧急采购：每原料 1 次小批 +2 档，不占档数', () => {
+    const s = operateState()
+    s.hand.push({ uid: 'c6#t', defId: 'C6', empowered: false })
+    expect(E.playCard(s, 'c6#t').ok).toBe(true)
+    expect(s.monthFlags.includes('urgent')).toBe(true)
+    const before = s.materials.resin.qty
+    expect(E.urgentBuy(s, 'resin').ok).toBe(true)
+    expect(s.materials.resin.qty).toBeGreaterThan(before)
+    expect(s.extraBuys.filter((e) => e.kind === 'urgent')).toHaveLength(1)
+    expect(E.urgentBuy(s, 'resin').ok).toBe(false) // 每原料限 1 次
+  })
+
+  it('C10 清仓：每原料 1 次小批 -2 档，不占档数', () => {
+    const s = operateState()
+    s.hand.push({ uid: 'c10#t', defId: 'C10', empowered: false })
+    expect(E.playCard(s, 'c10#t').ok).toBe(true)
+    const d = E.derive(s)
+    expect(E.clearanceBuy(s, 'pkg').ok).toBe(true)
+    // 清仓价 = 当前档位 -2 档的小批单价
+    expect(E.materialPriceAt('pkg', (d.materials.pkg.tierShift ?? 0) - 2)).toBeGreaterThan(0)
+  })
+
+  it('C7 原料替换：按账面价出售 5 单位、按当前价购入 5 单位，每月 1 次', () => {
+    const s = operateState()
+    s.materials.pkg.qty = 12
+    s.materials.pkg.value = 120 // 账面 10/件
+    s.hand.push({ uid: 'c7#t', defId: 'C7', empowered: false })
+    expect(E.playCard(s, 'c7#t').ok).toBe(true)
+    const resinBefore = s.materials.resin.qty
+    const cashBefore = s.cash
+    expect(E.swapMaterials(s, 'pkg', 'resin').ok).toBe(true)
+    expect(s.materials.pkg.qty).toBe(7) // 12 - 5
+    expect(s.materials.resin.qty).toBe(resinBefore + 5)
+    // 出售 5 件按账面 10/件 回款；购入 5 件按当前档位价支出（净现金流 = 差值）
+    const d = E.derive(s)
+    const resinUnit = E.materialPriceAt('resin', d.materials.resin.tierShift)
+    expect(s.cash).toBe(Math.round(cashBefore + 50 - resinUnit * 5))
+    expect(E.swapMaterials(s, 'pkg', 'resin').ok).toBe(false) // 每月 1 次
+  })
+
+  it('C9 期货：基础版锁当前档位最高的 1 种原料；下月气候档位高于锁定时按锁定档位采购', () => {
+    const s = operateState()
+    s.hand.push({ uid: 'c9#t', defId: 'C9', empowered: false })
+    s.cash = 300
+    expect(E.playCard(s, 'c9#t').ok).toBe(true) // 实施费用 2w
+    expect(Object.keys(s.futures)).toHaveLength(1) // 基础版只锁 1 种（当前档位最高的原料）
+    // 锁定消费端：锁 -1 档，下月过热（包材 +1 档）高于锁定 → 负向档位修正拉回锁定档位
+    s.futures = { pkg: -1 }
+    s.climate = 'overheat'
+    E.settleMonth(s)
+    E.nextMonth(s)
+    expect(s.monthMods.materials?.pkg?.tierShift).toBe(-2) // 锁定 -1 − 过热 +1
+  })
+
+  it('C8 供应商关系：上月打出过，本月额外 -1 档', () => {
+    const s = operateState()
+    s.hand.push({ uid: 'c8#t', defId: 'C8', empowered: false })
+    s.cash = 200
+    expect(E.playCard(s, 'c8#t').ok).toBe(true)
+    expect(s.flags['lastC8']).toBe(s.month)
+    // 本月：只有 -1（上月未打出）
+    expect(E.buyCardShift(s)).toBe(-1)
+    // 下月：lastC8 === month-1 生效，-2
+    s.monthFlags = []
+    s.playedThisMonth = []
+    s.hand.push({ uid: 'c8b#t', defId: 'C8', empowered: false })
+    E.playCard(s, 'c8b#t')
+    s.flags['lastC8'] = s.month - 1 // 模拟「上月也打出过」
+    expect(E.buyCardShift(s)).toBe(-2)
+  })
+
+  it('C1 批量采购：第 2 档起额外 -1 档（buyTierExtra 生效）', () => {
+    const s = operateState()
+    s.hand.push({ uid: 'c1#t', defId: 'C1', empowered: false })
+    expect(E.playCard(s, 'c1#t').ok).toBe(true)
+    expect(E.buyCardShift(s)).toBe(-1) // 第 1 档：仅基础 -1
+    s.lotsUsed = 1 // 已选 1 档 → 再采购即「第 2 个已选档」
+    expect(E.buyCardShift(s)).toBe(-2) // 额外 -1 生效
+  })
+
+  it('M2 加 AP 当月生效（唯一打出的牌 +2）', () => {
+    const s = operateState()
+    s.hand.push({ uid: 'm2#t', defId: 'M2', empowered: false })
+    const apBefore = s.ap
+    expect(E.playCard(s, 'm2#t').ok).toBe(true)
+    expect(s.ap).toBe(apBefore + 2) // 基础 +1（effect.ap）+ 唯一牌 +1
+  })
+
+  it('M3 复制手牌：复制目标入 hand，保留原牌强化状态', () => {
+    const s = operateState()
+    s.hand.push({ uid: 'm3#t', defId: 'M3', empowered: false })
+    s.hand.push({ uid: 'p1#t', defId: 'P1', empowered: true })
+    const r = E.playCard(s, 'm3#t', { targetUid: 'p1#t' })
+    expect(r.ok).toBe(true)
+    const copy = s.hand.find((c) => c.uid !== 'm3#t' && c.uid !== 'p1#t' && c.defId === 'P1')
+    expect(copy).toBeTruthy()
+    expect(copy!.empowered).toBe(true) // 保留原牌强化状态
+  })
+
+  it('P10 库存清理：结算时按账面价出售最多库存的产品（不计损益）', () => {
+    const s = operateState()
+    s.hand.push({ uid: 'p10#t', defId: 'P10', empowered: false })
+    s.products.low.qty = 12
+    s.products.low.value = 120 // 账面 10/件
+    s.plan.quantities.low = 0
+    s.orders = []
+    expect(E.playCard(s, 'p10#t').ok).toBe(true)
+    const rep = E.settleMonth(s)
+    // 12 件：P10 按账面价出 10 件（不计损益），剩余 2 件被现货需求吃掉
+    expect(s.products.low.qty).toBe(0)
+    expect(s.monthLedger.some((r) => r.item.startsWith('库存清理') && r.debitAmt === 100)).toBe(true)
+    expect(rep.sales.spots.find((x) => x.tier === 'low')?.qty).toBe(2)
+    // 库存清理不走销售收入：现货收入只对应 2 件
+    expect(rep.sales.revenue).toBe(rep.sales.spots.reduce((a, x) => a + x.revenue, 0))
+    expect(rep.warnings.some((w) => w.includes('库存清理'))).toBe(true)
+  })
+
+  it('P1 满负荷：产能 +3（强化 +6），与新产能基线匹配', () => {
+    const s = operateState()
+    const cap0 = E.derive(s).capacity
+    s.hand.push({ uid: 'p1#t', defId: 'P1', empowered: false })
+    expect(E.playCard(s, 'p1#t').ok).toBe(true)
+    expect(E.derive(s).capacity).toBe(cap0 + 3)
+  })
+
+  it('O6 长期协议事件：只签 1 份 3 个月包材协议（修复双签）', () => {
+    const s = operateState()
+    s.phase = 'event'
+    s.currentEvent = EVENT_BY_ID['O6']
+    s.cash = 200
+    expect(E.applyEventOption(s, 0).ok).toBe(true)
+    expect(s.agreements).toHaveLength(1)
+    expect(s.agreements[0].monthsLeft).toBe(3)
+  })
+
+  it('D7 签订长约事件：只签 1 份 6 个月包材协议', () => {
+    const s = operateState()
+    s.phase = 'event'
+    s.currentEvent = EVENT_BY_ID['D7']
+    s.cash = 200
+    expect(E.applyEventOption(s, 0).ok).toBe(true)
+    expect(s.agreements).toHaveLength(1)
+    expect(s.agreements[0].monthsLeft).toBe(6)
+  })
+
+  it('R4 专利申请：基础/强化低配本月临时知产，强化 + 研发 ≥5 人本季知产（季度切换失效）', () => {
+    // 基础版（研发 0 人）：本月有效（tempIps，月初清零）
+    const s = operateState(42)
+    s.hand.push({ uid: 'r4#t', defId: 'R4', empowered: false })
+    expect(E.playCard(s, 'r4#t').ok).toBe(true)
+    expect(s.monthMods.tempIps).toHaveLength(1)
+    expect(E.activeIps(s)).toContain(s.monthMods.tempIps![0])
+    E.settleMonth(s)
+    E.nextMonth(s)
+    expect(s.monthMods.tempIps).toBeUndefined() // 月初清零
+
+    // 强化 + 研发 5 人：本季有效（quarterIps），季度切换失效
+    const s2 = operateState(42)
+    s2.depts.rnd.staff = 5
+    s2.depts.rnd.hired = 5
+    s2.hand.push({ uid: 'r4b#t', defId: 'R4', empowered: true })
+    expect(E.playCard(s2, 'r4b#t').ok).toBe(true)
+    expect(s2.monthMods.tempIps).toBeUndefined()
+    expect(s2.quarterIps).toHaveLength(1)
+    expect(E.activeIps(s2)).toContain(s2.quarterIps[0])
+    for (let i = 0; i < 3; i++) {
+      E.settleMonth(s2)
+      E.nextMonth(s2)
+    }
+    expect(s2.month).toBe(4)
+    expect(s2.quarterIps).toHaveLength(0) // 进入新季度，本季知产到期
   })
 })

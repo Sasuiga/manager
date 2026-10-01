@@ -139,7 +139,7 @@ export const TIER_LABEL: Record<Tier, string> = { low: '低端', mid: '中端', 
 /**
  * 销售资源加点上限（§7.2.4）：每层最多可推 3 倍基础需求。
  * 低端 +15 / 中端 +12 / 高端 +6 / 特殊 +3，合计 36，
- * 与销售 5 人的资源池（38）大致会师，全游戏没有大段死点。
+ * 与销售 5 人的资源池（基础 4 + 人员 28 = 32）大致会师，全游戏没有大段死点。
  */
 export const SALES_PUSH_CAP: Record<Tier, number> = {
   low: 3 * BASE_DEMAND.low,
@@ -155,8 +155,8 @@ export const SALES_PUSH_CAP: Record<Tier, number> = {
 export const SALES_PUSH_COST: Record<Tier, number> = { low: 1, mid: 2, high: 4, special: 6 }
 
 export const BOMS: Record<Tier, BomDef> = {
-  low: { tier: 'low', name: '标准品', recipe: { pkg: 2, resin: 1 }, basePrice: 60, stdCost: 40 },
-  mid: { tier: 'mid', name: '精工件', recipe: { resin: 2, alloy: 1 }, basePrice: 120, stdCost: 60 },
+  low: { tier: 'low', name: '标准品', recipe: { pkg: 2, resin: 1 }, basePrice: 55, stdCost: 40 },
+  mid: { tier: 'mid', name: '精工件', recipe: { resin: 2, alloy: 1 }, basePrice: 105, stdCost: 60 },
   high: { tier: 'high', name: '精密件', recipe: { alloy: 1, chip: 1 }, basePrice: 240, stdCost: 120 },
   special: { tier: 'special', name: '特种件', recipe: { micro: 1, comp: 1, alloy: 1 }, basePrice: 360, stdCost: 150 },
 }
@@ -166,8 +166,8 @@ export const BOMS: Record<Tier, BomDef> = {
  * 售价可降至「极低」或升至「极高」，故不做下限截断太狠。
  */
 export const PRODUCT_PRICE: Record<Tier, number[]> = {
-  low: [40, 50, 60, 70, 80],
-  mid: [80, 100, 120, 140, 160],
+  low: [35, 45, 55, 65, 75],
+  mid: [75, 90, 105, 125, 145],
   high: [160, 200, 240, 280, 320],
   special: [240, 300, 360, 420, 480],
 }
@@ -231,7 +231,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     dept: 'make',
     name: '生产人员',
     hireFees: [0], // 生产人员无阶梯招聘费，仅消耗 AP
-    salary: 5,
+    salary: 8,
     base: ['每人产能 +5'],
     unlocks: [
       { at: 2, text: '每名工人产能 +1' },
@@ -272,11 +272,11 @@ export const STAFF: Record<Dept, StaffDef> = {
 export const SALES_RESOURCE_STEPS = [0, 4, 4, 6, 6, 8]
 /** 每月确定性订单数（§7.2.6）：2 人解锁第 1 个订单槽，4 人解锁第 2 个。 */
 export const SALES_ORDER_COUNT = [0, 0, 1, 1, 2, 2]
-export const BASE_SALES_RESOURCE = 10
+export const BASE_SALES_RESOURCE = 0 // 基础销售资源池：开局 0 点（全部靠销售人员/事件/卡牌/知产获得）
 export const BASE_HAND = 5
 export const BASE_PLAYS = 2
 export const BASE_AP = 3
-export const START_CASH = 1000 // 100w
+export const START_CASH = 400 // 40w
 
 /** 采购档位：可选档数（§6.1.2）。 */
 export const BUY_LOT_SLOTS = [2, 3, 4, 5, 6, 7]
@@ -311,7 +311,7 @@ export const OVERTIME_COST: Money = 5
 // ════════════════════════════════════════════════════════════
 
 export const RND_PROJECTS: ResearchProjectDef[] = [
-  { id: 'bom-mid', name: '中端 BOM', kind: 'bom', tier: 'mid', need: 15, rate: 0.95, rateCap: 1, desc: '解锁中端产品配方（教学：1 人即可 100% 成功）' },
+  { id: 'bom-mid', name: '中端 BOM', kind: 'bom', tier: 'mid', need: 10, rate: 0.95, rateCap: 1, desc: '解锁中端产品配方（教学：1 人即可 100% 成功）' },
   { id: 'bom-high', name: '高端 BOM', kind: 'bom', tier: 'high', need: 50, rate: 0.6, desc: '解锁高端产品配方' },
   { id: 'bom-special', name: '特殊 BOM', kind: 'bom', tier: 'special', need: 50, rate: 0.45, desc: '解锁特殊产品配方，并揭示新材料' },
 
@@ -383,7 +383,7 @@ export const IP_BY_ID: Record<string, IpDef> = Object.fromEntries(IP_DEFS.map((i
 // ════════════════════════════════════════════════════════════
 
 export const BASE_CREDIT_LINE: Money = 200 // 20w 基础借款额度
-export const MONTHLY_RATE = 0.008 // 月利率 0.8%
+export const MONTHLY_RATE = 0.012 // 月利率 1.2%
 export const RATE_SHIFT_UNIT: Money = 10 // 利率档位：每档 1w
 export const TAX_RATE = 0.1 // 所得税，亏损不计
 export const RND_COST_PER_PROJECT: Money = 30 // 每个研发项目每月固定投入 3w（计入研发费用）
@@ -401,11 +401,11 @@ export const EVENTS: GameEventDef[] = [
   // ── 复苏 ──────────────────────────────────────────────
   { id: 'R1', climate: 'recovery', name: '消费回暖', type: 'instant', polarity: 'good', scope: 'sell', text: '本月低端需求 +1，中端需求 +1。', mods: { demand: T(1, 1) } },
   { id: 'R2', climate: 'recovery', name: '原料低价', type: 'instant', polarity: 'good', scope: 'buy', text: '本月所有原料供给 +2，价格降 1 档。', mods: { allSupply: 2, allTierShift: -1 } },
-  { id: 'R3', climate: 'recovery', name: '招工不易', type: 'instant', polarity: 'bad', scope: 'make', text: '本月招聘成本 +1w（每名）。', mods: { notes: ['招聘费 +1w'] } },
-  { id: 'R4', climate: 'recovery', name: '现金紧张', type: 'instant', polarity: 'bad', scope: 'cash', text: '本月借款利息 +1w。', mods: { rateShift: 1 } },
-  { id: 'R5', climate: 'recovery', name: '政策观望', type: 'instant', polarity: 'neutral', scope: 'ops', text: '本月抽卡多抽 1 张，但手牌上限 -1。', mods: { drawBonus: 1, handBonus: -1, notes: ['抽卡 +1 张', '手牌上限 -1'] } },
+  { id: 'R3', climate: 'recovery', name: '招工不易', type: 'instant', polarity: 'bad', scope: 'make', text: '本月招聘费 +1w（每名）。', mods: { notes: ['招聘费 +1w'] } },
+  { id: 'R4', climate: 'recovery', name: '现金紧张', type: 'instant', polarity: 'bad', scope: 'cash', needs: ['finance'], text: '本月借款利息 +1w。', mods: { rateShift: 1 } },
+  { id: 'R5', climate: 'recovery', name: '政策观望', type: 'instant', polarity: 'neutral', scope: 'ops', needs: ['cards'], text: '本月抽卡多抽 1 张，但手牌上限 -1。', mods: { drawBonus: 1, handBonus: -1, notes: ['抽卡 +1 张', '手牌上限 -1'] } },
   {
-    id: 'R6', climate: 'recovery', name: '低息贷款', type: 'choice', polarity: 'good', scope: 'cash', text: '银行愿意放款，代价是抬高你全部借款的利息。',
+    id: 'R6', climate: 'recovery', name: '低息贷款', type: 'choice', polarity: 'good', scope: 'cash', needs: ['finance'], text: '银行愿意放款，代价是抬高你全部借款的利息。',
     options: [
       { label: '接受贷款', detail: '借款额度 +5w，本月借款利率 +1w', mods: { notes: ['借款额度 +5w'] }, cost: {}, extra: '额度 +5w · 利率 +1w' },
       { label: '不借款', detail: '本月资金 +2w', gain: 20 },
@@ -421,7 +421,7 @@ export const EVENTS: GameEventDef[] = [
   {
     id: 'R8', climate: 'recovery', name: '渠道选择', type: 'choice', polarity: 'neutral', scope: 'sell', text: '自建渠道还是省下这笔力气。',
     options: [
-      { label: '投入渠道（1 AP）', detail: '消耗 1 AP，本月销售资源 +4', cost: { ap: 1 }, mods: { salesResource: 4 } },
+      { label: '投入渠道（1 AP）', detail: '消耗 1 AP，本月销售资源 +4（可推低端需求 +4 / 中端 +2 / 高端 +1）', cost: { ap: 1 }, mods: { salesResource: 4 } },
       { label: '放弃', detail: '本月销售资源 -2', mods: { salesResource: -2 } },
     ],
   },
@@ -430,14 +430,14 @@ export const EVENTS: GameEventDef[] = [
 
   // ── 繁荣 ──────────────────────────────────────────────
   { id: 'P1', climate: 'boom', name: '消费旺盛', type: 'instant', polarity: 'good', scope: 'sell', text: '本月低端、中端、高端需求各 +1。', mods: { demand: T(1, 1, 1) } },
-  { id: 'P2', climate: 'boom', name: '产能满载', type: 'instant', polarity: 'good', scope: 'make', text: '本月产能 +2。', mods: { capacity: 2 } },
+  { id: 'P2', climate: 'boom', name: '产能满载', type: 'instant', polarity: 'good', scope: 'make', text: '本月产能 +3。', mods: { capacity: 3 } },
   { id: 'P3', climate: 'boom', name: '原料跟涨', type: 'instant', polarity: 'bad', scope: 'buy', text: '本月所有原料供给 -2，价格升 1 档。', mods: { allSupply: -2, allTierShift: 1 } },
-  { id: 'P4', climate: 'boom', name: '用工成本上升', type: 'instant', polarity: 'bad', scope: 'ops', text: '本月每名员工薪酬 +0.5w。', mods: { salaryPer: 5 } },
-  { id: 'P5', climate: 'boom', name: '资金充裕', type: 'instant', polarity: 'neutral', scope: 'cash', text: '本月借款利率 -1w，但现金不产生任何利息。', mods: { rateShift: -1 } },
+  { id: 'P4', climate: 'boom', name: '用工成本上升', type: 'instant', polarity: 'bad', scope: 'ops', text: '本月每名员工薪酬 +0.5w（全部门）。', mods: { salaryPer: 5 } },
+  { id: 'P5', climate: 'boom', name: '资金充裕', type: 'instant', polarity: 'neutral', scope: 'cash', needs: ['finance'], text: '本月借款利率 -1w，但现金不产生任何利息。', mods: { rateShift: -1 } },
   {
     id: 'P6', climate: 'boom', name: '扩产机会', type: 'choice', polarity: 'good', scope: 'make', text: '设备厂给出一步到位的报价。',
     options: [
-      { label: '购买设备（5w）', detail: '现金 -5w，立即获得一台产能 10 的设备', cost: { cash: 50 }, extra: '设备 +1 · 产能 +10' },
+      { label: '购买设备（5w）', detail: '现金 -5w，立即获得 1 台产线（每名生产人员产能 +2、月折旧 0.2w；无生产人员则产能无增益）', cost: { cash: 50 }, extra: '设备 +1 · 产能 +10' },
       { label: '不购买', detail: '本月产能 +5', mods: { capacity: 5 } },
     ],
   },
@@ -455,19 +455,19 @@ export const EVENTS: GameEventDef[] = [
       { label: '自行研究', detail: '本月研发进度 +1', mods: { rndProgress: 1 } },
     ],
   },
-  { id: 'P9', climate: 'boom', name: '大订单', type: 'chance', polarity: 'good', scope: 'sell', text: '客户愿意签一份确定性采购合同。', chance: { cost: { ap: 2 }, mods: { orders: 1, orderQty: 10, orderPriceShift: 1 }, detail: '消耗 2 AP，获得 1 个确定性订单（数量 10，价格 +1 档）' } },
+  { id: 'P9', climate: 'boom', name: '大订单', type: 'chance', polarity: 'good', scope: 'sell', text: '客户愿意签一份确定性采购合同。', chance: { cost: { ap: 2 }, mods: { orders: 1, orderQty: 10, orderPriceShift: 1 }, detail: '消耗 2 AP，获得 1 个确定性订单（10 件，订单价高于市价 2 档，月末结算交付）' } },
   { id: 'P10', climate: 'boom', name: '猎头服务', type: 'chance', polarity: 'good', scope: 'ops', text: '猎头手上有一份现成名单。', chance: { cost: { cash: 30 }, mods: { notes: ['本月可额外招聘 1 人（不耗 AP）'] }, detail: '支付 3w，本月可多招聘 1 人（不耗 AP）' } },
 
   // ── 过热 ──────────────────────────────────────────────
   { id: 'O1', climate: 'overheat', name: '需求爆棚', type: 'instant', polarity: 'good', scope: 'sell', text: '本月中端 +1、高端 +2、特殊 +1 需求。', mods: { demand: T(0, 1, 2, 1) } },
-  { id: 'O2', climate: 'overheat', name: '加班文化', type: 'instant', polarity: 'good', scope: 'make', text: '本月产能 +3，但每名员工薪酬 +1w。', mods: { capacity: 3, salaryPer: 10 } },
+  { id: 'O2', climate: 'overheat', name: '加班文化', type: 'instant', polarity: 'good', scope: 'make', text: '本月产能 +3，但每名员工薪酬 +1w（全部门）。', mods: { capacity: 3, salaryPer: 10 } },
   { id: 'O3', climate: 'overheat', name: '原料飞涨', type: 'instant', polarity: 'bad', scope: 'buy', text: '本月所有原料供给 -4、价格升 1 档；芯片额外供给 -1、价格再升 1 档。', mods: { allSupply: -4, allTierShift: 1, materials: { chip: { supply: -1, tierShift: 1 } } } },
-  { id: 'O4', climate: 'overheat', name: '银根收紧', type: 'instant', polarity: 'bad', scope: 'cash', text: '本月借款利率 +2w，借款额度减半。', mods: { rateShift: 2, creditFactor: 0.5 } },
-  { id: 'O5', climate: 'overheat', name: '监管检查', type: 'instant', polarity: 'neutral', scope: 'ops', text: '本月每打出一张牌需额外支付 1w。', mods: { notes: ['打牌费用 +1w/张'] } },
+  { id: 'O4', climate: 'overheat', name: '银根收紧', type: 'instant', polarity: 'bad', scope: 'cash', needs: ['finance'], text: '本月借款利率 +2w，借款额度减半。', mods: { rateShift: 2, creditFactor: 0.5 } },
+  { id: 'O5', climate: 'overheat', name: '监管检查', type: 'instant', polarity: 'neutral', scope: 'ops', needs: ['cards'], text: '本月每打出一张牌需额外支付 1w。', mods: { notes: ['打牌费用 +1w/张'] } },
   {
     id: 'O6', climate: 'overheat', name: '长期协议', type: 'choice', polarity: 'bad', scope: 'buy', text: '供应商希望你签下长约以对冲涨价。',
     options: [
-      { label: '签下长约（4w）', detail: '现金 -4w，锁定一种原料 3 个月，每月中批供应（不占部门协议名额）', cost: { cash: 40 }, extra: '立即签订 1 份长期协议' },
+      { label: '签下长约（4w）', detail: '现金 -4w，立即签订一份包材 3 个月长期协议（每月中批供应，不占部门协议名额）', cost: { cash: 40 }, extra: '立即签订长期协议（包材 · 3 个月）' },
       { label: '拒绝', detail: '本月所有原料价格升 1 档', mods: { allTierShift: 1 } },
     ],
   },
@@ -486,14 +486,14 @@ export const EVENTS: GameEventDef[] = [
     ],
   },
   { id: 'O9', climate: 'overheat', name: '短期理财', type: 'chance', polarity: 'good', scope: 'cash', text: '有笔短期资金可以拆出去。', chance: { cost: { cash: 50 }, detail: '支付 5w，下月返还 6w', mods: { notes: ['下月现金 +6w'] } } },
-  { id: 'O10', climate: 'overheat', name: '技术突破', type: 'chance', polarity: 'good', scope: 'rnd', text: '外部有一份可以买断的技术资料。', chance: { cost: { cash: 30 }, detail: '支付 3w，立即获得 1 个随机普通知识产权（持续到本季结束）', mods: { tempIps: ['normal'] } } },
+  { id: 'O10', climate: 'overheat', name: '技术突破', type: 'chance', polarity: 'good', scope: 'rnd', text: '外部有一份可以买断的技术资料。', chance: { cost: { cash: 30 }, detail: '支付 3w，立即获得 1 个随机普通知识产权（本月有效）', mods: { tempIps: ['normal'] } } },
 
   // ── 滞涨 ──────────────────────────────────────────────
   { id: 'S1', climate: 'stagflation', name: '需求萎缩', type: 'instant', polarity: 'bad', scope: 'sell', text: '本月低端、中端、高端需求各 -1。', mods: { demand: T(-1, -1, -1) } },
   { id: 'S2', climate: 'stagflation', name: '成本高企', type: 'instant', polarity: 'bad', scope: 'buy', text: '本月所有原料供给 -3，价格升 1 档。', mods: { allSupply: -3, allTierShift: 1 } },
-  { id: 'S3', climate: 'stagflation', name: '现金为王', type: 'instant', polarity: 'bad', scope: 'cash', text: '本月借款利率 +2w。', mods: { rateShift: 2 } },
+  { id: 'S3', climate: 'stagflation', name: '现金为王', type: 'instant', polarity: 'bad', scope: 'cash', needs: ['finance'], text: '本月借款利率 +2w。', mods: { rateShift: 2 } },
   { id: 'S4', climate: 'stagflation', name: '裁员优化', type: 'instant', polarity: 'good', scope: 'ops', text: '本月可免费解雇 1 名员工，并返还其招聘费 50%。', mods: { notes: ['可在运营部解雇 1 人'] } },
-  { id: 'S5', climate: 'stagflation', name: '库存积压', type: 'instant', polarity: 'neutral', scope: 'make', text: '本月生产入库的产品，下月售价降 1 档。', mods: { notes: ['下月售价 -1 档'] } },
+  { id: 'S5', climate: 'stagflation', name: '库存积压', type: 'instant', polarity: 'neutral', scope: 'make', text: '产品卖不动，下月全部产品市价降 1 档。', mods: { notes: ['下月售价 -1 档'] } },
   {
     id: 'S6', climate: 'stagflation', name: '价格战', type: 'choice', polarity: 'bad', scope: 'sell', text: '对手已经开始降价。',
     options: [
@@ -511,19 +511,19 @@ export const EVENTS: GameEventDef[] = [
   {
     id: 'S8', climate: 'stagflation', name: '研发降本', type: 'choice', polarity: 'neutral', scope: 'rnd', text: '外协可以分担一部分研发工作。',
     options: [
-      { label: '支付 2w', detail: '现金 -2w，本月研发费用 -3w', cost: { cash: 20 }, mods: { rndCost: -30 } },
+      { label: '支付 2w', detail: '现金 -2w，本月每个在研项目的研发费用 -3w', cost: { cash: 20 }, mods: { rndCost: -30 } },
       { label: '自己扛', detail: '本月研发进度 -2', mods: { rndProgress: -2 } },
     ],
   },
-  { id: 'S9', climate: 'stagflation', name: '债务重组', type: 'chance', polarity: 'good', scope: 'cash', text: '可以谈一次债务重组。', chance: { cost: { cash: 20 }, mods: { rateShift: -2 }, detail: '支付 2w 手续费，本月借款利率 -2w' } },
+  { id: 'S9', climate: 'stagflation', name: '债务重组', type: 'chance', polarity: 'good', scope: 'cash', needs: ['finance'], text: '可以谈一次债务重组。', chance: { cost: { cash: 20 }, mods: { rateShift: -2 }, detail: '支付 2w 手续费，本月借款利率 -2w' } },
   { id: 'S10', climate: 'stagflation', name: '精益管理', type: 'chance', polarity: 'good', scope: 'ops', text: '顾问团队能压缩一轮人力成本。', chance: { cost: { ap: 1 }, mods: { salaryPer: -5 }, detail: '消耗 1 AP，本月每名员工薪酬 -0.5w' } },
 
   // ── 衰退 ──────────────────────────────────────────────
   { id: 'D1', climate: 'recession', name: '订单取消', type: 'instant', polarity: 'bad', scope: 'sell', text: '本月低端 -2、中端 -1、高端 -1 需求。', mods: { demand: T(-2, -1, -1) } },
   { id: 'D2', climate: 'recession', name: '原料下跌', type: 'instant', polarity: 'good', scope: 'buy', text: '本月所有原料供给 +3，价格降 1 档。', mods: { allSupply: 3, allTierShift: -1 } },
   { id: 'D3', climate: 'recession', name: '设备闲置', type: 'instant', polarity: 'bad', scope: 'make', text: '本月产能 -3。', mods: { capacity: -3 } },
-  { id: 'D4', climate: 'recession', name: '降息周期', type: 'instant', polarity: 'good', scope: 'cash', text: '本月借款利率 -2w。', mods: { rateShift: -2 } },
-  { id: 'D5', climate: 'recession', name: '人才回流', type: 'instant', polarity: 'neutral', scope: 'ops', text: '本月招聘费 -1w，但每名员工薪酬 +0.5w。', mods: { salaryPer: 5, notes: ['招聘费 -1w'] } },
+  { id: 'D4', climate: 'recession', name: '降息周期', type: 'instant', polarity: 'good', scope: 'cash', needs: ['finance'], text: '本月借款利率 -2w。', mods: { rateShift: -2 } },
+  { id: 'D5', climate: 'recession', name: '人才回流', type: 'instant', polarity: 'neutral', scope: 'ops', text: '本月招聘费 -1w，但每名员工薪酬 +0.5w（全部门）。', mods: { salaryPer: 5, notes: ['招聘费 -1w'] } },
   {
     id: 'D6', climate: 'recession', name: '清仓甩卖', type: 'choice', polarity: 'bad', scope: 'sell', text: '库存压得厉害。',
     options: [
@@ -534,7 +534,7 @@ export const EVENTS: GameEventDef[] = [
   {
     id: 'D7', climate: 'recession', name: '签订长约', type: 'choice', polarity: 'good', scope: 'buy', text: '低位锁定供应是笔好买卖。',
     options: [
-      { label: '支付 3w 签长约', detail: '现金 -3w，锁定一种原料 6 个月，每月中批供应', cost: { cash: 30 }, extra: '立即签订 1 份 6 个月长期协议' },
+      { label: '支付 3w 签长约', detail: '现金 -3w，立即签订一份包材 6 个月长期协议（每月中批供应，不占部门协议名额）', cost: { cash: 30 }, extra: '立即签订 6 个月长期协议（包材）' },
       { label: '不签', detail: '本月所有原料价格降 1 档', mods: { allTierShift: -1 } },
     ],
   },
@@ -545,15 +545,15 @@ export const EVENTS: GameEventDef[] = [
       { label: '收缩投入', detail: '本月研发进度 -2', mods: { rndProgress: -2 } },
     ],
   },
-  { id: 'D9', climate: 'recession', name: '低价设备', type: 'chance', polarity: 'good', scope: 'make', text: '有企业正在出清设备。', chance: { cost: { cash: 50 }, detail: '支付 5w，获得一台产能 10 的设备，折旧减半', mods: { notes: ['设备 +1（折旧减半）'] } } },
+  { id: 'D9', climate: 'recession', name: '低价设备', type: 'chance', polarity: 'good', scope: 'make', text: '有企业正在出清设备。', chance: { cost: { cash: 50 }, detail: '支付 5w，获得 1 条标准产线（每名生产人员产能 +2、月折旧 0.1w、折旧减半；无生产人员则产能无增益）', mods: { notes: ['设备 +1（折旧减半）'] } } },
   { id: 'D10', climate: 'recession', name: '猎头抄底', type: 'chance', polarity: 'good', scope: 'ops', text: '有人才正待价而沽。', chance: { cost: { cash: 20 }, detail: '支付 2w，免费获得 1 名管理人员（不耗 AP）', mods: { notes: ['管理人员 +1'] } } },
 
   // ── 萧条 ──────────────────────────────────────────────
   { id: 'X1', climate: 'depression', name: '需求冰点', type: 'instant', polarity: 'bad', scope: 'sell', text: '本月低端 -2、中端 -2、高端 -1、特殊 -1 需求。', mods: { demand: T(-2, -2, -1, -1) } },
   { id: 'X2', climate: 'depression', name: '原料白菜价', type: 'instant', polarity: 'good', scope: 'buy', text: '本月所有原料供给 +5、价格降 1 档；芯片供给不增加、价格不变。', mods: { allSupply: 5, allTierShift: -1, materials: { chip: { supply: -5, tierShift: 1 } } } },
-  { id: 'X3', climate: 'depression', name: '信贷冻结', type: 'instant', polarity: 'bad', scope: 'cash', text: '本月无法新增借款，且已有借款利率 +1w。', mods: { noBorrow: true, rateShift: 1 } },
+  { id: 'X3', climate: 'depression', name: '信贷冻结', type: 'instant', polarity: 'bad', scope: 'cash', needs: ['finance'], text: '本月无法新增借款，且已有借款利率 +1w。', mods: { noBorrow: true, rateShift: 1 } },
   { id: 'X4', climate: 'depression', name: '停工潮', type: 'instant', polarity: 'bad', scope: 'make', text: '本月产能 -4。', mods: { capacity: -4 } },
-  { id: 'X5', climate: 'depression', name: '破产潮', type: 'instant', polarity: 'neutral', scope: 'ops', text: '可以低价收购 1 名员工，需支付其原招聘费 50%。', mods: { notes: ['招聘费 -50%'] } },
+  { id: 'X5', climate: 'depression', name: '破产潮', type: 'instant', polarity: 'neutral', scope: 'ops', text: '人才正待价而沽，本月招聘费 -50%。', mods: { notes: ['招聘费 -50%'] } },
   {
     id: 'X6', climate: 'depression', name: '生存第一', type: 'choice', polarity: 'bad', scope: 'sell', text: '活下来比什么都重要。',
     options: [
@@ -571,11 +571,11 @@ export const EVENTS: GameEventDef[] = [
   {
     id: 'X8', climate: 'depression', name: '技术储备', type: 'choice', polarity: 'neutral', scope: 'rnd', text: '有人愿意低价转让技术。',
     options: [
-      { label: '支付 3w', detail: '现金 -3w，获得 1 个随机普通知识产权', cost: { cash: 30 }, extra: '获得 1 个随机普通知识产权' },
+      { label: '支付 3w', detail: '现金 -3w，获得 1 个随机普通知识产权（本月有效）', cost: { cash: 30 }, extra: '获得 1 个随机普通知识产权' },
       { label: '放弃', detail: '本月研发进度 -4', mods: { rndProgress: -4 } },
     ],
   },
-  { id: 'X9', climate: 'depression', name: '资产抄底', type: 'chance', polarity: 'good', scope: 'make', text: '破产清算现场有一台好设备。', chance: { cost: { cash: 80 }, detail: '支付 8w，获得一台产能 15 的设备', mods: { notes: ['设备 +1 · 产能 15'] } } },
+  { id: 'X9', climate: 'depression', name: '资产抄底', type: 'chance', polarity: 'good', scope: 'make', text: '破产清算现场有一台好设备。', chance: { cost: { cash: 80 }, detail: '支付 8w，获得 1 条清算产线（每名生产人员产能 +2、月折旧 0.2w；无生产人员则产能无增益）', mods: { notes: ['设备 +1 · 产能 15'] } } },
   { id: 'X10', climate: 'depression', name: '政府救助', type: 'chance', polarity: 'good', scope: 'cash', text: '有一笔无息纾困贷款。', chance: { cost: { ap: 1 }, detail: '消耗 1 AP，获得 10w 无息贷款（下月偿还）', mods: { notes: ['现金 +10w', '下月偿还 10w'] } } },
 ]
 
@@ -734,76 +734,76 @@ export const CARDS: CardDef[] = [
   // ── 采购 ──────────────────────────────────────────────
   {
     id: 'C1', name: '批量采购', kind: 'buy', core: true,
-    text: '本月采购价格降 1 档。若本月采购档数 ≥ 2，额外降 1 档。',
-    empowered: '本月采购价格降 2 档。若本月采购档数 ≥ 2，额外降 1 档。',
-    base: (c) => ({ buyTierShift: -1, flags: c.empowered ? ['buyTierExtra'] : [] }),
+    text: '本月采购价格降 1 档；自第 2 个已选采购档起再降 1 档。',
+    empowered: '本月采购价格降 2 档；自第 2 个已选采购档起再降 1 档。',
+    base: () => ({ buyTierShift: -1, flags: ['buyTierExtra'] }),
     strong: () => ({ buyTierShift: -2, flags: ['buyTierExtra'] }),
   },
   {
     id: 'C2', name: '囤货', kind: 'buy',
-    text: '本月每类原料供给 +4，且本月采购的原料不占库存上限。',
-    empowered: '本月每类原料供给 +8，且本月采购的原料不占库存上限。',
+    text: '本月每类原料供给 +4，且本月采购不占仓容上限。',
+    empowered: '本月每类原料供给 +8，且本月采购不占仓容上限。',
     base: (c) => ({ buySupply: c.empowered ? 8 : 4, flags: ['noCap'] }),
   },
   {
     id: 'C3', name: '压价', kind: 'buy',
-    text: '本月采购价格降 2 档，但本月可选档数 -1。',
-    empowered: '本月采购价格降 3 档，且不受可选档数惩罚。',
-    base: (c) => ({ buyTierShift: -2, buyLots: -1, flags: c.empowered ? ['noLotPenalty'] : [] }),
+    text: '本月采购价格降 2 档，但本月可选采购档数 -1。',
+    empowered: '本月采购价格降 3 档，且无档数惩罚。',
+    base: () => ({ buyTierShift: -2, buyLots: -1 }),
     strong: () => ({ buyTierShift: -3 }),
   },
   {
     id: 'C4', name: '贸易商', kind: 'buy',
-    text: '本月获得一次额外小批采购机会，价格 +1 档。若采购 ≥ 3 人，可指定品种。',
-    cond: '采购 ≥ 3 人：可指定品种',
-    empowered: '本月获得两次额外小批采购机会，价格不变，且可指定品种。',
+    text: '本月获得 1 次额外贸易商购买机会（小批、价格 +1 档，不占档数）。',
+    empowered: '本月获得 2 次额外贸易商购买机会（小批、价格 +1 档，不占档数）。',
     base: () => ({ flags: ['trader'] }),
   },
   {
     id: 'C5', name: '长期协议', kind: 'buy', core: true,
-    text: '立即签订一份长期协议，不占部门协议名额。若采购 ≥ 4 人，锁定期改为 6 个月。',
+    text: '立即签订一份包材 3 个月长期协议（每月中批供应，不占部门协议名额）。若采购 ≥ 4 人，锁定期改为 6 个月。',
     cond: '采购 ≥ 4 人：锁定期 6 个月',
-    empowered: '立即签订两份长期协议，锁定期 6 个月，均不占部门协议名额。',
+    empowered: '立即签订两份包材长期协议，各锁定 6 个月，均不占部门协议名额。',
     base: (c) => ({ flags: [S(c, 'buy') >= 4 ? 'agreement2x6' : 'agreement2x3'] }),
     strong: () => ({ flags: ['agreement2x6', 'agreementDouble'] }),
   },
   {
     id: 'C6', name: '紧急采购', kind: 'buy',
-    text: '立即获得小批原料，价格 +2 档，不占本月档数。若本月已打出过紧急采购，可再打出 1 次。',
-    empowered: '立即获得中批原料，价格 +1 档，不占本月档数。',
+    text: '本月每类原料 1 次紧急采购机会：小批、价格 +2 档，不占档数（采购页使用）。',
+    empowered: '本月每类原料 1 次紧急采购机会：中批、价格 +1 档，不占档数（采购页使用）。',
     base: (c) => ({ flags: [c.empowered ? 'urgentMid' : 'urgent'] }),
   },
   {
     id: 'C7', name: '原料替换', kind: 'buy',
-    text: '将一种原料替换为等量另一种原料，按当前价格结算差价。',
-    empowered: '替换时额外获得 2 单位目标原料。',
+    text: '按账面单价出售 5 单位任一原料，按当前价格购入 5 单位另一种原料，不占档数（采购页使用）。',
+    empowered: '按账面单价出售 5 单位任一原料，按当前价格购入 7 单位另一种原料，不占档数（采购页使用）。',
     base: (c) => ({ flags: [c.empowered ? 'swapPlus' : 'swap'] }),
   },
   {
     id: 'C8', name: '供应商关系', kind: 'buy',
-    text: '本月采购价格降 1 档。若上月也打出过此牌，改为降 2 档。',
-    empowered: '本月采购价格降 2 档。若上月也打出过此牌，改为降 3 档。',
+    text: '本月采购价格降 1 档；若上月也打出过此牌，降 2 档。',
+    empowered: '本月采购价格降 2 档；若上月也打出过此牌，降 3 档。',
     base: (c) => ({ buyTierShift: c.empowered ? -2 : -1, flags: ['supplierRelation'] }),
   },
   {
     id: 'C9', name: '期货', kind: 'buy', cost: 20,
-    text: '支付 2w，锁定下月一种原料价格。若下月该原料涨价，你仍按本月价格采购。',
-    empowered: '支付 2w，锁定下月全部原料价格。',
+    text: '支付 2w，锁定下月档位最高原料的价格（该原料下月档位上涨时，仍按本月锁定档位采购）。',
+    empowered: '支付 2w，锁定下月全部原料价格（档位上涨时按本月锁定档位采购）。',
     base: (c) => ({ flags: [c.empowered ? 'futuresAll' : 'futures'] }),
   },
   {
     id: 'C10', name: '清仓', kind: 'buy',
-    text: '以低 2 档价格购买小批指定原料。若本月不采购其他原料，额外 +2 单位。',
-    empowered: '以低 2 档价格购买中批指定原料，且额外 +2 单位。',
+    text: '本月每类原料 1 次清仓采购机会：小批、价格 -2 档，不占档数（采购页使用）。',
+    empowered: '本月每类原料 1 次清仓采购机会：中批、价格 -2 档，不占档数（采购页使用）。',
     base: (c) => ({ flags: [c.empowered ? 'clearanceMid' : 'clearance'] }),
   },
 
   // ── 生产 ──────────────────────────────────────────────
   {
     id: 'P1', name: '满负荷', kind: 'make', core: true,
-    text: '本月产能 +2。若本月产能全部用完，额外 +1。',
-    empowered: '本月产能 +4。若本月产能全部用完，额外 +2。',
-    base: (c) => ({ capacity: c.empowered ? 4 : 2, flags: ['fullLoad'] }),
+    text: '本月产能 +3。',
+    empowered: '本月产能 +6。',
+    base: () => ({ capacity: 3 }),
+    strong: () => ({ capacity: 6 }),
   },
   {
     id: 'P2', name: '质量管控', kind: 'make', core: true,
@@ -813,15 +813,15 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'P3', name: '加班', kind: 'make',
-    text: '本月产能 +3，但薪酬 +1w。可支付 2w 改为 +5。',
-    empowered: '本月产能 +5，薪酬 +1w。可支付 2w 改为 +8。',
-    base: (c) => ({ capacity: c.empowered ? 5 : 3, salary: 10, flags: ['overtimeCard'] }),
+    text: '本月产能 +4，每名员工薪酬 +0.5w（全部门）。',
+    empowered: '本月产能 +7，每名员工薪酬 +1w（全部门）。',
+    base: (c) => ({ capacity: c.empowered ? 7 : 4, salary: c.empowered ? 10 : 5 }),
   },
   {
     id: 'P4', name: '设备维护', kind: 'make',
-    text: '本月产能 +1。',
-    empowered: '本月产能 +3。',
-    base: (c) => ({ capacity: c.empowered ? 3 : 1 }),
+    text: '本月产能 +2。',
+    empowered: '本月产能 +4。',
+    base: (c) => ({ capacity: c.empowered ? 4 : 2 }),
   },
   {
     id: 'P5', name: '工人培训', kind: 'make',
@@ -833,23 +833,24 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'P6', name: '批量生产', kind: 'make',
-    text: '本月产能 +2。若生产 ≥ 5 人，改为 +3。',
-    cond: '生产 ≥ 5 人：+3',
-    empowered: '本月产能 +4。若生产 ≥ 5 人，改为 +5。',
-    base: (c) => ({ capacity: S(c, 'make') >= 5 ? (c.empowered ? 5 : 3) : c.empowered ? 4 : 2 }),
+    text: '本月产能 +2。若生产 ≥ 5 人，+4。',
+    cond: '生产 ≥ 5 人：+4',
+    empowered: '本月产能 +4。若生产 ≥ 5 人，+6。',
+    base: (c) => ({ capacity: S(c, 'make') >= 5 ? (c.empowered ? 6 : 4) : c.empowered ? 4 : 2 }),
   },
   {
     id: 'P7', name: '精益生产', kind: 'make',
-    text: '本月产能 +1，且生产成本 -10%。',
-    empowered: '本月产能 +2，且生产成本 -20%。',
-    base: (c) => ({ capacity: c.empowered ? 2 : 1, costFactor: c.empowered ? 0.8 : 0.9 }),
+    text: '本月产能 +2，且生产成本 -10%。',
+    empowered: '本月产能 +3，且生产成本 -20%。',
+    base: (c) => ({ capacity: c.empowered ? 3 : 2, costFactor: c.empowered ? 0.8 : 0.9 }),
   },
   {
     id: 'P8', name: '轮班制', kind: 'make',
-    text: '本月产能 +2，薪酬 +0.5w。若生产 ≥ 3 人，无薪酬惩罚。',
+    text: '本月产能 +2，每名员工薪酬 +0.5w（全部门）。若生产 ≥ 3 人，无薪酬惩罚。',
     cond: '生产 ≥ 3 人：无惩罚',
-    empowered: '本月产能 +4。若生产 ≥ 3 人，无薪酬惩罚。',
-    base: (c) => ({ capacity: c.empowered ? 4 : 2, salary: S(c, 'make') >= 3 ? 0 : 5 }),
+    empowered: '本月产能 +4，无薪酬惩罚。',
+    base: (c) => ({ capacity: c.empowered ? 4 : 2, salary: c.empowered ? 0 : (S(c, 'make') >= 3 ? 0 : 5) }),
+    strong: () => ({ capacity: 4 }),
   },
   {
     id: 'P9', name: '自动化', kind: 'make',
@@ -860,8 +861,8 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'P10', name: '库存清理', kind: 'make',
-    text: '将 5 单位库存商品以成本价出售。若库存 ≥ 10，可出售 10 单位。',
-    empowered: '将 10 单位库存商品以成本价出售。若库存 ≥ 10，可出售 15 单位。',
+    text: '月末结算时，将成品库存最多的产品按账面单价出售 5 件（不计损益，只把存货换成现金）；总库存 ≥ 10 件时出售 10 件。',
+    empowered: '月末结算时按账面单价出售 10 件；总库存 ≥ 15 件时出售 15 件。',
     base: (c) => ({ flags: [c.empowered ? 'clearStock15' : 'clearStock'] }),
   },
 
@@ -871,29 +872,28 @@ export const CARDS: CardDef[] = [
     text: '本月低端需求 +2。若销售 ≥ 3 人，额外 +1。',
     cond: '销售 ≥ 3 人：额外 +1',
     empowered: '本月低端需求 +4。若销售 ≥ 3 人，额外 +2。',
-    base: (c) => ({ demand: T(2 + (S(c, 'sell') >= 3 ? 1 : 0), 0, 0, 0), capacity: 0 }),
+    base: (c) => ({ demand: T(2 + (S(c, 'sell') >= 3 ? 1 : 0), 0, 0, 0) }),
     strong: (c) => ({ demand: T(4 + (S(c, 'sell') >= 3 ? 2 : 0), 0, 0, 0) }),
   },
   {
     id: 'S2', name: '渠道拓展', kind: 'sell',
-    text: '本月销售资源 +5。若销售 ≥ 2 人，额外 +3。',
+    text: '本月销售资源 +5（可推低端需求 +5 / 中端 +2 / 高端 +1）。若销售 ≥ 2 人，额外 +3。',
     cond: '销售 ≥ 2 人：额外 +3',
-    empowered: '本月销售资源 +8。若销售 ≥ 2 人，额外 +5。',
+    empowered: '本月销售资源 +8（可推低端需求 +8 / 中端 +4 / 高端 +2）。若销售 ≥ 2 人，额外 +5。',
     base: (c) => ({ salesResource: (c.empowered ? 8 : 5) + (S(c, 'sell') >= 2 ? (c.empowered ? 5 : 3) : 0) }),
   },
   {
     id: 'S3', name: '大订单', kind: 'sell', core: true,
-    text: '获得 1 个确定性订单，数量 10。若销售 ≥ 4 人，改为数量 15。',
+    text: '获得 1 个确定性订单（10 件，订单价高于市价 1 档，月末结算交付）。若销售 ≥ 4 人，数量 15 件。',
     cond: '销售 ≥ 4 人：数量 15',
-    empowered: '获得 2 个确定性订单，数量 15。',
+    empowered: '获得 2 个确定性订单，各 15 件（订单价高于市价 1 档）。',
     base: (c) => ({ orders: c.empowered ? 2 : 1, orderQty: S(c, 'sell') >= 4 || c.empowered ? 15 : 10, flags: [c.empowered ? 's3x2' : ''] }),
   },
   {
     id: 'S4', name: '提价', kind: 'sell',
-    text: '本月售价升 1 档，但需求 -1。若高端产品，无需求惩罚。',
-    cond: '高端产品：无惩罚',
-    empowered: '本月售价升 2 档，需求 -1。',
-    base: (c) => ({ price: T(c.empowered ? 2 : 1, c.empowered ? 2 : 1, c.empowered ? 2 : 1, c.empowered ? 2 : 1), demand: T(-1, -1, 0, 0) }),
+    text: '本月产品售价升 1 档，低端与中端需求 -1（高端 / 特殊无需求惩罚）。',
+    empowered: '本月产品售价升 2 档，低端与中端需求 -1（高端 / 特殊无需求惩罚）。',
+    base: (c) => ({ price: c.empowered ? T(2, 2, 2, 2) : T(1, 1, 1, 1), demand: T(-1, -1, 0, 0) }),
   },
   {
     id: 'S5', name: '品牌建设', kind: 'sell',
@@ -904,10 +904,11 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'S6', name: '销售激励', kind: 'sell',
-    text: '本月销售资源 +3，薪酬 +0.5w。若销售 ≥ 3 人，无薪酬惩罚。',
+    text: '本月销售资源 +3（可推低端需求 +3 / 中端 +1），每名员工薪酬 +0.5w（全部门）。若销售 ≥ 3 人，无薪酬惩罚。',
     cond: '销售 ≥ 3 人：无惩罚',
-    empowered: '本月销售资源 +6。若销售 ≥ 3 人，无薪酬惩罚。',
-    base: (c) => ({ salesResource: c.empowered ? 6 : 3, salary: S(c, 'sell') >= 3 ? 0 : 5 }),
+    empowered: '本月销售资源 +6（可推低端需求 +6 / 中端 +3），无薪酬惩罚。',
+    base: (c) => ({ salesResource: c.empowered ? 6 : 3, salary: c.empowered ? 0 : (S(c, 'sell') >= 3 ? 0 : 5) }),
+    strong: () => ({ salesResource: 6 }),
   },
   {
     id: 'S7', name: '市场调研', kind: 'sell',
@@ -922,9 +923,9 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'S8', name: '客户关系', kind: 'sell',
-    text: '本月确定性订单 +1。若已有订单，额外 +1。',
+    text: '本月获得 1 个额外确定性订单（10 件，订单价高于市价 1 档）。若本月已有订单，再 +1 个。',
     cond: '已有订单：额外 +1',
-    empowered: '本月确定性订单 +2。若已有订单，额外 +1。',
+    empowered: '本月获得 2 个额外确定性订单（各 10 件，订单价高于市价 1 档）。若本月已有订单，再 +1 个。',
     base: (c) => ({ orders: c.empowered ? 2 : 1, flags: ['customerRelation', c.empowered ? 's8x2' : ''] }),
   },
   {
@@ -939,10 +940,11 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'S10', name: '高端市场', kind: 'sell',
-    text: '本月高端产品售价升 1 档。若销售 ≥ 4 人，额外升 1 档。',
+    text: '本月高端产品售价升 1 档。若销售 ≥ 4 人，升 2 档。',
     cond: '销售 ≥ 4 人：额外 +1 档',
     empowered: '本月高端、特殊产品售价升 2 档。',
-    base: (c) => ({ priceShift: T(0, 0, S(c, 'sell') >= 4 ? 2 : 1, c.empowered ? 2 : 0) }),
+    base: (c) => ({ priceShift: T(0, 0, S(c, 'sell') >= 4 ? 2 : 1, 0) }),
+    strong: () => ({ priceShift: T(0, 0, 2, 2) }),
   },
 
   // ── 研发 ──────────────────────────────────────────────
@@ -955,9 +957,9 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'R2', name: '降低成本', kind: 'rnd',
-    text: '本月研发成本 -2w。若研发 ≥ 2 人，额外 -1w。',
+    text: '本月每个在研项目的研发费用 -2w。若研发 ≥ 2 人，额外 -1w。',
     cond: '研发 ≥ 2 人：额外 -1w',
-    empowered: '本月研发成本 -4w。若研发 ≥ 2 人，额外 -2w。',
+    empowered: '本月每个在研项目的研发费用 -4w。若研发 ≥ 2 人，额外 -2w。',
     base: (c) => ({ rndCost: -((c.empowered ? 40 : 20) + (S(c, 'rnd') >= 2 ? (c.empowered ? 20 : 10) : 0)) }),
   },
   {
@@ -969,10 +971,10 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'R4', name: '专利申请', kind: 'rnd',
-    text: '获得 1 个随机普通知识产权，持续到本季结束。若研发 ≥ 5 人，改为永久。',
-    cond: '研发 ≥ 5 人：永久',
-    empowered: '获得 1 个随机强力知识产权，持续到本季结束。若研发 ≥ 5 人，改为永久。',
-    base: (c) => ({ flags: [c.empowered ? 'ipStrongTemp' : 'ipNormalTemp', S(c, 'rnd') >= 5 ? 'ipPerm' : ''] }),
+    text: '获得 1 个随机普通知识产权（本月有效）。若研发 ≥ 5 人，改为永久。',
+    cond: '研发 ≥ 5 人：普通永久 / 强化本季',
+    empowered: '获得 1 个随机强力知识产权（本月有效）。若研发 ≥ 5 人，本季有效。',
+    base: (c) => ({ flags: [c.empowered ? 'ipStrongTemp' : 'ipNormalTemp', S(c, 'rnd') >= 5 ? (c.empowered ? 'ipQuarter' : 'ipPerm') : ''] }),
   },
   {
     id: 'R5', name: '研发人员', kind: 'rnd',
@@ -984,8 +986,8 @@ export const CARDS: CardDef[] = [
   {
     id: 'R6', name: '逆向工程', kind: 'rnd',
     minStaff: { rnd: 3 },
-    text: '需研发 ≥ 3 人。立即获得 1 个已研发产品的 BOM，无需研发。',
-    empowered: '需研发 ≥ 3 人。立即获得 2 个已研发产品的 BOM，无需研发。',
+    text: '需研发 ≥ 3 人。立即解锁 1 个未解锁的产品配方（按中端 → 高端 → 特殊顺序，无需研发放置），并揭示新材料。',
+    empowered: '需研发 ≥ 3 人。立即解锁 2 个未解锁的产品配方，无需研发放置。',
     base: (c) => ({ flags: [c.empowered ? 'reverse2' : 'reverse'] }),
   },
   {
@@ -1011,17 +1013,17 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'R10', name: '知识产权保护', kind: 'rnd',
-    text: '本月知识产权不会被事件影响。若研发 ≥ 5 人，额外获得 1 个激活槽。',
+    text: '若研发 ≥ 5 人，本月知识产权激活槽 +1。',
     cond: '研发 ≥ 5 人：额外激活槽',
-    empowered: '本月知识产权不会被事件影响，且立即获得 1 个激活槽。',
+    empowered: '无需人数条件，本月知识产权激活槽 +1。',
     base: (c) => ({ flags: [c.empowered || S(c, 'rnd') >= 5 ? 'ipSlotPlus' : 'ipProtected'] }),
   },
 
   // ── 管理 ──────────────────────────────────────────────
   {
-    id: 'M1', name: '抽 1 弃 1', kind: 'ops',
-    text: '抽 1 张牌，然后弃 1 张牌。若弃的是业务卡，再抽 1 张。',
-    empowered: '抽 2 张牌，然后弃 1 张牌。若弃的是业务卡，再抽 2 张。',
+    id: 'M1', name: '抽牌', kind: 'ops',
+    text: '抽 1 张牌入手。',
+    empowered: '抽 2 张牌入手。',
     base: (c) => ({ flags: [c.empowered ? 'm1b' : 'm1'] }),
   },
   {
@@ -1032,9 +1034,9 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'M3', name: '复制手牌', kind: 'ops',
-    text: '复制一张手牌，立即加入手牌。若复制的是强化卡，额外 +1 AP。',
-    empowered: '复制一张手牌，加入手牌并使其实效按强化计算。若为强化卡，额外 +2 AP。',
-    base: (c) => ({ flags: [c.empowered ? 'm3b' : 'm3'] }),
+    text: '复制一张手牌，立即加入手牌（保留原牌的效果与强化状态）。',
+    empowered: '复制一张手牌，立即加入手牌（保留原牌的效果与强化状态），且本月 AP +1。',
+    base: (c) => ({ flags: [c.empowered ? 'm3b' : 'm3'], ap: c.empowered ? 1 : 0 }),
   },
   {
     id: 'M4', name: '弃 2 换 1', kind: 'ops',

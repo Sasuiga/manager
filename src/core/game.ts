@@ -44,6 +44,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     nextClimateOdds: blankOdds(),
 
     cash: START_CASH,
+    openingCash: START_CASH,
     debt: 0,
     paidIn: START_CASH,
     ownerCapital: 0, // 新模型开局无初始设备，实物投入归零
@@ -99,6 +100,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     ipOwned: [],
     ipActive: [null],
     ipChangedThisMonth: false,
+    quarterIps: [],
     materialsDeveloped: Object.fromEntries(NEW_MATERIALS.map((m) => [m.id, 0])),
     agreements: [],
     futures: {},
@@ -107,6 +109,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     plan: { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false },
     pendingIncome: 0,
     pendingCost: 0,
+    eventCashGift: 0,
     wagePayableBy: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 },
     hireFeeBy: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 },
     nextMonthPrice: {},

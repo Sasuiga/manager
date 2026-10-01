@@ -170,7 +170,8 @@ export function mergeMods(...list: (MonthMods | undefined)[]): MonthMods {
 /** 把一张卡的 CardPlayEffect 转成 MonthMods。 */
 export function cardEffectToMods(e: CardPlayEffect): { mods: MonthMods; flags: string[] } {
   const mods: MonthMods = {}
-  if (e.buyTierShift) mods.allTierShift = (mods.allTierShift ?? 0) + e.buyTierShift
+  // buyTierShift 的卡牌修正在**采购时**生效（buyCardShift：采购价 / 贸易商价），
+  // 不并入展示价格档位（allTierShift），否则与 lotPrice 里的 buyCardShift 重复降档。
   if (e.buySupply) mods.allSupply = (mods.allSupply ?? 0) + e.buySupply
   if (e.buyLots) mods.buyLots = (mods.buyLots ?? 0) + e.buyLots
   if (e.capacity) mods.capacity = (mods.capacity ?? 0) + e.capacity
@@ -195,12 +196,13 @@ function mergeTier(r: Record<Tier, number>): Partial<Record<Tier, number>> {
   return out
 }
 
-/** 当前已激活的知识产权列表（含事件带来的临时知产）。 */
+/** 当前已激活的知识产权列表（含事件/卡牌带来的季度与月度临时知产）。 */
 export function activeIps(state: GameState): string[] {
   const out: string[] = []
   // 核心模式无知产激活槽位：已拥有即生效；完整模式保留槽位制
   const effective = state.mode === 'core' ? state.ipOwned : state.ipActive
   for (const id of effective) if (id) out.push(id)
+  for (const id of state.quarterIps ?? []) if (!out.includes(id)) out.push(id)
   for (const id of state.monthMods.tempIps ?? []) {
     if (id === 'normal' || id === 'strong') {
       // 事件临时知产：从对应池中挑一个尚未拥有的
@@ -376,7 +378,7 @@ export function derive(state: GameState): DerivedTotals {
   const rndCostTotal = rndCost * rndActiveCount
 
   // ── 运营 ──
-  const apMax = BASE_AP + Math.max(0, staffCount.ops - 1) + (mods.ap ?? 0)
+  const apMax = BASE_AP + Math.max(0, staffCount.ops - 1) + (mods.ap ?? 0) + (state.monthFlags.includes('m2solo') ? 1 : 0)
   const playsMax = (staffCount.ops >= 4 ? 3 : BASE_PLAYS) + (mods.plays ?? 0)
   let handMax = BASE_HAND
   if (staffCount.ops >= 3) handMax += 1

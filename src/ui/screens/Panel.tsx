@@ -12,61 +12,78 @@ export function Panel({ g, mode }: { g: Game; mode: 'report' | 'log' }) {
 
 /* ══════════════ 报表 ══════════════ */
 
+/**
+ * 报表页（重做）：只有一页，不再「每月一张报表」切换。
+ * 展示最近 2 个月（本期 / 上期）并列对照，与正常财务报表的本期/上期风格一致；
+ * 列头直接用具体月数（如「2月 / 1月」）而非「本期 / 上期」——
+ * 结算后玩家已进入下月，写「本期」容易与当前经营月混淆。
+ * 仅结算过 1 个月时，第二列留空（—）。
+ */
 function ReportPanel({ g }: { g: Game }) {
   const s = g.s
-  const [month, setMonth] = useState<number | null>(
-    s.ledgers.length ? s.ledgers[s.ledgers.length - 1].month : null,
-  )
-  const idx = month === null ? -1 : s.ledgers.findIndex((l) => l.month === month)
-  const led = idx >= 0 ? s.ledgers[idx] : undefined
-  const bal = idx >= 0 ? s.balanceHistory[idx] : undefined
-  const [drill, setDrill] = useState<string | null>(null)
+  const n = s.ledgers.length
+  const cur = n > 0 ? s.ledgers[n - 1] : undefined
+  const prev = n > 1 ? s.ledgers[n - 2] : undefined
+  const curBal = n > 0 ? s.balanceHistory[n - 1] : undefined
+  const prevBal = n > 1 ? s.balanceHistory[n - 2] : undefined
+  const [drill, setDrill] = useState<{ item: string; month: number } | null>(null)
 
-  if (!led || !bal) {
+  if (!cur || !curBal) {
     return (
       <div className="scroll">
         <div className="card">
-          <h3>报表</h3>
+          <h3>财务报表</h3>
           <div className="title-rule" />
           <p className="muted sm">
-            还没有已结算的月份。完成第一次结算后，这里会出现利润表、资产负债表与财务比率。
+            还没有已结算的月份。完成第一次结算后，这里会出现本期与上期对照的利润表、资产负债表与财务比率。
           </p>
         </div>
       </div>
     )
   }
 
+  // 列头用具体月数：「2月 / 1月」「2月末 / 1月末」，不写「本期 / 上期」
+  const periodHead: [string, string] = [`${cur.month}月`, prev ? `${prev.month}月` : '—']
+  const balanceHead: [string, string] = [`${cur.month}月末`, prev ? `${prev.month}月末` : '—']
+  const drillLed = drill ? s.ledgers.find((l) => l.month === drill.month) : undefined
+
   return (
     <div className="scroll">
-      <div className="wrap">
-        {s.ledgers.map((l) => (
-          <button
-            key={l.month}
-            className={`btn btn-mini${l.month === month ? ' on' : ''}`}
-            style={{
-              width: 'auto',
-              boxShadow:
-                l.month === month
-                  ? 'inset 0 0 0 1px var(--line-gold-hi), var(--glow-gold)'
-                  : undefined,
-            }}
-            onClick={() => setMonth(l.month)}
-          >
-            <span className="btn-main xs">{l.month}月</span>
-          </button>
-        ))}
+      <div className="card">
+        <h3>利润表</h3>
+        <div className="title-rule" />
+        <StmtTable
+          head={periodHead}
+          curMonth={cur.month}
+          prevMonth={prev?.month ?? 0}
+          rows={pnlRows(cur, prev)}
+          onDrill={(item, month) => setDrill({ item, month })}
+        />
+        <div className="hint">
+          现金：{cur.month}月 {wan(cur.cashBegin)} → {wan(cur.cashEnd)}
+          {prev ? `；${prev.month}月 ${wan(prev.cashBegin)} → ${wan(prev.cashEnd)}` : ''}
+        </div>
       </div>
 
-      <ProfitCard led={led} onDrill={setDrill} />
-      <BalanceCard bal={bal} />
-      <RatioCard led={led} bal={bal} />
+      <div className="card">
+        <h3>资产负债表</h3>
+        <div className="title-rule" />
+        <StmtTable head={balanceHead} curMonth={cur.month} prevMonth={prev?.month ?? 0} rows={balRows(curBal, prevBal)} />
+        <div className="hint">均为月末结账数。资产 = 负债 + 所有者权益。借款与应付职工薪酬只作负债列示，不从权益中扣减。</div>
+      </div>
+
+      <div className="card">
+        <h3>财务比率</h3>
+        <div className="title-rule" />
+        <StmtTable head={periodHead} curMonth={cur.month} prevMonth={prev?.month ?? 0} rows={ratioRows(cur, curBal, prev, prevBal)} />
+      </div>
 
       <div className="card">
         <div className="section-label">累计</div>
         <Cumulative g={g} />
       </div>
 
-      {drill ? <DrillSheet name={drill} led={led} onClose={() => setDrill(null)} /> : null}
+      {drill && drillLed ? <DrillSheet name={drill.item} led={drillLed} onClose={() => setDrill(null)} /> : null}
     </div>
   )
 }
@@ -93,119 +110,147 @@ function Cumulative({ g }: { g: Game }) {
   )
 }
 
-function ProfitCard({ led, onDrill }: { led: E.Ledger; onDrill: (n: string) => void }) {
-  const p = led.parts
-  const line = (name: string, v: number, drillable = true) => (
-    <button key={name} className="row" style={{ width: '100%' }} onClick={() => drillable && onDrill(name)}>
-      <span className="row-key">
-        {name}
-        {drillable ? ' ' : ''}
-        {drillable ? <Icon name="chevron" size={11} className="faint" /> : null}
-      </span>
-      <span className={`row-val ${v < 0 ? 'red' : v > 0 ? 'green' : ''}`}>{wan(v)}</span>
-    </button>
-  )
+/** 金额单元格：undefined → 留空（—）；sign 决定着色（sign = 正负着色，neg = 仅负数红）。 */
+type Cell = { text: string; cls?: string; drill?: string }
+type RowDef =
+  | { kind: 'section'; label: string }
+  | { kind: 'row'; label: string; cur: Cell; prev: Cell; bold?: boolean }
 
-  return (
-    <div className="card">
-      <h3>{led.month}月 · 利润表</h3>
-      <div className="title-rule" />
-      <div className="stack-sm">
-        {line('销售收入', led.revenue)}
-        {line('销售成本', -led.cogs)}
-        <div className="row bold">
-          <span className="row-key">毛利</span>
-          <span className="row-val">{wan(led.grossProfit)}</span>
-        </div>
-        {line('生产费用', -led.mfgExpense)}
-        {line('销售费用', -led.sellExpense)}
-        {line('管理费用', -led.adminExpense)}
-        {line('研发费用', -led.rndExpense)}
-        {line('财务费用', -led.financeExpense)}
-        <div className="row">
-          <span className="row-key">营业外收入</span>
-          <span className="row-val green">{wan(p['营业外收入'] ?? 0)}</span>
-        </div>
-        <div className="row">
-          <span className="row-key">所得税</span>
-          <span className="row-val red">{wan(-(p['所得税'] ?? 0))}</span>
-        </div>
-        <div className="row bold">
-          <span className="row-key">净利润</span>
-          <span className="row-val">{wan(led.netProfit)}</span>
-        </div>
-      </div>
-      <div className="hint">
-        现金 {wan(led.cashBegin)} → {wan(led.cashEnd)}
-      </div>
-    </div>
-  )
+const DASH: Cell = { text: '—' }
+
+const money = (v: number | undefined, sign: 'sign' | 'neg' | 'none' = 'none', drill?: string): Cell => {
+  if (v === undefined) return { text: '—', drill }
+  let cls = ''
+  if (sign === 'sign') cls = v < 0 ? 'red' : v > 0 ? 'green' : ''
+  else if (sign === 'neg') cls = v < 0 ? 'red' : ''
+  return { text: wan(v), cls, drill }
 }
 
-function BalanceCard({ bal }: { bal: E.BalanceSheet }) {
-  const net = bal.equipmentGross - bal.equipmentAccum
-  return (
-    <div className="card">
-      <h3>资产负债表</h3>
-      <div className="title-rule" />
-      <div className="section-label">资产</div>
-      <div className="stack-sm">
-        <Row k="现金" v={wan(bal.cash)} cls={bal.cash < 0 ? 'red' : ''} />
-        <Row k="原料存货" v={wan(bal.inventoryMaterial)} />
-        <Row k="成品存货" v={wan(bal.inventoryProduct)} />
-        <Row
-          k={`设备净值（原值 ${wan(bal.equipmentGross)}）`}
-          v={wan(net)}
-        />
-        <div className="row bold">
-          <span className="row-key">资产合计</span>
-          <span className="row-val">{wan(bal.totalAssets)}</span>
-        </div>
-      </div>
+/** 两列表报表：项目 | 本期 | 上期（期末），与正常财务报表版式一致；金额格可下钻。 */
+function StmtTable({
+  head,
+  rows,
+  curMonth,
+  prevMonth,
+  onDrill,
+}: {
+  head: [string, string]
+  rows: RowDef[]
+  curMonth: number
+  prevMonth: number
+  onDrill?: (item: string, month: number) => void
+}) {
+  const val = (c: Cell, month: number) => {
+    const cls = `stmt-val${c.cls ? ` ${c.cls}` : ''}`
+    const item = c.drill
+    if (item && onDrill)
+      return (
+        <button className={`${cls} click`} onClick={() => onDrill(item, month)}>
+          {c.text}
+          <Icon name="chevron" size={10} className="faint" />
+        </button>
+      )
+    return <span className={cls}>{c.text}</span>
+  }
 
-      <div className="section-label" style={{ marginTop: 'var(--s4)' }}>
-        负债与所有者权益
-      </div>
-      <div className="stack-sm">
-        <Row k="借款" v={wan(bal.debt)} />
-        <Row k="应付职工薪酬" v={wan(bal.wagePayable)} />
-        <Row k="实收资本" v={wan(bal.paidIn)} />
-        <Row k="股东实物投入" v={wan(bal.ownerCapital)} />
-        <Row k="留存收益" v={wan(bal.retained)} cls={bal.retained < 0 ? 'red' : ''} />
-        <div className="row bold">
-          <span className="row-key">负债与权益合计</span>
-          <span className="row-val">{wan(bal.debt + bal.wagePayable + bal.equity)}</span>
-        </div>
-      </div>
-      <div className="hint">资产 = 负债 + 所有者权益。借款与应付职工薪酬只作负债列示，不从权益中扣减。</div>
-    </div>
-  )
-}
-
-function RatioCard({ led, bal }: { led: E.Ledger; bal: E.BalanceSheet }) {
-  const eq = bal.equity
-  const rows: [string, string][] = [
-    ['毛利率', led.revenue > 0 ? `${((led.grossProfit / led.revenue) * 100).toFixed(1)}%` : '—'],
-    ['净利率', led.revenue > 0 ? `${((led.netProfit / led.revenue) * 100).toFixed(1)}%` : '—'],
-    ['需求满足率', led.demandTotal > 0 ? `${((led.demandFilled / led.demandTotal) * 100).toFixed(0)}%` : '—'],
-    ['资产负债率', bal.totalAssets > 0 ? `${(((bal.debt + bal.wagePayable) / bal.totalAssets) * 100).toFixed(0)}%` : '—'],
-    ['债务权益比', eq > 0 ? `${((bal.debt / eq) * 100).toFixed(0)}%` : '—'],
-    ['权益乘数', eq > 0 ? (bal.totalAssets / eq).toFixed(2) : '—'],
-  ]
   return (
-    <div className="card">
-      <h3>财务比率</h3>
-      <div className="title-rule" />
-      <div className="stack-sm">
-        {rows.map(([k, v]) => (
-          <div key={k} className="row">
-            <span className="row-key">{k}</span>
-            <span className="row-val">{v}</span>
+    <div className="stmt">
+      <div className="stmt-head">
+        <span>项目</span>
+        <span>{head[0]}</span>
+        <span>{head[1]}</span>
+      </div>
+      {rows.map((r, i) =>
+        r.kind === 'section' ? (
+          <div key={r.label} className="stmt-section">
+            {r.label}
           </div>
-        ))}
-      </div>
+        ) : (
+          <div key={`${r.label}-${i}`} className={`stmt-row${r.bold ? ' bold' : ''}`}>
+            <span className="stmt-label">{r.label}</span>
+            {val(r.cur, curMonth)}
+            {val(r.prev, prevMonth)}
+          </div>
+        ),
+      )}
     </div>
   )
+}
+
+/** 利润表行：本期金额 / 上期金额；可下钻科目点开后看构成。 */
+function pnlRows(cur: E.Ledger, prev: E.Ledger | undefined): RowDef[] {
+  const L = (
+    label: string,
+    f: (l: E.Ledger) => number,
+    opts: { bold?: boolean; sign?: 'sign' | 'none'; drill?: boolean } = {},
+  ): RowDef => ({
+    kind: 'row',
+    label,
+    cur: money(f(cur), opts.sign ?? 'sign', opts.drill === false ? undefined : label),
+    prev: prev ? money(f(prev), opts.sign ?? 'sign', opts.drill === false ? undefined : label) : DASH,
+    bold: opts.bold,
+  })
+  return [
+    L('销售收入', (l) => l.revenue),
+    L('销售成本', (l) => -l.cogs),
+    L('毛利', (l) => l.grossProfit, { bold: true, drill: false }),
+    L('生产费用', (l) => -l.mfgExpense),
+    L('销售费用', (l) => -l.sellExpense),
+    L('管理费用', (l) => -l.adminExpense),
+    L('研发费用', (l) => -l.rndExpense),
+    L('财务费用', (l) => -l.financeExpense),
+    L('营业外收入', (l) => l.parts['营业外收入'] ?? 0, { sign: 'none', drill: false }),
+    L('所得税', (l) => -(l.parts['所得税'] ?? 0), { sign: 'none', drill: false }),
+    L('净利润', (l) => l.netProfit, { bold: true, drill: false }),
+  ]
+}
+
+/** 资产负债表行：期末余额 / 上期末余额。 */
+function balRows(cur: E.BalanceSheet, prev: E.BalanceSheet | undefined): RowDef[] {
+  const L = (
+    label: string,
+    f: (b: E.BalanceSheet) => number,
+    opts: { bold?: boolean; sign?: 'neg' | 'none' } = {},
+  ): RowDef => ({
+    kind: 'row',
+    label,
+    cur: money(f(cur), opts.sign ?? 'none'),
+    prev: prev ? money(f(prev), opts.sign ?? 'none') : DASH,
+    bold: opts.bold,
+  })
+  return [
+    { kind: 'section', label: '资产' },
+    L('现金', (b) => b.cash, { sign: 'neg' }),
+    L('原料存货', (b) => b.inventoryMaterial),
+    L('成品存货', (b) => b.inventoryProduct),
+    L('设备净值', (b) => b.equipmentGross - b.equipmentAccum),
+    L('资产合计', (b) => b.totalAssets, { bold: true }),
+    { kind: 'section', label: '负债与权益' },
+    L('借款', (b) => b.debt),
+    L('应付职工薪酬', (b) => b.wagePayable),
+    L('实收资本', (b) => b.paidIn),
+    L('股东实物投入', (b) => b.ownerCapital),
+    L('留存收益', (b) => b.retained, { sign: 'neg' }),
+    L('负债与权益合计', (b) => b.debt + b.wagePayable + b.equity, { bold: true }),
+  ]
+}
+
+const RATIO_DEFS: { label: string; calc: (l: E.Ledger, b: E.BalanceSheet) => string }[] = [
+  { label: '毛利率', calc: (l) => (l.revenue > 0 ? `${((l.grossProfit / l.revenue) * 100).toFixed(1)}%` : '—') },
+  { label: '净利率', calc: (l) => (l.revenue > 0 ? `${((l.netProfit / l.revenue) * 100).toFixed(1)}%` : '—') },
+  { label: '需求满足率', calc: (l) => (l.demandTotal > 0 ? `${((l.demandFilled / l.demandTotal) * 100).toFixed(0)}%` : '—') },
+  { label: '资产负债率', calc: (_l, b) => (b.totalAssets > 0 ? `${(((b.debt + b.wagePayable) / b.totalAssets) * 100).toFixed(0)}%` : '—') },
+  { label: '债务权益比', calc: (_l, b) => (b.equity > 0 ? `${((b.debt / b.equity) * 100).toFixed(0)}%` : '—') },
+  { label: '权益乘数', calc: (_l, b) => (b.equity > 0 ? (b.totalAssets / b.equity).toFixed(2) : '—') },
+]
+
+function ratioRows(cur: E.Ledger, curBal: E.BalanceSheet, prev?: E.Ledger, prevBal?: E.BalanceSheet): RowDef[] {
+  return RATIO_DEFS.map((d) => ({
+    kind: 'row' as const,
+    label: d.label,
+    cur: { text: d.calc(cur, curBal) },
+    prev: prev && prevBal ? { text: d.calc(prev, prevBal) } : DASH,
+  }))
 }
 
 /** 科目下钻。 */

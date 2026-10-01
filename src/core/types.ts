@@ -342,6 +342,12 @@ export interface GameEventDef {
   scope: Scope
   /** 卡片正面的效果文案 */
   text: string
+  /**
+   * 修正效果需要哪些系统活跃才「落地」（池过滤用）：
+   * - 'finance'：依赖借款/额度/利率参数（融资层未落地前全模式剔除，debt≡0 时修正落空）；
+   * - 'cards'：依赖抽卡/打牌参数（两种模式都有立项（抽卡）阶段，全模式保留；标记留给后续调整）。
+   */
+  needs?: ('finance' | 'cards')[]
   mods?: MonthMods
   options?: EventOption[]
   /** 机会事件：参与成本与效果 */
@@ -571,6 +577,8 @@ export interface GameState {
   nextClimateOdds: Record<Climate, number>
 
   cash: Money
+  /** 期初现金（本月月初真值 = 上期结算后，含上月挂账收款到账）；预算页「本期现金计划」桥接的期初口径 */
+  openingCash: Money
   debt: Money
   paidIn: Money
   /** 股东以实物投入的资产（开局的初始产线），计入所有者权益 */
@@ -603,6 +611,8 @@ export interface GameState {
   rnd: Record<string, ResearchSlot>
   ipOwned: string[]
   ipActive: (string | null)[]
+  /** 季度临时知产（R4 强化：研发 ≥5 人时「本季有效」），季度切换时清空 */
+  quarterIps: string[]
   ipChangedThisMonth: boolean
   materialsDeveloped: Record<string, number>
   agreements: Agreement[]
@@ -643,6 +653,12 @@ export interface GameState {
   miscExpense: Money
   /** 本月因事件直接获得的、需要计入当期收益的现金 */
   miscIncome: Money
+  /**
+   * 本月事件直接收到的现金（不计损益，如政府纾困无息贷款：
+   * 现金与挂账负债（pendingCost）同时增加、P&L 中性；若误入 miscIncome 权益会多增、恒等式失衡）。
+   * 预算桥接单独展示此项；月末结算清零。
+   */
+  eventCashGift: Money
   /**
    * 本月招聘费净额（招聘实付 − 裁员返还），月末计入管理费用。
    * 招聘支出是现金流出，若不确认费用，资产会凭空减少、恒等式失衡。

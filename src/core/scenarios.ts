@@ -1,3 +1,4 @@
+import { mergeMods } from './derive'
 import type { Climate, GameState, MonthMods, Order, Tier } from './types'
 
 export type CoreScenarioId =
@@ -31,10 +32,19 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.climate = setup.climate
   state.cash = setup.cash
   state.paidIn = setup.cash
+  state.openingCash = setup.cash
   state.debt = 0
   state.retained = 0
   state.monthMods = setup.mods ?? {}
   state.cardMods = {}
+  /**
+   * 事件：保留 startGame 抽出的事件（seed 固定，即场景的一部分，事件屏正常流转）。
+   * 即时事件修正在抽取时已并入 monthMods，上方基线重置会丢掉它，需重新并入，
+   * 否则该事件本月不生效（经营阶段的 derive 读不到其修正）。
+   */
+  if (state.currentEvent?.type === 'instant' && state.currentEvent.mods) {
+    state.monthMods = mergeMods(state.monthMods, state.currentEvent.mods)
+  }
   /** 场景预设订单需要销售团队作为来源：无销售则开局无订单。 */
   state.depts.sell.staff = setup.sellStaff ?? 0
   state.orders = setup.orders.map((o, i) => makeOrder(state, i, o))
@@ -49,6 +59,7 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.depts.rnd.staff = setup.rndStaff ?? 1
   state.depts.rnd.hired = state.depts.rnd.staff
   state.ipOwned = []
+  state.quarterIps = []
   state.rndStartsThisMonth = []
   state.flags['rndConfirmed'] = 0
   for (const s of Object.values(state.rnd)) {

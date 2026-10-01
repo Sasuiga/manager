@@ -2,6 +2,7 @@ import { useState, Fragment } from 'react'
 import * as E from '../../core/engine'
 import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS } from '../../data/game'
 import type { CardCtx } from '../../data/game'
+import type { CardInstance } from '../../core/types'
 import type { Tier } from '../../core/types'
 import { Icon, type IconName } from '../icons'
 import { Medallion } from '../ornaments'
@@ -171,7 +172,8 @@ export function TurnScreen({
 }) {
   const s = g.s
   const d = E.derive(s)
-  const visibleDepts: E.Dept[] = s.mode === 'core' ? ['buy', 'make', 'sell', 'rnd'] : DEPTS
+  // 完整 / 核心模式均展示全部五部门：核心模式同样含管理部门（管理人员招聘 + 提案实施）
+  const visibleDepts: E.Dept[] = DEPTS
 
   /** 轨道红点：有未处理事项时亮起。 */
   const dots: Record<E.Dept, boolean> = {
@@ -220,6 +222,12 @@ export function TurnScreen({
 function OpsPage({ g }: { g: Game }) {
   const s = g.s
   const [view, setView] = useState<'discard' | null>(null)
+  /** M3 复制手牌：先选要复制的目标手牌，再打出 */
+  const [m3, setM3] = useState<string | null>(null)
+  const descOf = (c: CardInstance) => {
+    const def = CARD_BY_ID[c.defId]
+    return c.empowered && def?.empowered ? def.empowered : def?.text ?? ''
+  }
 
   return (
     <>
@@ -263,7 +271,7 @@ function OpsPage({ g }: { g: Game }) {
                         {c.empowered ? <span className="tag gold" style={{ marginLeft: 6 }}>强化</span> : null}
                       </span>
                     </span>
-                    <span className="card-desc">{def.text}</span>
+                    <span className="card-desc">{descOf(c)}</span>
                     <span className="card-cost">
 {cost > 0 ? `实施费用 ${wan(cost)}` : '实施费用：无'}
                     </span>
@@ -273,7 +281,17 @@ function OpsPage({ g }: { g: Game }) {
                       className="btn btn-mini"
                       style={{ width: 'auto' }}
                       disabled={!playable.ok}
-                      onClick={() => g.act((st) => E.playCard(st, c.uid))}
+                      onClick={() => {
+                        if (def.id === 'M3') {
+                          if (s.hand.length <= 1) {
+                            g.setToast('无其他手牌可复制')
+                            return
+                          }
+                          setM3(c.uid)
+                          return
+                        }
+                        g.act((st) => E.playCard(st, c.uid))
+                      }}
                     >
                       <span className="btn-main xs">实施</span>
                       {!playable.ok ? <span className="btn-sub xs">{playable.msg}</span> : null}
@@ -316,8 +334,8 @@ function OpsPage({ g }: { g: Game }) {
                       <div key={c.uid} className={`card-item d-${def.kind}`}>
                         <span className="spine" />
                         <span className="card-body">
-                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}</span>
-                          <span className="card-desc">{def.text}</span>
+                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}{c.empowered ? '（强化）' : ''}</span>
+                          <span className="card-desc">{c.empowered && def.empowered ? def.empowered : def.text}</span>
                         </span>
                       </div>
                     )
@@ -344,8 +362,8 @@ function OpsPage({ g }: { g: Game }) {
                       <div key={c.uid} className={`card-item d-${def.kind}`}>
                         <span className="spine" />
                         <span className="card-body">
-                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}</span>
-                          <span className="card-desc">{def.text}</span>
+                          <span className="card-name">【{DEPT_SHORT[def.kind]}】{def.name}{c.empowered ? '（强化）' : ''}</span>
+                          <span className="card-desc">{c.empowered && def.empowered ? def.empowered : def.text}</span>
                         </span>
                       </div>
                     )
@@ -363,7 +381,51 @@ function OpsPage({ g }: { g: Game }) {
           </div>
         </Sheet>
       ) : null}
+
+      {/* M3 复制手牌：选择要复制的目标手牌 */}
+      {m3 ? (
+        <M3TargetSheet g={g} cardUid={m3} onClose={() => setM3(null)} />
+      ) : null}
     </>
+  )
+}
+
+/** M3 复制手牌的目标选择弹框：选一张手牌，确认后打出 M3 并复制。 */
+function M3TargetSheet({ g, cardUid, onClose }: { g: Game; cardUid: string; onClose: () => void }) {
+  const s = g.s
+  const targets = s.hand.filter((c) => c.uid !== cardUid)
+  return (
+    <Sheet title="复制手牌" sub="选择要复制的手牌" onClose={onClose}>
+      <div className="info">
+        复制的牌立即加入手牌，保留原牌的效果与强化状态；打出 M3 消耗 1 次实施数。
+      </div>
+      <div className="stack">
+        {targets.map((c) => {
+          const def = CARD_BY_ID[c.defId]
+          return (
+            <button
+              key={c.uid}
+              className={`card-item d-${def.kind}`}
+              onClick={() => {
+                const r = g.act((st) => E.playCard(st, cardUid, { targetUid: c.uid }))
+                if (!r.ok) g.setToast(r.msg)
+                onClose()
+              }}
+            >
+              <span className="spine" />
+              <span className="card-body">
+                <span className="card-name">
+                  【{DEPT_SHORT[def.kind]}】{def.name}
+                  {c.empowered ? <span className="tag gold" style={{ marginLeft: 6 }}>强化</span> : null}
+                </span>
+                <span className="card-desc">{c.empowered && def.empowered ? def.empowered : def.text}</span>
+              </span>
+            </button>
+          )
+        })}
+        {targets.length === 0 ? <p className="muted sm">没有可复制的手牌。</p> : null}
+      </div>
+    </Sheet>
   )
 }
 
@@ -373,12 +435,18 @@ function BuyPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
   const mats = E.materialViews(gs)
-  /** 结算前现金（与预算页同一口径）：月初现金 − 纯消耗（采购计划/协议/加班/研发/利息/上月工资） */
+  /** 本期期末资金（回款前，与预算页同一口径）：期初现金 + 事件收益 − 已付/结算时付各项 */
   const presettle = E.preSettleCash(gs)
   const [buy, setBuy] = useState<{ id: string; lot: E.LotSize } | null>(null)
   const [pickLot, setPickLot] = useState<string | null>(null)
   const [trader, setTrader] = useState(false)
   const [agreement, setAgreement] = useState(false)
+  const [urgent, setUrgent] = useState(false)
+  const [clearance, setClearance] = useState(false)
+  const [swap, setSwap] = useState(false)
+  const urgentOn = gs.monthFlags.includes('urgent') || gs.monthFlags.includes('urgentMid')
+  const clearanceOn = gs.monthFlags.includes('clearance') || gs.monthFlags.includes('clearanceMid')
+  const swapOn = gs.monthFlags.includes('swap') || gs.monthFlags.includes('swapPlus')
 
   return (
     <>
@@ -517,11 +585,11 @@ function BuyPage({ g }: { g: Game }) {
         <div className="card">
           <h3>采购计划汇总</h3>
           <div className="title-rule" />
-          <Row k="计划支出" v={wan(presettle.purchaseSpend)} />
-          <Row k="结算前现金" v={wan(presettle.cashAfter)} cls={presettle.cashAfter < 0 ? 'red' : ''} />
+          <Row k="计划支出" v={wan(presettle.purchasePlan)} />
+          <Row k="期末资金（回款前）" v={wan(presettle.cashAfter)} cls={presettle.cashAfter < 0 ? 'red' : ''} />
           <Row k="已选采购档" v={`${gs.lotsUsed} / ${d.buyLots}`} />
           {presettle.cashAfter < 0 ? (
-            <p className="hint">纯消耗（含协议/加班/研发/利息/上月工资）超出月初现金，计划超出资金能力；明细见「预算」页</p>
+            <p className="hint">纯消耗使期末资金（回款前）为负，计划超出资金能力；明细见「预算」页</p>
           ) : null}
         </div>
       ) : null}
@@ -544,8 +612,55 @@ function BuyPage({ g }: { g: Game }) {
               {gs.depts.buy.staff < 3 ? '需采购 3 人解锁' : '1 AP + 1w'}
             </span>
           </button>
+          {urgentOn ? (
+            <button className="btn btn-mini" onClick={() => setUrgent(true)}>
+              <span className="btn-main">紧急采购</span>
+              <span className="btn-sub">卡牌【紧急采购】· 每原料 1 次 · 不占档数</span>
+            </button>
+          ) : null}
+          {clearanceOn ? (
+            <button className="btn btn-mini" onClick={() => setClearance(true)}>
+              <span className="btn-main">清仓采购</span>
+              <span className="btn-sub">卡牌【清仓】· 每原料 1 次 · 不占档数</span>
+            </button>
+          ) : null}
+          {swapOn ? (
+            <button className="btn btn-mini" onClick={() => setSwap(true)}>
+              <span className="btn-main">原料替换</span>
+              <span className="btn-sub">卡牌【原料替换】· 每月 1 次 · 不占档数</span>
+            </button>
+          ) : null}
         </div>
       </div>
+
+      {gs.agreements.length > 0 ? (
+        <div className="card">
+          <h3>生效协议</h3>
+          <div className="title-rule" />
+          <div className="stack-sm">
+            {gs.agreements.map((a, i) => {
+              const mv = E.materialViews(gs).find((m) => m.id === a.materialId)
+              const unit = E.materialPriceAt(a.materialId, a.priceTierShift)
+              return (
+                <div key={i} className="card">
+                  <div className="hstack-between">
+                    <span className="sm">
+                      {mv?.name ?? a.materialId} · 余 {a.monthsLeft} 月
+                    </span>
+                    <button className="btn btn-nav" style={{ width: 'auto', padding: '2px var(--s2)' }} onClick={() => g.act((st) => E.cancelAgreement(st, i))}>
+                      <span className="xs">终止</span>
+                    </button>
+                  </div>
+                  <Row k="每月自动到货" v={`${a.qty} 件 × ${wan(unit)} = ${wan(a.qty * unit)}（锁定档位价）`} />
+                </div>
+              )
+            })}
+          </div>
+          <p className="hint">
+            协议每月中批自动到货、结算时统一付款（不占采购档数、占仓容）。本月协议合计约 {wan(presettle.agreementSpend)}，仓容/现金不足会整批跳过，准确金额见「预算」页。
+          </p>
+        </div>
+      ) : null}
 
       {pickLot ? (
         <Sheet title="选择采购档位" sub={mats.find((x) => x.id === pickLot)?.name} onClose={() => setPickLot(null)}>
@@ -599,6 +714,9 @@ function BuyPage({ g }: { g: Game }) {
         />
       ) : null}
       {trader ? <TraderSheet g={g} onClose={() => setTrader(false)} /> : null}
+      {urgent ? <UrgentClearanceSheet g={g} mode="urgent" onClose={() => setUrgent(false)} /> : null}
+      {clearance ? <UrgentClearanceSheet g={g} mode="clearance" onClose={() => setClearance(false)} /> : null}
+      {swap ? <SwapSheet g={g} onClose={() => setSwap(false)} /> : null}
       {agreement ? <AgreementSheet g={g} onClose={() => setAgreement(false)} /> : null}
     </>
   )
@@ -792,6 +910,121 @@ function TraderSheet({ g, onClose }: { g: Game; onClose: () => void }) {
           )
         })}
         {offers.length === 0 ? <p className="muted sm">本月没有贸易商上门。</p> : null}
+      </div>
+    </Sheet>
+  )
+}
+
+/** C6 紧急采购 / C10 清仓：每类原料 1 次、不占档数的额外购买机会。 */
+function UrgentClearanceSheet({ g, mode, onClose }: { g: Game; mode: 'urgent' | 'clearance'; onClose: () => void }) {
+  const gs = g.s
+  const d = E.derive(gs)
+  const mats = E.materialViews(gs)
+  const mid = gs.monthFlags.includes(mode === 'urgent' ? 'urgentMid' : 'clearanceMid')
+  const shift = mode === 'urgent' ? (mid ? 1 : 2) : -2
+  const label = mode === 'urgent' ? '紧急采购' : '清仓采购'
+  const cardName = mode === 'urgent' ? '紧急采购' : '清仓'
+  return (
+    <Sheet title={label} sub={`卡牌【${cardName}】· ${mid ? '中批' : '小批'} · 不占档数`} onClose={onClose}>
+      <div className="info">
+        每类原料限 1 次；价格{shift > 0 ? '+' : ''}{shift} 档（在当前档位基础上计算）。
+      </div>
+      <div className="stack">
+        {mats.filter((m) => m.supply > 0).map((m) => {
+          const used = gs.extraBuys.filter((e) => e.kind === mode && e.materialId === m.id).length
+          const soldOut = used >= 1
+          const qty = E.lotQty(gs, m.id, mid ? 'mid' : 'small')
+          const unit = E.materialPriceAt(m.id, (d.materials[m.id]?.tierShift ?? 0) + shift)
+          const total = qty * unit
+          return (
+            <div key={m.id} className="card">
+              <Row k={m.name} v={`${qty} 件 · ${wan(unit)}/件`} />
+              <Row k="合计" v={wan(total)} />
+              <div style={{ marginTop: 'var(--s3)' }}>
+                <button
+                  className="btn btn-mini"
+                  disabled={soldOut || total > gs.cash || qty <= 0}
+                  onClick={() => {
+                    const r = g.act((st) => (mode === 'urgent' ? E.urgentBuy(st, m.id) : E.clearanceBuy(st, m.id)))
+                    if (!r.ok) g.setToast(r.msg)
+                  }}
+                >
+                  <span className="btn-main">{soldOut ? '本月已用' : total > gs.cash ? '现金不足' : '购买'}</span>
+                </button>
+              </div>
+            </div>
+          )
+        })}
+        {mats.filter((m) => m.supply > 0).length === 0 ? <p className="muted sm">本月没有可供原料。</p> : null}
+      </div>
+    </Sheet>
+  )
+}
+
+/** C7 原料替换：出售 5 单位（账面价）→ 购入 5/7 单位（当前价），每月 1 次。 */
+function SwapSheet({ g, onClose }: { g: Game; onClose: () => void }) {
+  const gs = g.s
+  const d = E.derive(gs)
+  const mats = E.materialViews(gs)
+  const plus = gs.monthFlags.includes('swapPlus')
+  const used = gs.extraBuys.some((e) => e.kind === 'swap')
+  const [sellId, setSellId] = useState<string>('')
+  const [buyId, setBuyId] = useState<string>('')
+  const sell = mats.find((m) => m.id === sellId)
+  const buy = mats.find((m) => m.id === buyId)
+  const sellState = sellId ? gs.materials[sellId] : undefined
+  const sellQty = sell ? Math.min(5, sell.qty) : 0
+  const buyQty = buy ? Math.min(plus ? 7 : 5, d.materials[buy.id]?.supply ?? 0) : 0
+  const sellUnit = sellState && sellState.qty > 0 ? sellState.value / sellState.qty : 0
+  const buyUnit = buy ? E.materialPriceAt(buy.id, (d.materials[buy.id]?.tierShift ?? 0)) : 0
+  const sellTotal = sellUnit * sellQty
+  const buyTotal = buyUnit * buyQty
+  const valid = !used && sell && buy && sell.id !== buy.id && sellQty > 0 && buyQty > 0 && gs.cash + sellTotal >= buyTotal
+  return (
+    <Sheet title="原料替换" sub={`卡牌【原料替换】· 每月 1 次 · 不占档数`} onClose={onClose}>
+      <div className="info">
+        出售 5 单位（不足 5 按全部库存）按账面单价收款，购入{plus ? 7 : 5}单位按当前档位价付款；资产互换、不进损益。
+      </div>
+      {used ? <p className="muted sm">本月已使用。</p> : null}
+      <div className="section-label">出售（按账面单价）</div>
+      <div className="stack-sm">
+        {mats.filter((m) => m.qty > 0).map((m) => (
+          <button key={m.id} className={`btn btn-mini${sellId === m.id ? ' on selected' : ''}`}
+            disabled={m.id === buyId}
+            onClick={() => setSellId(m.id)}>
+            <span className="btn-main xs">{m.name}</span>
+            <span className="btn-sub xs">库存 {m.qty} · 账面 {wan(m.avgCost)}/件 · 售 {Math.min(5, m.qty)} 件</span>
+          </button>
+        ))}
+        {mats.filter((m) => m.qty > 0).length === 0 ? <p className="muted sm">无库存原料可出售。</p> : null}
+      </div>
+      <div className="section-label" style={{ marginTop: 'var(--s3)' }}>购入（按当前档位价）</div>
+      <div className="stack-sm">
+        {mats.filter((m) => (d.materials[m.id]?.supply ?? 0) > 0).map((m) => (
+          <button key={m.id} className={`btn btn-mini${buyId === m.id ? ' on selected' : ''}`}
+            disabled={m.id === sellId}
+            onClick={() => setBuyId(m.id)}>
+            <span className="btn-main xs">{m.name}</span>
+            <span className="btn-sub xs">供 {d.materials[m.id]?.supply ?? 0} · 入 {Math.min(plus ? 7 : 5, d.materials[m.id]?.supply ?? 0)} 件 · {wan(E.materialPriceAt(m.id, (d.materials[m.id]?.tierShift ?? 0)))}/件</span>
+          </button>
+        ))}
+        {mats.filter((m) => (d.materials[m.id]?.supply ?? 0) > 0).length === 0 ? <p className="muted sm">本月无可供原料。</p> : null}
+      </div>
+      <div className="card" style={{ marginTop: 'var(--s3)' }}>
+        <Row k="出售所得" v={sell ? wan(sellTotal) : '—'} />
+        <Row k="购入支出" v={buy ? wan(buyTotal) : '—'} />
+        <Row k="现金净额" cls={(sellTotal - buyTotal) >= 0 ? 'green' : 'red'} v={sell && buy ? wan(sellTotal - buyTotal) : '—'} />
+      </div>
+      <div style={{ marginTop: 'var(--s3)' }}>
+        <button className="btn btn-primary" disabled={!valid}
+          onClick={() => {
+            const r = g.act((st) => E.swapMaterials(st, sellId, buyId))
+            if (!r.ok) g.setToast(r.msg)
+            else onClose()
+          }}>
+          <span className="btn-main">确认替换</span>
+          <span className="btn-sub">出售 {sellQty} 件 · 购入 {buyQty} 件</span>
+        </button>
       </div>
     </Sheet>
   )
@@ -1429,6 +1662,10 @@ function RndPage({ g }: { g: Game }) {
   const ip = themeStats('ip')
 
   const free = Math.max(0, staff - assigned)
+  /** 知产展示：永久（ipOwned）+ 季度限时（R4 强化研发 ≥5，quarterIps，季度切换清零）+ 月度限时（卡牌/事件奖励，tempIps，月初清零） */
+  const quarterIpIds = gs.quarterIps
+  const monthTempIps = E.activeIps(gs).filter((id) => !gs.ipOwned.includes(id) && !quarterIpIds.includes(id))
+  const ipRows = [...gs.ipOwned, ...quarterIpIds, ...monthTempIps]
 
   return (
     <>
@@ -1479,42 +1716,57 @@ function RndPage({ g }: { g: Game }) {
         </p>
       </div>
 
-      {gs.mode === 'full' ? (
-        <div className="card">
-          <div className="hstack-between">
-            <h3>知识产权</h3>
+      <div className="card">
+        <div className="hstack-between">
+          <h3>知识产权</h3>
+          {gs.mode === 'full' ? (
             <span className="xs faint mono">
               槽位 {gs.ipActive.filter(Boolean).length}/{slots}
             </span>
-          </div>
-          <div className="title-rule" />
-          {gs.ipOwned.length === 0 ? (
-            <p className="muted sm">尚未拥有知识产权。完成「知识产权」类研发项目后可获得。</p>
           ) : (
-            <div className="stack-sm">
-              {gs.ipOwned.map((id) => {
-                const on = gs.ipActive.includes(id)
-                const def = IP_BY_ID[id]
-                return (
-                  <div key={id} className="hstack-between">
-                    <span className="sm">
-                      {def?.name ?? id}
-                      {on ? <span className="tag gold" style={{ marginLeft: 6 }}>已激活</span> : null}
-                    </span>
-                    <button
-                      className="btn btn-mini"
-                      style={{ width: 'auto' }}
-                      onClick={() => setIps(true)}
-                    >
-                      <span className="btn-main xs">管理</span>
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
+            <span className="xs faint mono">生效 {ipRows.length}</span>
           )}
         </div>
-      ) : null}
+        <div className="title-rule" />
+        {ipRows.length === 0 ? (
+          <p className="muted sm">暂无生效的知识产权。完成「知识产权」类研发项目可解锁；卡牌与事件可奖励临时知产。</p>
+        ) : (
+          <div className="stack-sm">
+            {ipRows.map((id) => {
+              const quarter = quarterIpIds.includes(id)
+              const monthTemp = monthTempIps.includes(id)
+              const on = gs.mode === 'core' || gs.ipActive.includes(id)
+              const def = IP_BY_ID[id]
+              return (
+                <div key={id} className="card">
+                  <div className="hstack-between">
+                    <span className="sm">
+                      {def?.name ?? id}
+                      {quarter ? (
+                        <span className="tag gold" style={{ marginLeft: 6 }}>临时 · 本季</span>
+                      ) : monthTemp ? (
+                        <span className="tag gold" style={{ marginLeft: 6 }}>临时 · 本月</span>
+                      ) : on ? (
+                        <span className="tag gold" style={{ marginLeft: 6 }}>{gs.mode === 'core' ? '生效中' : '已激活'}</span>
+                      ) : null}
+                    </span>
+                    {gs.mode === 'full' && !quarter && !monthTemp ? (
+                      <button
+                        className="btn btn-mini"
+                        style={{ width: 'auto' }}
+                        onClick={() => setIps(true)}
+                      >
+                        <span className="btn-main xs">管理</span>
+                      </button>
+                    ) : null}
+                  </div>
+                  {def?.desc ? <p className="hint" style={{ marginTop: 'var(--s1)' }}>{def.desc}</p> : null}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {theme === 'prod' ? <RndBomSheet g={g} onClose={() => setTheme(null)} /> : null}
       {theme === 'ip' ? <RndIpSheet g={g} onClose={() => setTheme(null)} /> : null}

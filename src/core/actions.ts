@@ -16,6 +16,7 @@ import {
   TIERS,
 } from '../data/game'
 import { cardEffectToMods, derive, makerPerStaff, mergeMods, unitCost } from './derive'
+import { materialPriceAt } from './settle'
 import { Rng } from './rng'
 import type {
   CardCtx,
@@ -57,7 +58,8 @@ export function hireCost(state: GameState, dept: Dept): Money {
 
 export function canHire(state: GameState, dept: Dept): ActionResult {
   if (state.depts[dept].staff >= 5) return fail('已达上限（5 人）')
-  if (state.ap < 1) return fail('AP 不足')
+  const freeHire = state.monthFlags.includes('extraHire') // P10 猎头：本月可额外招聘 1 人（不耗 AP）
+  if (!freeHire && state.ap < 1) return fail('AP 不足')
   const fee = hireCost(state, dept)
   if (state.cash < fee) return fail('现金不足')
   return OK
@@ -70,7 +72,12 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   state.cash -= fee
   /** 招聘费当期费用化（管理费用）：不能只扣现金不记费用，否则资产凭空减少、恒等式失衡 */
   state.hireFeeBy[dept] += fee
-  state.ap -= 1
+  if (state.monthFlags.includes('extraHire')) {
+    // 消耗 P10 猎头的「额外 +1 不耗 AP」名额（一次）
+    state.monthFlags = state.monthFlags.filter((f) => f !== 'extraHire')
+  } else {
+    state.ap -= 1
+  }
   state.depts[dept].staff += 1
   state.depts[dept].hired += 1
   state.flags[`hireMonth:${dept}:${state.month}`] = (state.flags[`hireMonth:${dept}:${state.month}`] ?? 0) + 1
@@ -261,6 +268,8 @@ export function playCard(state: GameState, uid: string, opts?: { materialId?: st
   const { mods, flags } = cardEffectToMods(effect)
   state.cardMods = mergeMods(state.cardMods, mods)
   state.monthFlags.push(...flags)
+  /** AP 效果当月生效：state.ap 在月初按当时 apMax 初始化，卡牌带来的增量需实时补加（M2/M3） */
+  if (effect.ap) state.ap += effect.ap
   state.playedThisMonth.push(card)
   state.hand.splice(idx, 1)
   state.discard.push(card)
@@ -306,9 +315,12 @@ function applyCardSpecial(state: GameState, defId: string, flags: string[], opts
         if (flags.includes('ipPerm')) {
           state.ipOwned.push(gift.id)
           pushLog(state, 'action', `永久获得知识产权【${gift.name}】`)
+        } else if (flags.includes('ipQuarter')) {
+          state.quarterIps.push(gift.id)
+          pushLog(state, 'action', `获得知识产权【${gift.name}】（本季有效，下季度失效）`)
         } else {
           state.monthMods.tempIps = [...(state.monthMods.tempIps ?? []), gift.id]
-          pushLog(state, 'action', `临时获得知识产权【${gift.name}】（本季有效）`)
+          pushLog(state, 'action', `临时获得知识产权【${gift.name}】（本月有效）`)
         }
       }
       break
@@ -375,21 +387,41 @@ function applyCardSpecial(state: GameState, defId: string, flags: string[], opts
       break
     }
     // 以下几张牌的效果在「结算 / 界面」阶段处理，这里只记录本月标记：
-    // C4 贸易商 / C6 紧急采购 / C7 原料替换 / C9 期货 / C10 清仓 / P1 满负荷
+    // C4 贸易商 / C6 紧急采购 / C7 原料替换 / C9 期货 / C10 清仓
     case 'C4':
       state.flags['cardTrader'] = 1
       break
     case 'C6':
       state.flags['cardUrgent'] = 1
       break
-    case 'C9':
+    case 'C8':
+      // 供应商关系：记录打出月份，供下月 buyCardShift 判定「上月也打出」
+      state.flags['lastC8'] = state.month
+      break
+    case 'C9': {
+      // 期货：锁定本月档位（含气候/事件修正），下月气候档位上涨时按锁定档位采购
+      const dd = derive(state)
+      if (flags.includes('futuresAll')) {
+        for (const m of MATERIALS) state.futures[m.id] = dd.materials[m.id]?.tierShift ?? 0
+        pushLog(state, 'action', '期货：锁定下月全部原料价格', ['若下月档位上涨，按本月锁定档位采购'])
+      } else {
+        let top = MATERIALS[0].id
+        let topShift = -99
+        for (const m of MATERIALS) {
+          const t = dd.materials[m.id]?.tierShift ?? 0
+          if (t > topShift) {
+            top = m.id
+            topShift = t
+          }
+        }
+        state.futures[top] = topShift
+        pushLog(state, 'action', `期货：锁定下月 ${nameOf(top)} 价格`, [`锁定档位偏移 ${topShift}（若下月档位上涨，按此档位采购）`])
+      }
       state.flags['cardFutures'] = flags.includes('futuresAll') ? 2 : 1
       break
+    }
     case 'C10':
       state.flags['cardClearance'] = 1
-      break
-    case 'P1':
-      state.monthFlags.push('fullLoadCard')
       break
     default:
       break
@@ -482,7 +514,7 @@ export function lotPrice(state: GameState, materialId: string, lot: LotSize): Mo
   return priceAtShift(materialId, base.tierShift + shift + buyCardShift(state))
 }
 
-/** 卡牌带来的额外采购价格档位（批量采购、清仓等）。 */
+/** 卡牌带来的额外采购价格档位（批量采购、压价、供应商关系等，作用于采购/贸易商价格）。 */
 export function buyCardShift(state: GameState): number {
   let shift = 0
   for (const c of state.playedThisMonth) {
@@ -491,8 +523,11 @@ export function buyCardShift(state: GameState): number {
     const ctx = cardCtx(state, c.empowered)
     const e = c.empowered && def.strong ? def.strong(ctx) : def.base(ctx)
     if (e.buyTierShift) shift += e.buyTierShift
+    // C1 批量采购：自第 2 个已选采购档起额外 -1 档
+    if (e.flags?.includes('buyTierExtra') && state.lotsUsed >= 1) shift -= 1
   }
-  if (state.monthFlags.includes('supplierRelation') && (state.flags['lastC8'] ?? 0) > 0) shift -= 1
+  // C8 供应商关系：上月也打出过则额外 -1 档
+  if (state.monthFlags.includes('supplierRelation') && state.flags['lastC8'] === state.month - 1) shift -= 1
   return shift
 }
 
@@ -832,6 +867,99 @@ export function buyFromTrader(state: GameState, materialId: string, qty: number,
   }
   pushLog(state, 'action', `贸易商采购 ${nameOf(materialId)}`, [`${added} 单位 × ${(price / 10).toFixed(2)}w`])
   return { ok: true, msg: `入库 ${added} 单位` }
+}
+
+/** 不占档数的额外采购机会（C6 紧急采购 / C10 清仓）共用执行：扣现金、入库、记账、记录次数。 */
+function extraBuy(state: GameState, materialId: string, kind: string, qty: number, unit: Money, desc: string): ActionResult {
+  const total = qty * unit
+  if (state.cash < total) return fail('现金不足')
+  const added = addMaterial(state, materialId, qty, unit, false, true)
+  if (added <= 0) return fail('仓容已满，无法入库')
+  state.extraBuys.push({ kind, materialId, qty: added, price: unit, used: true })
+  state.monthLedger.push({
+    dept: 'buy',
+    item: `采购 ${nameOf(materialId)} ×${added}（${desc}）`,
+    debit: `库存 ${nameOf(materialId)}`,
+    credit: '现金',
+    debitAmt: added * unit,
+    creditAmt: added * unit,
+    detail: [`${added} 单位 × ${(unit / 10).toFixed(2)}w（不占本月采购档数）`, '现金实付全额转入库存（移动加权平均计价）'],
+  })
+  pushLog(state, 'action', `${desc} ${nameOf(materialId)}`, [`${added} 单位 × ${(unit / 10).toFixed(2)}w`])
+  return { ok: true, msg: `入库 ${added} 单位` }
+}
+
+/** C6 紧急采购：每类原料 1 次。小批 +2 档；强化版中批 +1 档。不占档数。 */
+export function urgentBuy(state: GameState, materialId: string): ActionResult {
+  const mid = state.monthFlags.includes('urgentMid')
+  if (!mid && !state.monthFlags.includes('urgent')) return fail('本月无紧急采购机会')
+  if (state.extraBuys.some((e) => e.kind === 'urgent' && e.materialId === materialId)) return fail('该原料本月已紧急采购')
+  const d = derive(state)
+  const qty = lotQty(state, materialId, mid ? 'mid' : 'small')
+  if (qty <= 0) return fail('该原料本月无供给')
+  const unit = materialPriceAt(materialId, (d.materials[materialId]?.tierShift ?? 0) + (mid ? 1 : 2))
+  return extraBuy(state, materialId, 'urgent', qty, unit, mid ? '紧急采购（中批 · 价格 +1 档）' : '紧急采购（小批 · 价格 +2 档）')
+}
+
+/** C10 清仓：每类原料 1 次。小批 -2 档；强化版中批 -2 档。不占档数。 */
+export function clearanceBuy(state: GameState, materialId: string): ActionResult {
+  const mid = state.monthFlags.includes('clearanceMid')
+  if (!mid && !state.monthFlags.includes('clearance')) return fail('本月无清仓采购机会')
+  if (state.extraBuys.some((e) => e.kind === 'clearance' && e.materialId === materialId)) return fail('该原料本月已清仓采购')
+  const d = derive(state)
+  const qty = lotQty(state, materialId, mid ? 'mid' : 'small')
+  if (qty <= 0) return fail('该原料本月无供给')
+  const unit = materialPriceAt(materialId, (d.materials[materialId]?.tierShift ?? 0) - 2)
+  return extraBuy(state, materialId, 'clearance', qty, unit, mid ? '清仓采购（中批 · 价格 -2 档）' : '清仓采购（小批 · 价格 -2 档）')
+}
+
+/** C7 原料替换：按账面单价出售 5 单位任一原料，按当前价格购入 5/7 单位另一种原料。每月 1 次，不占档数、不影响损益。 */
+export function swapMaterials(state: GameState, sellId: string, buyId: string): ActionResult {
+  const plus = state.monthFlags.includes('swapPlus')
+  if (!plus && !state.monthFlags.includes('swap')) return fail('本月无原料替换机会')
+  if (state.extraBuys.some((e) => e.kind === 'swap')) return fail('原料替换本月已使用')
+  if (sellId === buyId) return fail('出售与购入原料不能相同')
+  const d = derive(state)
+  const sell = state.materials[sellId]
+  if (!sell || sell.qty <= 0) return fail('出售原料无库存')
+  const buyUnit = materialPriceAt(buyId, d.materials[buyId]?.tierShift ?? 0)
+  const buyQty = Math.min(plus ? 7 : 5, d.materials[buyId]?.supply ?? 0)
+  if (buyQty <= 0) return fail('购入原料本月无供给')
+  const sellQty = Math.min(5, sell.qty)
+  const sellUnit = sell.value / sell.qty
+  const sellTotal = sellUnit * sellQty
+  if (state.cash + sellTotal < buyUnit * buyQty) return fail('现金不足（出售所得抵付后仍缺口）')
+  sell.value = Math.max(0, sell.value - sellTotal)
+  sell.qty -= sellQty
+  state.cash += sellTotal
+  const added = addMaterial(state, buyId, buyQty, buyUnit, false, true)
+  if (added <= 0) {
+    sell.value += sellTotal
+    sell.qty += sellQty
+    state.cash -= sellTotal
+    return fail('仓容已满，无法接收购入原料')
+  }
+  state.extraBuys.push({ kind: 'swap', materialId: buyId, qty: added, price: buyUnit, used: true })
+  state.monthLedger.push({
+    dept: 'buy',
+    item: `原料替换：出售 ${nameOf(sellId)} ×${sellQty}`,
+    debit: '现金',
+    credit: `库存 ${nameOf(sellId)}`,
+    debitAmt: Math.round(sellTotal),
+    creditAmt: Math.round(sellTotal),
+    detail: [`按账面单价 ${(sellUnit / 10).toFixed(2)}w × ${sellQty} 单位`, '资产转现金，不计损益（不进销售收入/成本）'],
+  })
+  state.monthLedger.push({
+    dept: 'buy',
+    item: `原料替换：购入 ${nameOf(buyId)} ×${added}`,
+    debit: `库存 ${nameOf(buyId)}`,
+    credit: '现金',
+    debitAmt: added * buyUnit,
+    creditAmt: added * buyUnit,
+    detail: [`${added} 单位 × ${(buyUnit / 10).toFixed(2)}w（当前档位价，不占档数）`],
+  })
+  pushLog(state, 'action', `原料替换：${nameOf(sellId)} ×${sellQty} → ${nameOf(buyId)} ×${added}`, [])
+  return { ok: true, msg: `出 ${sellQty} 入 ${added} 单位` }
 }
 
 /** 长期协议。 */
@@ -1464,6 +1592,20 @@ export function applyEventOption(state: GameState, optionIndex: number): ActionR
         purchasedAt: state.month,
       })
       if (paid <= 0) state.miscIncome += bookValue
+      if (paid > 0) {
+        // 现金对价已在调用方扣减；资本支出记账（借 固定资产 / 贷 现金），预算页「设备购置」行以台账行为准
+        state.monthLedger.push({
+          dept: 'make',
+          item: `设备购置 ${opt.extra.includes('产能 15') ? '清算设备' : '机会设备'}`,
+          debit: '固定资产',
+          credit: '现金',
+          debitAmt: paid,
+          creditAmt: paid,
+          detail: [
+            `现金支出 ${(paid / 10).toFixed(2)}w 资本化为固定资产（事件对价，不计入当期损益）`,
+          ],
+        })
+      }
       state.flags['capexQ'] = (state.flags['capexQ'] ?? 0) + 1
     }
     if (opt.extra.includes('长期协议') || opt.extra.includes('锁定')) {
@@ -1477,7 +1619,7 @@ export function applyEventOption(state: GameState, optionIndex: number): ActionR
         const rng = Rng.fromState(state.seed + state.month * 31)
         const gift = cands[rng.int(cands.length)]
         state.monthMods.tempIps = [...(state.monthMods.tempIps ?? []), gift.id]
-        pushLog(state, 'event', `获得临时知识产权【${gift.name}】（本季有效）`)
+        pushLog(state, 'event', `获得临时知识产权【${gift.name}】（本月有效）`)
       }
     }
     if (opt.extra.includes('管理人员 +1') && state.depts.ops.staff < 5) {
@@ -1486,7 +1628,6 @@ export function applyEventOption(state: GameState, optionIndex: number): ActionR
       state.flags['opsHired'] = (state.flags['opsHired'] ?? 0) + 1
       checkAchievements(state)
     }
-    if (opt.extra.includes('签订 1 份')) signAgreement(state, MATERIALS[0].id, 3, true)
     void d
   }
 
@@ -1539,7 +1680,7 @@ export function acceptChance(state: GameState): ActionResult {
       const rng = Rng.fromState(state.seed + state.month * 53)
       const gift = cands[rng.int(cands.length)]
       state.monthMods.tempIps = [...(state.monthMods.tempIps ?? []), gift.id]
-      pushLog(state, 'event', `获得临时知识产权【${gift.name}】（本季有效）`)
+      pushLog(state, 'event', `获得临时知识产权【${gift.name}】（本月有效）`)
     }
   }
   if (c.mods?.orders) {
@@ -1573,6 +1714,20 @@ function applyModSideEffects(state: GameState, mods: MonthMods, equipmentConside
         purchasedAt: state.month,
       })
       if (equipmentConsideration <= 0) state.miscIncome += bookValue
+      if (equipmentConsideration > 0) {
+        // 现金对价已在调用方扣减；资本支出记账（借 固定资产 / 贷 现金），预算页「设备购置」行以台账行为准
+        state.monthLedger.push({
+          dept: 'make',
+          item: '设备购置 机会设备',
+          debit: '固定资产',
+          credit: '现金',
+          debitAmt: equipmentConsideration,
+          creditAmt: equipmentConsideration,
+          detail: [
+            `现金支出 ${(equipmentConsideration / 10).toFixed(2)}w 资本化为固定资产（事件对价，不计入当期损益）`,
+          ],
+        })
+      }
       state.flags['capexQ'] = (state.flags['capexQ'] ?? 0) + 1
     }
     if (note.includes('管理人员 +1') && state.depts.ops.staff < 5) {
@@ -1582,6 +1737,7 @@ function applyModSideEffects(state: GameState, mods: MonthMods, equipmentConside
       checkAchievements(state)
     }
     if (note.includes('解雇 1 人')) state.monthFlags.push('canFire')
+    if (note.includes('额外招聘 1 人')) state.monthFlags.push('extraHire')
 
     /**
      * 跨月挂账一律按权责发生制在**当月**入账，次月结算只做现金收付。
@@ -1597,7 +1753,15 @@ function applyModSideEffects(state: GameState, mods: MonthMods, equipmentConside
       state.pendingIncome += 60
       state.miscIncome += 60
     }
-    if (note.includes('现金 +10w')) state.cash += 100
+    if (note.includes('现金 +10w')) {
+      /**
+       * 政府纾困（无息贷款）：当月收到现金，负债侧由下方 pendingCost 挂账，
+       * 资产与负债同步增加、损益中性——不进 miscIncome（否则权益多增、恒等式失衡），
+       * 记入 eventCashGift 供预算桥接展示本笔流入。
+       */
+      state.cash += 100
+      state.eventCashGift += 100
+    }
     /**
      * 「下月偿还 10w」描述的是这笔无息贷款形成的负债：
      * 收到现金的同月同时确认等额应付，次月偿还时冲销。

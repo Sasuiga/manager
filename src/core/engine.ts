@@ -17,12 +17,12 @@ import type { SettleReport } from './settle'
 import type { Climate, GameEventDef, GameState, GoalDef, GoalTrack, Ledger, Money } from './types'
 
 export * from './types'
-export { derive, mergeMods, unitCost, rndProjectOutcome } from './derive'
+export { derive, mergeMods, unitCost, rndProjectOutcome, activeIps } from './derive'
 export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityOf, buildDeck, wagePayableOf } from './game'
-export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct } from './settle'
+export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct, materialPriceAt } from './settle'
 export type { SettleReport } from './settle'
 export { previewOperations, preSettleCash } from './preview'
-export type { OperatingPreview, ProductPreview, ValueRange, PreSettleCash } from './preview'
+export type { OperatingPreview, ProductPreview, ValueRange, PreSettleCash, NextPeriodLiabilities } from './preview'
 export { CORE_SCENARIOS, applyCoreScenario } from './scenarios'
 export type { CoreScenarioDef, CoreScenarioId } from './scenarios'
 export {
@@ -55,6 +55,9 @@ export {
   traderOffer,
   buyFromTrader,
   traderQuota,
+  urgentBuy,
+  clearanceBuy,
+  swapMaterials,
   signAgreement,
   cancelAgreement,
   agreementSlots,
@@ -102,22 +105,28 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
   const isEnd = idx === 0 || idx === 5
   const weights: { ev: GameEventDef; w: number }[] = []
   for (const ev of EVENTS) {
+    // 事件效果落地过滤：修正必须落在玩家当前能响应的参数上。
+    // 融资层未落地（无借/还入口，debt≡0）：利率/额度类事件全模式剔除（融资层落地后摘掉 needs 标记）；
+    // 两种模式都有立项（抽卡）阶段：卡牌参数事件（抽卡/手牌/打牌修正）全模式保留。
+    if (ev.needs?.includes('finance')) continue
     const evIdx = CLIMATE_ORDER.indexOf(ev.climate)
     const dist = Math.min((evIdx - idx + 6) % 6, (idx - evIdx + 6) % 6)
     let w = 1
     if (dist === 0) w = isEnd ? 9 : 8
     else if (dist === 1) w = 2
+    // 负面事件权重 ×1.5：避免正面事件刷满现金流，给资金断裂风险留空间
+    if (ev.polarity === 'bad') w = Math.round(w * 1.5)
     weights.push({ ev, w })
   }
   return weights.flatMap(({ ev, w }) => Array<GameEventDef>(w).fill(ev))
 }
 
-/** 开局：第 1 月即季度首月，董事会先行（选定挑战后由 UI 抽事件）。 */
+/** 开局：完整模式第 1 月即季度首月，董事会先行（选定挑战后由 UI 抽事件）；核心模式直接进入事件阶段。 */
 export function startGame(state: GameState) {
   if (state.mode === 'core') {
-    state.phase = 'operate'
     state.boardPrompted = false
-    generateMonthlyOrders(state)
+    // 全类型事件（池已按模式过滤）：确认后 enterDraw 进入立项（抽卡）阶段，再进经营
+    beginMonthEvent(state)
     return
   }
   state.boardPrompted = false
@@ -238,9 +247,9 @@ function drawEvent(state: GameState, rng: Rng): GameEventDef {
 /**
  * 事件确认后进入抽卡阶段：每月开始独立的一次活动，先于经营布局。
  * 月度同步（AP/打牌数/手牌/抽牌参数）与渠道订单都在这里完成。
+ * 完整 / 核心模式均经立项（抽卡）阶段后进入经营。
  */
 export function enterDraw(state: GameState) {
-  state.phase = 'draw'
   const d = derive(state)
   state.apMax = d.apMax
   state.playsMax = d.playsMax
@@ -251,8 +260,9 @@ export function enterDraw(state: GameState) {
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   state.declinedOrders = []
   state.acceptedOrders = []
-  // 本月订单（渠道带来）
-  generateMonthlyOrders(state)
+  // 本月订单（渠道带来）：场景预设的订单（applyCoreScenario）不重复生成
+  if (state.orders.length === 0) generateMonthlyOrders(state)
+  state.phase = 'draw'
   // 开局（第 1 月）起始手牌已由 newGame 预置，跳过再抽一次
   if (state.drawn.length > 0) return
   // 常规每月：直接抽 N 张，让玩家一次看到全部 N 张选 M 张
@@ -311,9 +321,9 @@ export function nextMonth(state: GameState) {
   advanceMonthCore(state, rng)
   state.rngState = rng.state
   if (state.mode === 'core') {
-    state.phase = 'operate'
     state.boardPrompted = false
-    generateMonthlyOrders(state)
+    // 核心模式：事件阶段全类型（池已过滤），确认后 enterDraw 进入立项（抽卡）阶段，再进经营
+    beginMonthEvent(state)
     return
   }
   state.boardPrompted = false
