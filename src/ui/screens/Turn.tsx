@@ -633,6 +633,35 @@ function BuyPage({ g }: { g: Game }) {
         </div>
       </div>
 
+      {gs.agreements.length > 0 ? (
+        <div className="card">
+          <h3>生效协议</h3>
+          <div className="title-rule" />
+          <div className="stack-sm">
+            {gs.agreements.map((a, i) => {
+              const mv = E.materialViews(gs).find((m) => m.id === a.materialId)
+              const unit = E.materialPriceAt(a.materialId, a.priceTierShift)
+              return (
+                <div key={i} className="card">
+                  <div className="hstack-between">
+                    <span className="sm">
+                      {mv?.name ?? a.materialId} · 余 {a.monthsLeft} 月
+                    </span>
+                    <button className="btn btn-nav" style={{ width: 'auto', padding: '2px var(--s2)' }} onClick={() => g.act((st) => E.cancelAgreement(st, i))}>
+                      <span className="xs">终止</span>
+                    </button>
+                  </div>
+                  <Row k="每月自动到货" v={`${a.qty} 件 × ${wan(unit)} = ${wan(a.qty * unit)}（锁定档位价）`} />
+                </div>
+              )
+            })}
+          </div>
+          <p className="hint">
+            协议每月中批自动到货、结算时统一付款（不占采购档数、占仓容）。本月协议合计约 {wan(presettle.agreementSpend)}，仓容/现金不足会整批跳过，准确金额见「预算」页。
+          </p>
+        </div>
+      ) : null}
+
       {pickLot ? (
         <Sheet title="选择采购档位" sub={mats.find((x) => x.id === pickLot)?.name} onClose={() => setPickLot(null)}>
           <div className="stack">
@@ -1633,6 +1662,10 @@ function RndPage({ g }: { g: Game }) {
   const ip = themeStats('ip')
 
   const free = Math.max(0, staff - assigned)
+  /** 知产展示：永久（ipOwned）+ 季度限时（R4 强化研发 ≥5，quarterIps，季度切换清零）+ 月度限时（卡牌/事件奖励，tempIps，月初清零） */
+  const quarterIpIds = gs.quarterIps
+  const monthTempIps = E.activeIps(gs).filter((id) => !gs.ipOwned.includes(id) && !quarterIpIds.includes(id))
+  const ipRows = [...gs.ipOwned, ...quarterIpIds, ...monthTempIps]
 
   return (
     <>
@@ -1683,42 +1716,57 @@ function RndPage({ g }: { g: Game }) {
         </p>
       </div>
 
-      {gs.mode === 'full' ? (
-        <div className="card">
-          <div className="hstack-between">
-            <h3>知识产权</h3>
+      <div className="card">
+        <div className="hstack-between">
+          <h3>知识产权</h3>
+          {gs.mode === 'full' ? (
             <span className="xs faint mono">
               槽位 {gs.ipActive.filter(Boolean).length}/{slots}
             </span>
-          </div>
-          <div className="title-rule" />
-          {gs.ipOwned.length === 0 ? (
-            <p className="muted sm">尚未拥有知识产权。完成「知识产权」类研发项目后可获得。</p>
           ) : (
-            <div className="stack-sm">
-              {gs.ipOwned.map((id) => {
-                const on = gs.ipActive.includes(id)
-                const def = IP_BY_ID[id]
-                return (
-                  <div key={id} className="hstack-between">
-                    <span className="sm">
-                      {def?.name ?? id}
-                      {on ? <span className="tag gold" style={{ marginLeft: 6 }}>已激活</span> : null}
-                    </span>
-                    <button
-                      className="btn btn-mini"
-                      style={{ width: 'auto' }}
-                      onClick={() => setIps(true)}
-                    >
-                      <span className="btn-main xs">管理</span>
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
+            <span className="xs faint mono">生效 {ipRows.length}</span>
           )}
         </div>
-      ) : null}
+        <div className="title-rule" />
+        {ipRows.length === 0 ? (
+          <p className="muted sm">暂无生效的知识产权。完成「知识产权」类研发项目可解锁；卡牌与事件可奖励临时知产。</p>
+        ) : (
+          <div className="stack-sm">
+            {ipRows.map((id) => {
+              const quarter = quarterIpIds.includes(id)
+              const monthTemp = monthTempIps.includes(id)
+              const on = gs.mode === 'core' || gs.ipActive.includes(id)
+              const def = IP_BY_ID[id]
+              return (
+                <div key={id} className="card">
+                  <div className="hstack-between">
+                    <span className="sm">
+                      {def?.name ?? id}
+                      {quarter ? (
+                        <span className="tag gold" style={{ marginLeft: 6 }}>临时 · 本季</span>
+                      ) : monthTemp ? (
+                        <span className="tag gold" style={{ marginLeft: 6 }}>临时 · 本月</span>
+                      ) : on ? (
+                        <span className="tag gold" style={{ marginLeft: 6 }}>{gs.mode === 'core' ? '生效中' : '已激活'}</span>
+                      ) : null}
+                    </span>
+                    {gs.mode === 'full' && !quarter && !monthTemp ? (
+                      <button
+                        className="btn btn-mini"
+                        style={{ width: 'auto' }}
+                        onClick={() => setIps(true)}
+                      >
+                        <span className="btn-main xs">管理</span>
+                      </button>
+                    ) : null}
+                  </div>
+                  {def?.desc ? <p className="hint" style={{ marginTop: 'var(--s1)' }}>{def.desc}</p> : null}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {theme === 'prod' ? <RndBomSheet g={g} onClose={() => setTheme(null)} /> : null}
       {theme === 'ip' ? <RndIpSheet g={g} onClose={() => setTheme(null)} /> : null}
