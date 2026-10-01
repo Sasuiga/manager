@@ -979,4 +979,32 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
     expect(s.agreements).toHaveLength(1)
     expect(s.agreements[0].monthsLeft).toBe(6)
   })
+
+  it('R4 专利申请：基础/强化低配本月临时知产，强化 + 研发 ≥5 人本季知产（季度切换失效）', () => {
+    // 基础版（研发 0 人）：本月有效（tempIps，月初清零）
+    const s = operateState(42)
+    s.hand.push({ uid: 'r4#t', defId: 'R4', empowered: false })
+    expect(E.playCard(s, 'r4#t').ok).toBe(true)
+    expect(s.monthMods.tempIps).toHaveLength(1)
+    expect(E.activeIps(s)).toContain(s.monthMods.tempIps![0])
+    E.settleMonth(s)
+    E.nextMonth(s)
+    expect(s.monthMods.tempIps).toBeUndefined() // 月初清零
+
+    // 强化 + 研发 5 人：本季有效（quarterIps），季度切换失效
+    const s2 = operateState(42)
+    s2.depts.rnd.staff = 5
+    s2.depts.rnd.hired = 5
+    s2.hand.push({ uid: 'r4b#t', defId: 'R4', empowered: true })
+    expect(E.playCard(s2, 'r4b#t').ok).toBe(true)
+    expect(s2.monthMods.tempIps).toBeUndefined()
+    expect(s2.quarterIps).toHaveLength(1)
+    expect(E.activeIps(s2)).toContain(s2.quarterIps[0])
+    for (let i = 0; i < 3; i++) {
+      E.settleMonth(s2)
+      E.nextMonth(s2)
+    }
+    expect(s2.month).toBe(4)
+    expect(s2.quarterIps).toHaveLength(0) // 进入新季度，本季知产到期
+  })
 })

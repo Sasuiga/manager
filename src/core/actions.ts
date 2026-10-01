@@ -315,9 +315,12 @@ function applyCardSpecial(state: GameState, defId: string, flags: string[], opts
         if (flags.includes('ipPerm')) {
           state.ipOwned.push(gift.id)
           pushLog(state, 'action', `永久获得知识产权【${gift.name}】`)
+        } else if (flags.includes('ipQuarter')) {
+          state.quarterIps.push(gift.id)
+          pushLog(state, 'action', `获得知识产权【${gift.name}】（本季有效，下季度失效）`)
         } else {
           state.monthMods.tempIps = [...(state.monthMods.tempIps ?? []), gift.id]
-          pushLog(state, 'action', `临时获得知识产权【${gift.name}】（本季有效）`)
+          pushLog(state, 'action', `临时获得知识产权【${gift.name}】（本月有效）`)
         }
       }
       break
@@ -1616,7 +1619,7 @@ export function applyEventOption(state: GameState, optionIndex: number): ActionR
         const rng = Rng.fromState(state.seed + state.month * 31)
         const gift = cands[rng.int(cands.length)]
         state.monthMods.tempIps = [...(state.monthMods.tempIps ?? []), gift.id]
-        pushLog(state, 'event', `获得临时知识产权【${gift.name}】（本季有效）`)
+        pushLog(state, 'event', `获得临时知识产权【${gift.name}】（本月有效）`)
       }
     }
     if (opt.extra.includes('管理人员 +1') && state.depts.ops.staff < 5) {
@@ -1677,7 +1680,7 @@ export function acceptChance(state: GameState): ActionResult {
       const rng = Rng.fromState(state.seed + state.month * 53)
       const gift = cands[rng.int(cands.length)]
       state.monthMods.tempIps = [...(state.monthMods.tempIps ?? []), gift.id]
-      pushLog(state, 'event', `获得临时知识产权【${gift.name}】（本季有效）`)
+      pushLog(state, 'event', `获得临时知识产权【${gift.name}】（本月有效）`)
     }
   }
   if (c.mods?.orders) {

@@ -486,7 +486,7 @@ export const EVENTS: GameEventDef[] = [
     ],
   },
   { id: 'O9', climate: 'overheat', name: '短期理财', type: 'chance', polarity: 'good', scope: 'cash', text: '有笔短期资金可以拆出去。', chance: { cost: { cash: 50 }, detail: '支付 5w，下月返还 6w', mods: { notes: ['下月现金 +6w'] } } },
-  { id: 'O10', climate: 'overheat', name: '技术突破', type: 'chance', polarity: 'good', scope: 'rnd', text: '外部有一份可以买断的技术资料。', chance: { cost: { cash: 30 }, detail: '支付 3w，立即获得 1 个随机普通知识产权（持续到本季结束）', mods: { tempIps: ['normal'] } } },
+  { id: 'O10', climate: 'overheat', name: '技术突破', type: 'chance', polarity: 'good', scope: 'rnd', text: '外部有一份可以买断的技术资料。', chance: { cost: { cash: 30 }, detail: '支付 3w，立即获得 1 个随机普通知识产权（本月有效）', mods: { tempIps: ['normal'] } } },
 
   // ── 滞涨 ──────────────────────────────────────────────
   { id: 'S1', climate: 'stagflation', name: '需求萎缩', type: 'instant', polarity: 'bad', scope: 'sell', text: '本月低端、中端、高端需求各 -1。', mods: { demand: T(-1, -1, -1) } },
@@ -571,7 +571,7 @@ export const EVENTS: GameEventDef[] = [
   {
     id: 'X8', climate: 'depression', name: '技术储备', type: 'choice', polarity: 'neutral', scope: 'rnd', text: '有人愿意低价转让技术。',
     options: [
-      { label: '支付 3w', detail: '现金 -3w，获得 1 个随机普通知识产权（本季有效）', cost: { cash: 30 }, extra: '获得 1 个随机普通知识产权' },
+      { label: '支付 3w', detail: '现金 -3w，获得 1 个随机普通知识产权（本月有效）', cost: { cash: 30 }, extra: '获得 1 个随机普通知识产权' },
       { label: '放弃', detail: '本月研发进度 -4', mods: { rndProgress: -4 } },
     ],
   },
@@ -971,10 +971,10 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'R4', name: '专利申请', kind: 'rnd',
-    text: '获得 1 个随机普通知识产权，持续到本季结束。若研发 ≥ 5 人，改为永久。',
-    cond: '研发 ≥ 5 人：永久',
-    empowered: '获得 1 个随机强力知识产权，持续到本季结束。若研发 ≥ 5 人，改为永久。',
-    base: (c) => ({ flags: [c.empowered ? 'ipStrongTemp' : 'ipNormalTemp', S(c, 'rnd') >= 5 ? 'ipPerm' : ''] }),
+    text: '获得 1 个随机普通知识产权（本月有效）。若研发 ≥ 5 人，改为永久。',
+    cond: '研发 ≥ 5 人：普通永久 / 强化本季',
+    empowered: '获得 1 个随机强力知识产权（本月有效）。若研发 ≥ 5 人，本季有效。',
+    base: (c) => ({ flags: [c.empowered ? 'ipStrongTemp' : 'ipNormalTemp', S(c, 'rnd') >= 5 ? (c.empowered ? 'ipQuarter' : 'ipPerm') : ''] }),
   },
   {
     id: 'R5', name: '研发人员', kind: 'rnd',

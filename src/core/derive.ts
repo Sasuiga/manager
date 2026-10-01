@@ -196,12 +196,13 @@ function mergeTier(r: Record<Tier, number>): Partial<Record<Tier, number>> {
   return out
 }
 
-/** 当前已激活的知识产权列表（含事件带来的临时知产）。 */
+/** 当前已激活的知识产权列表（含事件/卡牌带来的季度与月度临时知产）。 */
 export function activeIps(state: GameState): string[] {
   const out: string[] = []
   // 核心模式无知产激活槽位：已拥有即生效；完整模式保留槽位制
   const effective = state.mode === 'core' ? state.ipOwned : state.ipActive
   for (const id of effective) if (id) out.push(id)
+  for (const id of state.quarterIps ?? []) if (!out.includes(id)) out.push(id)
   for (const id of state.monthMods.tempIps ?? []) {
     if (id === 'normal' || id === 'strong') {
       // 事件临时知产：从对应池中挑一个尚未拥有的

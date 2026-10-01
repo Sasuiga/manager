@@ -59,6 +59,7 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.depts.rnd.staff = setup.rndStaff ?? 1
   state.depts.rnd.hired = state.depts.rnd.staff
   state.ipOwned = []
+  state.quarterIps = []
   state.rndStartsThisMonth = []
   state.flags['rndConfirmed'] = 0
   for (const s of Object.values(state.rnd)) {

@@ -100,6 +100,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     ipOwned: [],
     ipActive: [null],
     ipChangedThisMonth: false,
+    quarterIps: [],
     materialsDeveloped: Object.fromEntries(NEW_MATERIALS.map((m) => [m.id, 0])),
     agreements: [],
     futures: {},

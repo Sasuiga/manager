@@ -925,6 +925,8 @@ export function advanceMonth(state: GameState, rng: Rng) {
     const nextIdx = ((idx + move) % 6 + 6) % 6
     state.climate = CLIMATE_ORDER[nextIdx]
     state.nextClimateOdds = forecastOdds(nextIdx)
+    // 季度临时知产到期（R4 强化「本季有效」）
+    state.quarterIps = []
   }
 
   /**

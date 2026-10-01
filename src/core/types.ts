@@ -611,6 +611,8 @@ export interface GameState {
   rnd: Record<string, ResearchSlot>
   ipOwned: string[]
   ipActive: (string | null)[]
+  /** 季度临时知产（R4 强化：研发 ≥5 人时「本季有效」），季度切换时清空 */
+  quarterIps: string[]
   ipChangedThisMonth: boolean
   materialsDeveloped: Record<string, number>
   agreements: Agreement[]
