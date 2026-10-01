@@ -242,7 +242,7 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(s.orders.length).toBe(2) // 第 2 单当月立即补发
   })
 
-  it('3 名生产解锁加班：产能计划含 +10', () => {
+  it('3 名生产解锁加班：加班费 = 2× 生产工资，产能 + 人数 × 每人产能', () => {
     const s = fresh(902)
     s.monthMods = {} // 排除本月事件修正，只验证加班解锁本身
     s.currentEvent = null
@@ -251,7 +251,10 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(E.hire(s, 'make').ok).toBe(true)
     expect(E.hire(s, 'make').ok).toBe(true)
     expect(E.toggleOvertime(s).ok).toBe(true)
-    expect(E.planCapacity(s)).toBe(5 + 3 * 6 + 10)
+    // 每人 6（基础 5 + 2 人解锁 1，无设备）：加班增益 = 3 × 6
+    expect(E.planCapacity(s)).toBe(5 + 3 * 6 + 3 * 6)
+    // 加班费 = 2 × 0.8w × 3 人 = 4.8w
+    expect(E.preSettleCash(s).overtimePay).toBe(48)
   })
 
   it('预演包含当月招聘的效果：招 2 名生产后产能上限提升', () => {

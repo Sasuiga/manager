@@ -285,10 +285,10 @@ export const BUY_LOT_SLOTS = [2, 3, 4, 5, 6, 7]
 export const OWNER_CAPACITY = 5
 /** 每名工人的基础产能。 */
 export const MAKER_CAP_BASE = 5
-/** 每台设备给每名工人额外提供的产能（设备系统后续分支引入，先占位）。 */
-export const EQUIP_CAP_PER_WORKER = 2
+/** 每台设备给每名工人额外提供的产能（设备层恢复前的占位值；IP I2/J1 的空转授予同口径）。 */
+export const EQUIP_CAP_PER_WORKER = 4
 
-/** 加成计算：每名工人的产能（基础 5；生产 2 人 +1、4 人 +1 解锁；每台设备 +2）。 */
+/** 加成计算：每名工人的产能（基础 5；生产 2 人 +1、4 人 +1 解锁；每台设备 +4）。 */
 export function makerCapacityPerStaff(staff: number, equipmentCount = 0): number {
   let v = MAKER_CAP_BASE
   if (staff >= 2) v += 1
@@ -298,13 +298,31 @@ export function makerCapacityPerStaff(staff: number, equipmentCount = 0): number
 }
 
 export const EQUIPMENT_SHOP: { id: string; name: string; capacity: number; depreciation: Money; creditLine: Money; price: Money; desc: string }[] = [
-  { id: 'eq-line', name: '标准产线', capacity: 10, depreciation: 20, creditLine: 50, price: 50, desc: '产能 10 · 安置 1 人' },
-  { id: 'eq-precision', name: '精密产线', capacity: 16, depreciation: 35, creditLine: 80, price: 90, desc: '产能 16 · 安置 1 人' },
-  { id: 'eq-auto', name: '自动化产线', capacity: 24, depreciation: 50, creditLine: 120, price: 150, desc: '产能 24 · 安置 1 人' },
+  { id: 'eq-line', name: '标准产线', capacity: 10, depreciation: 20, creditLine: 50, price: 50, desc: '每名生产人员产能 +4 · 月折旧 2w · 额度 5w' },
+  { id: 'eq-precision', name: '精密产线', capacity: 16, depreciation: 35, creditLine: 80, price: 90, desc: '每名生产人员产能 +4 · 月折旧 3.5w · 额度 8w' },
+  { id: 'eq-auto', name: '自动化产线', capacity: 24, depreciation: 50, creditLine: 120, price: 150, desc: '每名生产人员产能 +4 · 月折旧 5w · 额度 12w' },
 ]
 
-export const OVERTIME_CAPACITY = 10
-export const OVERTIME_COST: Money = 5
+/**
+ * 加班：一次性支付 2× 本月生产工资计提额（含事件/卡牌薪酬修正），
+ * 当月产能 +1× 员工产能部分（人数 × 每人产能，含解锁加成与设备加成；
+ * 不含老板基线与卡牌/事件定额修正）。
+ * 成本随工资（人数）上涨、效果随产能（人数×设备）放大：
+ * 多招人加班更贵、买设备加班更值——设备是加班的放大器而非竞争者。
+ */
+export const OVERTIME_WAGE_FACTOR = 2
+/** 加班解锁线：生产 3 人 */
+export const OVERTIME_UNLOCK_STAFF = 3
+
+/** 加班费 = 2 × 生产人员本月工资（salaryPer 已含事件/卡牌修正；<3 人为 0）。 */
+export function overtimeCostOf(salaryPerMake: number, makeStaff: number): number {
+  return makeStaff >= OVERTIME_UNLOCK_STAFF ? OVERTIME_WAGE_FACTOR * salaryPerMake * makeStaff : 0
+}
+
+/** 加班增益 = 员工产能部分（人数 × 每人产能，含解锁加成 + 设备加成；<3 人为 0）。 */
+export function overtimeGainOf(makeStaff: number, equipmentCount = 0): number {
+  return makeStaff >= OVERTIME_UNLOCK_STAFF ? makeStaff * makerCapacityPerStaff(makeStaff, equipmentCount) : 0
+}
 
 // ════════════════════════════════════════════════════════════
 // 5. 研发与知识产权

@@ -17,7 +17,6 @@ import {
   MATERIALS,
   OWNER_CAPACITY,
   MONTHLY_RATE,
-  OVERTIME_COST,
   RND_COST_PER_PROJECT,
   RND_PROGRESS_PER_WORKER,
   RND_RATE_PER_WORKER,
@@ -30,6 +29,7 @@ import {
   SALES_RESOURCE_STEPS,
   STAFF,
   TIERS,
+  overtimeCostOf,
   priceOf,
 } from '../data/game'
 import type { CardPlayEffect, Dept, GameState, MonthMods, ResearchProjectDef, Tier } from './types'
@@ -336,7 +336,7 @@ export function derive(state: GameState): DerivedTotals {
   const price: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const t of TIERS) price[t] = productPriceRaw(t, priceShift[t])
 
-  // ── 产能：老板自产 + 工人数 × 每人产能（基础 5，2 人/4 人解锁各 +1，每台设备 +2） ──
+  // ── 产能：老板自产 + 工人数 × 每人产能（基础 5，2 人/4 人解锁各 +1，每台设备 +4） ──
   const capacity = Math.max(0, OWNER_CAPACITY + staffCount.make * makerPerStaff(staffCount.make, state.equipment.length) + (mods.capacity ?? 0))
 
   // ── 薪酬 ──
@@ -393,7 +393,8 @@ export function derive(state: GameState): DerivedTotals {
   const noBorrow = !!mods.noBorrow
 
   // ── 各部门费用明细 ──
-  const overtimeCost = state.plan.overtime && state.depts.make.staff >= 3 ? OVERTIME_COST : 0
+  // 加班费 = 2× 生产人员本月工资计提（含事件/卡牌薪酬修正；<3 人为 0）
+  const overtimeCost = state.plan.overtime ? overtimeCostOf(salaryPer.make, state.depts.make.staff) : 0
   let makeDepreciation = 0
   for (const e of state.equipment) {
     makeDepreciation += Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated))
