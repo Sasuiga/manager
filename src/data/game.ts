@@ -235,7 +235,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     base: ['每人产能 +5'],
     unlocks: [
       { at: 2, text: '每名工人产能 +1' },
-      { at: 3, text: '解锁加班：0.5w 临时 +10 产能，每月 1 次' },
+      { at: 3, text: '解锁加班：付 2× 生产工资，当月产能 +1× 员工产能' },
       { at: 4, text: '每名工人产能 +1，并强化卡牌效果' },
       { at: 5, text: '每生产 5 件额外入库 1 件', achievement: '流水线' },
     ],
