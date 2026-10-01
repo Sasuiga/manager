@@ -543,6 +543,114 @@ button {
   font-weight: 600;
 }
 
+/* ── 财务报表（本期/上期 两列对照）────────────────── */
+
+.stmt {
+  font-size: var(--fs-sm);
+}
+
+.stmt-head,
+.stmt-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 92px) minmax(0, 92px);
+  column-gap: var(--s2);
+}
+
+.stmt-head {
+  padding-bottom: var(--s1);
+  border-bottom: 1px solid var(--line-gold);
+}
+
+.stmt-head span {
+  font-size: var(--fs-xs);
+  color: var(--faint);
+  font-family: var(--font-mono);
+}
+
+.stmt-head span:nth-child(n + 2) {
+  text-align: right;
+}
+
+.stmt-row {
+  align-items: baseline;
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.stmt-row:last-child {
+  border-bottom: none;
+}
+
+.stmt-label {
+  color: var(--muted);
+}
+
+.stmt-val {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.stmt-val.red { color: var(--red); }
+.stmt-val.green { color: var(--green); }
+
+/* 合计行：与 .row.bold 同语言（祖母绿底 + 金值），符号色优先 */
+.stmt-row.bold {
+  background: var(--emerald-soft);
+  margin-inline: calc(-1 * var(--s3));
+  padding-inline: var(--s3);
+  border-radius: var(--r-sm);
+  border-bottom: none;
+}
+
+.stmt-row.bold .stmt-label {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.stmt-row.bold .stmt-val {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.stmt-row.bold .stmt-val.red { color: var(--red); }
+.stmt-row.bold .stmt-val.green { color: var(--green); }
+
+/* 分节行（资产 / 负债与权益） */
+.stmt-section {
+  font-size: var(--fs-xs);
+  color: var(--faint);
+  letter-spacing: 0.08em;
+  padding: var(--s3) 0 var(--s1);
+  border-bottom: 1px solid var(--line);
+}
+
+/* 可下钻的金额格：悬停金色高亮，提示可点 */
+button.stmt-val {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 2px;
+  background: none;
+  border: none;
+  padding: 2px var(--s1);
+  margin-right: calc(-1 * var(--s1));
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: inherit;
+  color: inherit;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-settle), background var(--dur-fast) var(--ease-settle);
+}
+
+button.stmt-val:hover {
+  color: var(--gold-hi);
+  background: var(--panel-2);
+}
+
 /* ── 底部部门轨道 ───────────────────────────────────────── */
 
 .track {
