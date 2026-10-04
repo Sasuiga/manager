@@ -5,6 +5,7 @@ import {
   CLIMATE_MATERIAL,
   CLIMATE_NAMES,
   CLIMATE_ORDER,
+  LOAN_TERM_MONTHS,
   MATERIALS,
   MGMT_CARD_UNLOCK,
   MOMENTUM_ODDS,
@@ -465,6 +466,29 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   const preTax = grossProfit - mfgExpense - sellExpense - adminExpense - rndExpense - financeExpense + otherIncome
   const tax = preTax > 0 ? Math.round(preTax * TAX_RATE) : 0
   state.cash -= tax
+  /**
+   * 借款到期（3 个月期限）：到期月结算时，未还清的剩余本金强制现金全额归还（当月利息已按余额计提）。
+   * 现金与负债同步减少，恒等式不变；现金仍为负则进下方终局判定（资金断裂）。
+   */
+  if (state.month === state.loanDueMonth && state.debt > 0) {
+    const due = state.debt
+    state.cash -= due
+    state.debt = 0
+    state.loanDueMonth = 0
+    state.monthLedger.push({
+      dept: 'ops',
+      item: '借款到期还款',
+      debit: '借款',
+      credit: '现金',
+      debitAmt: due,
+      creditAmt: due,
+      detail: [
+        `期限 ${LOAN_TERM_MONTHS} 个月届满，剩余借款 ${(due / 10).toFixed(2)}w 到期强制现金全额归还`,
+        '现金仍为负则资金断裂（终局判定）',
+      ],
+    })
+    warnings.push(`借款到期：剩余 ${(due / 10).toFixed(2)}w 已强制现金归还`)
+  }
   const netProfit = preTax - tax
 
   /**

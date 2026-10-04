@@ -7,6 +7,7 @@ import {
   EQUIPMENT_SHOP,
   EQUIP_CAP_PER_WORKER,
   IP_BY_ID,
+  LOAN_TERM_MONTHS,
   MATERIALS,
   NEW_MATERIALS,
   overtimeCostOf,
@@ -1502,12 +1503,15 @@ export function deactivateIp(state: GameState, slot: number): ActionResult {
 
 export function borrow(state: GameState, amount: Money): ActionResult {
   const d = derive(state)
+  if (state.debt > 0) return fail('先还清上一笔借款，再借新笔')
   if (d.noBorrow) return fail('本月无法新增借款')
   if (amount <= 0) return fail('金额无效')
   if (amount > d.creditAvailable) return fail('超出可用额度')
   if (amount % 10 !== 0) return fail('借款以 1w 为单位')
   state.cash += amount
   state.debt += amount
+  const dueMonth = state.month + LOAN_TERM_MONTHS - 1
+  state.loanDueMonth = dueMonth
   state.monthLedger.push({
     dept: 'ops',
     item: '借款',
@@ -1517,11 +1521,15 @@ export function borrow(state: GameState, amount: Money): ActionResult {
     creditAmt: amount,
     detail: [
       `到账 ${(amount / 10).toFixed(2)}w，新增负债 ${(amount / 10).toFixed(2)}w`,
-      '现金与负债同步增加，净资产不变；利息按月确认进财务费用',
+      `期限 ${LOAN_TERM_MONTHS} 个月：第 ${dueMonth} 月末到期，未还部分到期强制全额归还`,
+      '现金与负债同步增加，净资产不变；利息按月末余额 × 月利率确认进财务费用，提前还款可降低后续利息',
     ],
   })
-  pushLog(state, 'action', `借款 ${(amount / 10).toFixed(2)}w`, [`月利率 ${(d.rate * 100).toFixed(1)}%`])
-  return { ok: true, msg: `到账 ${(amount / 10).toFixed(2)}w` }
+  pushLog(state, 'action', `借款 ${(amount / 10).toFixed(2)}w`, [
+    `月利率 ${(d.rate * 100).toFixed(1)}% · 期限 ${LOAN_TERM_MONTHS} 个月（第 ${dueMonth} 月到期）`,
+    '还清前不能借新笔；提前还款按剩余余额少计利息',
+  ])
+  return { ok: true, msg: `到账 ${(amount / 10).toFixed(2)}w · 第 ${dueMonth} 月到期` }
 }
 
 export function repay(state: GameState, amount: Money): ActionResult {
@@ -1530,6 +1538,8 @@ export function repay(state: GameState, amount: Money): ActionResult {
   if (amount > state.cash) return fail('现金不足')
   state.cash -= amount
   state.debt -= amount
+  const cleared = state.debt === 0
+  if (cleared) state.loanDueMonth = 0
   state.monthLedger.push({
     dept: 'ops',
     item: '还款',
@@ -1537,10 +1547,13 @@ export function repay(state: GameState, amount: Money): ActionResult {
     credit: '现金',
     debitAmt: amount,
     creditAmt: amount,
-    detail: [`归还 ${(amount / 10).toFixed(2)}w，负债同步减少`],
+    detail: [
+      `归还 ${(amount / 10).toFixed(2)}w，负债同步减少`,
+      cleared ? '已全部还清：期限约束解除，可再借新笔' : '提前还款：后续月份利息按剩余余额计提，降低利息费用',
+    ],
   })
-  pushLog(state, 'action', `还款 ${(amount / 10).toFixed(2)}w`)
-  return { ok: true, msg: `已还 ${(amount / 10).toFixed(2)}w` }
+  pushLog(state, 'action', cleared ? `还款 ${(amount / 10).toFixed(2)}w（已还清）` : `还款 ${(amount / 10).toFixed(2)}w`)
+  return { ok: true, msg: cleared ? '已还清，可再借新笔' : `已还 ${(amount / 10).toFixed(2)}w` }
 }
 
 // ════════════════════════════════════════════════════════════

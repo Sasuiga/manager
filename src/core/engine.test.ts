@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as E from './engine'
-import { BOMS, CLIMATE_ORDER, MATERIALS, TIERS } from '../data/game'
+import { BOMS, CLIMATE_ORDER, LOAN_TERM_MONTHS, MATERIALS, MONTHLY_RATE, TIERS } from '../data/game'
 import { Rng } from './rng'
 
 /**
@@ -45,8 +45,9 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
     }
     E.enterOperate(s)
 
-    // ── 借款：现金 < 30w 时借到可用额度上限（基础额度 5w），再招聘/采购 ──
+    // ── 借款：现金 < 30w 时先还上一笔（未还清不能借新），再借到可用额度上限（基础额度 5w），再招聘/采购 ──
     if (s.cash < 300) {
+      if (s.debt > 0) E.repay(s, s.debt)
       const d0 = E.derive(s)
       const amt = Math.min(d0.creditAvailable, 300)
       if (amt > 0) E.borrow(s, amt - (amt % 10))
@@ -121,8 +122,9 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
       if (!s.rnd[target].done) E.setRndAssign(s, target, s.depts.rnd.staff)
     }
 
-    // ── 借款：现金 < 30w 时借满可用额度（采购之后、结算前） ──
+    // ── 借款：现金 < 30w 时先还上一笔（未还清不能借新），再借满可用额度（采购之后、结算前） ──
     if (s.cash < 300) {
+      if (s.debt > 0) E.repay(s, s.debt)
       const d2 = E.derive(s)
       const amt = Math.min(d2.creditAvailable, 300)
       if (amt > 0) E.borrow(s, amt - (amt % 10))
@@ -360,6 +362,7 @@ describe('引擎', () => {
       }
       E.enterDraw(s)
       E.enterOperate(s)
+      if (s.debt > 0) E.repay(s, s.debt)
       if (E.derive(s).creditAvailable >= 100 && m >= 2) E.borrow(s, 100)
 
       const rep = E.settleMonth(s)
@@ -783,5 +786,62 @@ describe('引擎', () => {
     expect(s.wagePayableBy.make).toBe(wage)
     const b2 = E.balanceSheet(s)
     expect(b2.totalAssets - b2.debt - b2.wagePayable - b2.equity).toBe(0)
+  })
+
+  it('融资：3 个月期限到期强还、未还清不能借新、提前还款降低计息基数', () => {
+    expect(MONTHLY_RATE).toBe(0.05)
+    const s = E.newGame(31)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    E.beginMonthEvent(s)
+    E.enterDraw(s)
+    E.enterOperate(s)
+    expect(s.month).toBe(1)
+
+    // 第 1 月借 5w（基础额度），期限 3 个月 → 第 3 月末到期
+    expect(E.borrow(s, 50).ok).toBe(true)
+    expect(s.debt).toBe(50)
+    expect(s.loanDueMonth).toBe(1 + LOAN_TERM_MONTHS - 1)
+
+    // 没还旧的不能借新的
+    expect(E.borrow(s, 10).ok).toBe(false)
+
+    // 提前部分还款：期限约束不解除，后续利息按减少后的余额计提
+    expect(E.repay(s, 30).ok).toBe(true)
+    expect(s.debt).toBe(20)
+    expect(s.loanDueMonth).toBe(3)
+    expect(E.borrow(s, 10).ok).toBe(false)
+
+    // 提前还清：期限约束解除，可再借新笔（期限仍为 3 个月）
+    expect(E.repay(s, 20).ok).toBe(true)
+    expect(s.debt).toBe(0)
+    expect(s.loanDueMonth).toBe(0)
+    expect(E.borrow(s, 20).ok).toBe(true)
+    expect(s.loanDueMonth).toBe(3)
+
+    // 第 1、2 月结算：利息按月末余额计提，借款余额不变
+    E.settleMonth(s)
+    E.nextMonth(s)
+    expect(s.month).toBe(2)
+    E.settleMonth(s)
+    E.nextMonth(s)
+
+    // 第 3 月（到期月）：结算时剩余本金强制现金全额归还
+    expect(s.month).toBe(3)
+    expect(s.debt).toBe(20)
+    const rate3 = E.derive(s).rate
+    const interest3 = Math.max(0, Math.round(20 * rate3))
+    const cash0 = s.cash
+    const rep3 = E.settleMonth(s)
+    expect(rep3.ledger.parts['借款利息']).toBe(interest3)
+    expect(s.cash).toBe(cash0 - 20 - interest3)
+    expect(s.debt).toBe(0)
+    expect(s.loanDueMonth).toBe(0)
+    // 台账记了到期强还的分录（现金与负债同步减少，恒等式不变）
+    const due = s.monthLedger.find((r) => r.item === '借款到期还款')
+    expect(due).toBeTruthy()
+    expect(due!.creditAmt).toBe(20)
+    const b = E.balanceSheet(s)
+    expect(b.totalAssets - b.debt - b.wagePayable - b.equity).toBe(0)
   })
 })

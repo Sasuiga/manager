@@ -351,7 +351,7 @@ export function derive(state: GameState): DerivedTotals {
   // ── 资金 ──
   const rate = Math.max(0, MONTHLY_RATE + (mods.rateShift ?? 0) * 0.001 - ip.rateSave * 0.001)
   const interest = Math.max(0, Math.round(state.debt * rate) - ip.interestSave)
-  const creditLine = Math.round((BASE_CREDIT_LINE + ip.creditLine) * (mods.creditFactor ?? 1))
+  const creditLine = Math.round((BASE_CREDIT_LINE + ip.creditLine + (state.flags['extraCredit'] ?? 0)) * (mods.creditFactor ?? 1))
 
   // ── 销售 ──
   // 品牌加成计入资源池（新模型下品牌 = 更多推力）

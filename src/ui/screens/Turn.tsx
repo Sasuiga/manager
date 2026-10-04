@@ -1,6 +1,6 @@
 import { useState, Fragment } from 'react'
 import * as E from '../../core/engine'
-import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, EQUIP_CAP_PER_WORKER, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS, overtimeCostOf, overtimeGainOf } from '../../data/game'
+import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, EQUIP_CAP_PER_WORKER, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS, LOAN_TERM_MONTHS, overtimeCostOf, overtimeGainOf } from '../../data/game'
 import type { CardCtx } from '../../data/game'
 import type { CardInstance } from '../../core/types'
 import type { Tier } from '../../core/types'
@@ -66,13 +66,14 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
     if (r.item.includes('加班')) return ['加班费 = 2× 本月生产工资计提额，安排时发生即支付（选定后不可取消、费用不退还，需生产 ≥ 3 人；效果 = 本月产能 +1× 员工产能，含设备加成）']
     if (r.item.includes('研发')) return [`每个项目每月 ${wan(RND_COST_PER_PROJECT)}`, '本月推进 1 个项目']
     if (r.item.includes('提案')) return ['提案实施费用合计（含卡牌费用），计入管理费用']
-    if (r.item.includes('借款利息')) return ['借款余额 × 月利率，计入财务费用']
+    if (r.item.includes('借款到期还款')) return [`期限 ${LOAN_TERM_MONTHS} 个月届满，剩余本金到期强制现金全额归还`, '当月利息已按月末余额计提；现金仍为负则资金断裂']
+    if (r.item.includes('借款利息')) return ['借款余额 × 月利率，计入财务费用；提前还款按剩余余额少计']
     if (r.item.includes('生产费用结转')) return ['制造费用未转入存货的部分（工资/折旧/加班/降本差异）当期费用化，与损益表「生产费用」一致']
     if (r.item.includes('流水线入库')) return ['白得产出按本批单位成本计价入库，贷记营业外收入，恒等式不漂移']
     if (r.item.includes('协议手续费')) return ['签订长期协议费用 1w，计入事件与杂项支出']
     if (r.item.includes('供应商开发')) return ['开发费 3w 计入事件与杂项支出；基础供给 +2 立即生效']
     if (r.item.includes('设备购置')) return ['现金资本化为固定资产，不计当期损益；折旧逐月进生产费用']
-    if (r.item.includes('借款')) return ['现金与负债同步增减，净资产不变；利息按月确认进财务费用']
+    if (r.item.includes('借款')) return ['现金与负债同步增减，净资产不变；期限 3 个月，到期未还部分强制全额归还；利息按月末余额确认进财务费用']
     // 手工记账行的兜底说明（正常路径由 r.detail 提供）
     if (r.item.startsWith('采购') || r.item.includes('贸易商') || r.item.includes('协议到货'))
       return ['现金实付全额转入库存（移动加权平均计价）', '库存增加额 = 现金扣减额，与生产领料出库勾稽']
@@ -311,7 +312,7 @@ function OpsPage({ g }: { g: Game }) {
         ) : null}
       </div>
 
-      {/* 融资：额度内以 1w 为单位借/还，利息按月末余额 × 月利率进财务费用 */}
+      {/* 融资：额度内以 1w 为单位借/还；期限 3 个月，到期未还部分强制全额归还；未还清不能借新笔；利息按月末余额 × 月利率进财务费用 */}
       <div className="card">
         <div className="hstack-between">
           <h3>融资</h3>
@@ -319,23 +320,34 @@ function OpsPage({ g }: { g: Game }) {
         </div>
         <div className="title-rule" />
         <Row k="借款余额" v={wan(s.debt)} />
+        {s.loanDueMonth > 0 ? (
+          <Row k="还款期限" v={`第 ${s.loanDueMonth} 月到期 · 剩 ${s.loanDueMonth - s.month + 1} 个月`} cls="gold" />
+        ) : null}
         <Row k="可用额度" v={wan(d.creditAvailable)} cls={d.creditAvailable > 0 ? 'gold' : ''} />
         <Row k="月利率" v={`${(d.rate * 100).toFixed(1)}%`} />
         {s.debt > 0 ? <Row k="本月利息" v={wan(d.interest)} /> : null}
         <div className="stack" style={{ marginTop: 'var(--s3)' }}>
           <button
             className="btn btn-mini"
-            disabled={d.noBorrow || d.creditAvailable < 10}
+            disabled={d.noBorrow || s.debt > 0 || d.creditAvailable < 10}
             onClick={() => setLoan('borrow')}
           >
             <span className="btn-main">借款</span>
             <span className="btn-sub">
-              {d.noBorrow ? '本月无法新增借款' : d.creditAvailable < 10 ? '可用额度不足 1w' : `可用 ${wan(d.creditAvailable)} · 以 1w 为单位`}
+              {d.noBorrow
+                ? '本月无法新增借款'
+                : s.debt > 0
+                  ? '先还清上一笔，再借新笔'
+                  : d.creditAvailable < 10
+                    ? '可用额度不足 1w'
+                    : `可用 ${wan(d.creditAvailable)} · 以 1w 为单位 · 期限 ${LOAN_TERM_MONTHS} 个月`}
             </span>
           </button>
           <button className="btn btn-mini" disabled={s.debt <= 0} onClick={() => setLoan('repay')}>
             <span className="btn-main">还款</span>
-            <span className="btn-sub">{s.debt > 0 ? `余额 ${wan(s.debt)} · 现金 ${wan(s.cash)}` : '暂无借款'}</span>
+            <span className="btn-sub">
+              {s.debt > 0 ? `余额 ${wan(s.debt)} · 现金 ${wan(s.cash)}${s.loanDueMonth > 0 ? ` · 第 ${s.loanDueMonth} 月到期` : ''}` : '暂无借款'}
+            </span>
           </button>
         </div>
       </div>
@@ -2154,6 +2166,7 @@ function LoanSheet({ g, mode, onClose }: { g: Game; mode: 'borrow' | 'repay'; on
   const full = mode === 'borrow' ? d.creditAvailable : s.debt
   const reasonOf = (a: number): string | null => {
     if (mode === 'borrow') {
+      if (s.debt > 0) return '先还清上一笔借款，再借新笔'
       if (d.noBorrow) return '本月无法新增借款'
       if (a > d.creditAvailable) return '超出可用额度'
     } else {
@@ -2188,8 +2201,8 @@ function LoanSheet({ g, mode, onClose }: { g: Game; mode: 'borrow' | 'repay'; on
       title={mode === 'borrow' ? '借款' : '还款'}
       sub={
         mode === 'borrow'
-          ? `可用额度 ${wan(d.creditAvailable)} · 月利率 ${(d.rate * 100).toFixed(1)}%`
-          : `余额 ${wan(s.debt)} · 现金 ${wan(s.cash)}`
+          ? `可用额度 ${wan(d.creditAvailable)} · 月利率 ${(d.rate * 100).toFixed(1)}% · 期限 ${LOAN_TERM_MONTHS} 个月`
+          : `余额 ${wan(s.debt)}${s.loanDueMonth > 0 ? ` · 第 ${s.loanDueMonth} 月到期` : ''} · 现金 ${wan(s.cash)}`
       }
       onClose={onClose}
     >
@@ -2201,8 +2214,8 @@ function LoanSheet({ g, mode, onClose }: { g: Game; mode: 'borrow' | 'repay'; on
       </div>
       <div className="hint">
         {mode === 'borrow'
-          ? '借款以 1w 为单位，到账即计负债；利息按月末借款余额 × 月利率按月确认，计入财务费用。'
-          : '还款即时扣减现金，负债同步减少；利息仍按当月末余额计提。'}
+          ? `借款以 1w 为单位，期限 ${LOAN_TERM_MONTHS} 个月（第 ${s.month + LOAN_TERM_MONTHS - 1} 月末到期），到期未还部分强制全额归还；利息按月末余额 × 月利率计提，提前还款可降低利息费用；还清前不能借新笔。`
+          : '还款即时扣减现金，负债同步减少；利息按剩余余额计提，提前还款可降低后续利息；全部还清后才能再借新笔。'}
       </div>
     </Sheet>
   )

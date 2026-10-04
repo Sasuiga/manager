@@ -46,6 +46,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     cash: START_CASH,
     openingCash: START_CASH,
     debt: 0,
+    loanDueMonth: 0,
     paidIn: START_CASH,
     ownerCapital: 0, // 新模型开局无初始设备，实物投入归零
     prepaid: 0,
@@ -202,7 +203,7 @@ export function buildDeck(state: GameState, rng: Rng) {
 /** 部门人员基础值与解锁效果的展示文本，供 UI 直接使用。 */
 export function creditInfo(state: GameState) {
   const d = derive(state)
-  return { line: d.creditLine, used: state.debt, available: d.creditAvailable, noBorrow: d.noBorrow }
+  return { line: d.creditLine, used: state.debt, available: d.creditAvailable, noBorrow: d.noBorrow, dueMonth: state.loanDueMonth }
 }
 
 export function monthlyRndCost(state: GameState): Money {

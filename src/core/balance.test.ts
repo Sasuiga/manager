@@ -72,6 +72,7 @@ function play(seed: number) {
 
     // 周转紧张时借一点
     if (s.cash < 200) {
+      if (s.debt > 0) E.repay(s, s.debt)
       const d2 = E.derive(s)
       const amt = Math.min(d2.creditAvailable, 200)
       if (amt >= 10) E.borrow(s, amt - (amt % 10))

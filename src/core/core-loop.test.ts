@@ -129,6 +129,9 @@ describe('订单与排产联动', () => {
   function orderState() {
     const s = E.newGame(88, 'core')
     E.startGame(s)
+    // 事件噪声隔离：清掉第 1 月抽到的事件及其修正（订单/排产测试只关心经营机制）
+    s.monthMods = {}
+    s.currentEvent = null
     s.orders = [
       { id: 'o1', tier: 'low', qty: 3, priceShift: 1, dueMonth: 1, from: 'test' },
       { id: 'o2', tier: 'low', qty: 2, priceShift: 1, dueMonth: 1, from: 'test' },
@@ -696,12 +699,12 @@ describe('统一成本口径（采购计划 → 单位成本 → 单件毛利 �
 })
 
 describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
-  it('池过滤：融资未落地剔 8 张（两模式）；卡牌参数事件两模式均保留（核心也有立项抽卡阶段）', () => {
+  it('池过滤：融资事件全模式保留（融资层已落地）；卡牌参数事件两模式均保留（核心也有立项抽卡阶段）', () => {
     const fullPool = new Set(E.buildEventPool(E.newGame(1), Rng.fromState(1)).map((e) => e.id))
     const corePool = new Set(E.buildEventPool(E.newGame(1, 'core'), Rng.fromState(1)).map((e) => e.id))
     for (const id of ['R4', 'P5', 'O4', 'S3', 'D4', 'X3', 'R6', 'S9']) {
-      expect(fullPool.has(id), `${id} 依赖借款参数（debt≡0 落空）`).toBe(false)
-      expect(corePool.has(id), id).toBe(false)
+      expect(fullPool.has(id), `${id} 融资层已落地（借/还入口 + 3 个月期限 + 5% 月利率），保留`).toBe(true)
+      expect(corePool.has(id), id).toBe(true)
     }
     for (const id of ['R5', 'O5']) {
       expect(fullPool.has(id), `${id} 完整模式有提案阶段，保留`).toBe(true)

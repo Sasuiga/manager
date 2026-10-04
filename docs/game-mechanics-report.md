@@ -107,7 +107,7 @@
 
 ```
 startGame / nextMonth（engine.ts:116/303）：
-  phase='event'（每月 1 张事件，池按 needs 过滤：融资类全模式剔除、卡牌参数类两模式保留——核心也有立项抽卡阶段）
+  phase='event'（每月 1 张事件，池按 needs 过滤：融资类事件全模式保留（融资层已落地）、卡牌参数类两模式保留——核心也有立项抽卡阶段）
   → 确认后 enterDraw 进入立项（抽卡）阶段（抽 N 选 M，与完整模式一致）→ 经营阶段。
   generateMonthlyOrders（订单数 = 销售人数 + 知产 + 卡牌驱动，见 §8）。
   无董事会、无设备购买、无知产槽位；AP = 3 + 管理人数−1（核心也显示管理部门，AP 不再恒 3）。
@@ -656,7 +656,7 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 ```
 
 - 折旧：每台 `min(月折旧, 原值 − 累计折旧)`，提足即停（账面不穿负）。
-- 利息：`max(0, round(debt × rate) − I5)`，`rate = max(0, 1.2% + 事件利率修正×0.1% − J7×0.1%)`。**当前 UI 无借款入口 → debt 恒 0、利息恒 0**（§18）。
+- 利息：`max(0, round(debt × rate) − I5)`，`rate = max(0, 5% + 事件利率修正×0.1% − J7×0.1%)`（基础月利率 5%，3 个月期限：到期月结算时剩余本金强制现金全额归还，见 §14.4）。
 
 ### 14.3 资产负债表（`balanceSheet`，game.ts:252）
 
@@ -669,12 +669,14 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 
 注意 UI 报表（Panel/Report）的「负债与权益合计」显示为 `debt + wagePayable + equity`（不含 pendingCost，展示口径简化）。
 
-### 14.4 借款（引擎完整、UI 未暴露）
+### 14.4 借款（入口在运营页「融资」卡片，3 个月期限）
 
-- `borrow`（actions.ts:1366）：1w 为单位，≤ 可用额度，`noBorrow`（X3 信贷冻结）禁止；现金 +、debt +。
-- `repay`：≤ debt 且 ≤ 现金。
-- 额度 = round((5w + J7 20w) × 事件额度系数)；**设备的标注额度与 R6 事件的「额度 +5w」都未接入**（§18）。
-- 测试脚本（route/balance）里用借还稳现金流，所以引擎路径本身是活的，只是玩家界面没有按钮。
+- `borrow`（actions.ts:1504）：1w 为单位，≤ 可用额度，`noBorrow`（X3 信贷冻结）禁止；**有未清借款（debt > 0）时不能借新**；到账时记 `loanDueMonth = 借款月 + LOAN_TERM_MONTHS − 1`（3 个月期限）。
+- `repay`（actions.ts:1535）：≤ debt 且 ≤ 现金；**还清后 loanDueMonth 清零，可再借新笔**。利息按月末余额计提，提前还款降低后续利息费用。
+- 到期：到期月结算（settle.ts:470 附近）时余额 > 0 则**强制现金全额归还**（台账「借款到期还款」行 + 警告），现金仍为负进终局判定（资金断裂）；当月利息已按余额计提。
+- 额度 = round((5w + J7 20w + R6 extraCredit) × 事件额度系数)：R6「额度 +5w」已接入（写 `flags['extraCredit']`，derive 读）；**设备的标注额度仍未接入**（§18-A8）。
+- 基础月利率 5%（`MONTHLY_RATE`，由 1.2% 上调）；事件利率修正仍按 0.1%/档，J7 利率 −0.1%/月。
+- 融资类事件（R4/R6/P5/O4/S3/S9/D4/X3，needs: ['finance']）随融资层落地全模式进池（engine.buildEventPool 不再剔除）。
 
 ### 14.5 报表与下钻
 
@@ -771,13 +773,13 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 
 ### A. 玩家界面没有入口（引擎完整）
 
-1. **借款 / 还款**（`borrow/repay`，actions.ts:1366/1390）：入口已落在运营部页「融资」卡片（借/还金额选档弹窗，同采购选档样式）；额度（5w 基础 + J7）、利率（1.2% + 事件修正）、利息随之生效。
+1. **借款 / 还款**（`borrow/repay`，actions.ts:1504/1535）：入口在运营部页「融资」卡片（借/还金额选档弹窗）；已加 **3 个月期限**（`loanDueMonth`，到期月结算强制全额归还）、**未还清不能借新**（单笔在借）、**提前还款降低计息基数**；基础月利率 5%（`MONTHLY_RATE`）。
 2. **裁员**（`fire`，actions.ts:113）：S4 事件设 `canFire` 标记但无 UI 按钮，只能 dev console 调用。
 3. **C6 紧急采购 / C7 原料替换 / C9 期货 / C10 清仓**：打出卡只设置 `flags`（cardUrgent/swap/cardFutures/cardClearance），注释说「结算/界面阶段处理」——但该界面从未实现，四张卡当前**零效果**（C9 的 `state.futures` 永远为空对象）。
 4. **P1「产能全用完额外 +1」**（fullLoadCard）、**P3「付 2w 改 +5」**（overtimeCard）、**P10 库存清理**（clearStock/clearStock15）：flag 置了没人读。
 5. **C8「上月也打降 2 档」**：读 `flags['lastC8']`（actions.ts:495）但无人写入 → 条件永不成立。
 6. **J5 专利壁垒（每季度复制 1 张已打牌）**：derive 聚合了 `cardCopy`（derive.ts:254）无消费端。
-7. **R6 事件的「借款额度 +5w」**：写 `flags['extraCredit']`（actions.ts:1608）derive 不读。
+7. **R6 事件的「借款额度 +5w」**：写 `flags['extraCredit']`（actions.ts）derive 已读（§14.4，融资层落地时接入）。~~derive 不读~~（已解决）。
 8. **设备的标注借款额度**（标准设备 5w）：存进 Equipment.creditLine 但 derive 的额度公式只用 `BASE + J7`（注释「留给融资线」）。
 9. **nextClimateOdds 预测概率**：值已与真实转移分布对齐（§5.1 ③，动能概率×步长分布），但 UI 仍不展示；动能 momentum 已在 HUD 显示并作为季度切换的输入（见 §5.1）。
 10. **boardPrompted 标志**：只写不读（types.ts:671）。
@@ -813,7 +815,7 @@ HUD **不显示**：借款额度/已借（`creditInfo` 是未使用的导出）�
 | 采购档数/数量/价格 | `src/core/actions.ts:458-496` | lotQty（25/50/100% + 取整规则）、lotPrice（小 +1 大 −1 档）、buyCardShift |
 | 订单数量/价格/生成 | `src/core/engine.ts:272` + `derive.ts:359-362` | generateMonthlyOrders（8~12 件、已解锁层随机）、orderPriceShift 基 1 |
 | 现货随机区间 | `src/core/settle.ts:236-241` | 0.5 + rng×0.5（核心）；因子上下界在 preview.ts:125-126 |
-| 工资/利息/税 | `src/core/derive.ts:341-353` + settle | STAFF.salary、I10、rate 1.2%+修正、TAX_RATE 10% |
+| 工资/利息/税 | `src/core/derive.ts:350-356` + settle | STAFF.salary、I10、rate 5%+修正（3 个月期限，到期强还，settle.ts:470）、TAX_RATE 10% |
 | 研发进度/成功率/费用 | `src/core/derive.ts:600` + data | 每人 +5/+5%、封顶 90%（中端 100）、3w/在研项目 |
 | 结算顺序 | `src/core/settle.ts:76` | §0 协议 → §1 研发 → §2 生产 → §3 销售 → §4 过账 → §5 目标 → §6 终局 |
 | 预演区间 | `src/core/preview.ts:125-132` | LOW_FACTORS 0.5 / HIGH_FACTORS 1.0 |

@@ -106,9 +106,8 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
   const weights: { ev: GameEventDef; w: number }[] = []
   for (const ev of EVENTS) {
     // 事件效果落地过滤：修正必须落在玩家当前能响应的参数上。
-    // 融资层未落地（无借/还入口，debt≡0）：利率/额度类事件全模式剔除（融资层落地后摘掉 needs 标记）；
-    // 两种模式都有立项（抽卡）阶段：卡牌参数事件（抽卡/手牌/打牌修正）全模式保留。
-    if (ev.needs?.includes('finance')) continue
+    // 融资层已落地（借/还入口 + 3 个月期限 + 5% 月利率）：利率/额度/禁借类事件（needs: ['finance']）全模式保留；
+    // 卡牌参数事件（抽卡/手牌/打牌修正）两种模式都有立项（抽卡）阶段，同样保留（needs 标记留给后续调整）。
     const evIdx = CLIMATE_ORDER.indexOf(ev.climate)
     const dist = Math.min((evIdx - idx + 6) % 6, (idx - evIdx + 6) % 6)
     let w = 1
