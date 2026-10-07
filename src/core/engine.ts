@@ -38,6 +38,9 @@ export {
   canPlay,
   cardPlayCost,
   copyPlayedCard,
+  standardDraw,
+  standardPromote,
+  standardConsult,
   drawToHand,
   buyMaterial,
   setPurchasePlan,
@@ -258,7 +261,6 @@ function drawEvent(state: GameState, rng: Rng): GameEventDef {
 export function enterDraw(state: GameState) {
   const d = derive(state)
   state.apMax = d.apMax
-  state.playsMax = d.playsMax
   state.handMax = d.handMax
   state.drawN = d.drawN
   state.drawM = d.drawM
@@ -359,8 +361,6 @@ export interface HudView {
   cash: Money
   ap: number
   apMax: number
-  plays: number
-  playsMax: number
   credit: number
   creditUsed: Money
   salesResource: number
@@ -378,8 +378,6 @@ export function hudView(state: GameState): HudView {
     cash: state.cash,
     ap: state.ap,
     apMax: state.apMax,
-    plays: state.plays,
-    playsMax: state.playsMax,
     credit: d.creditLine - state.debt,
     creditUsed: state.debt,
     salesResource: d.salesResource,

@@ -16,6 +16,7 @@ import {
   SALES_ORDER_COUNT,
   STAFF,
   TIERS,
+  TIER_LABEL,
 } from '../data/game'
 import { cardEffectToMods, derive, makerPerStaff, mergeMods, unitCost } from './derive'
 import { materialPriceAt } from './settle'
@@ -242,7 +243,7 @@ export function cardPlayCost(state: GameState, def: CardDef): Money {
 export function canPlay(state: GameState, card: CardInstance): ActionResult {
   const def = CARD_BY_ID[card.defId]
   if (!def) return fail('未知卡牌')
-  if (state.plays <= 0) return fail('本月可打牌数已用完')
+  if (state.ap < 1) return fail('AP 不足（打牌需 1 AP）')
   if (cardPlayCost(state, def) > state.cash) return fail('现金不足')
   if (def.minStaff) {
     for (const [dept, min] of Object.entries(def.minStaff) as [Dept, number][]) {
@@ -263,7 +264,7 @@ export function playCard(state: GameState, uid: string, opts?: { materialId?: st
   const cost = cardPlayCost(state, def)
   state.cash -= cost
   state.miscExpense += cost
-  state.plays -= 1
+  state.ap -= 1
 
   const ctx = cardCtx(state, card.empowered)
   const effect = card.empowered && def.strong ? def.strong(ctx) : def.base(ctx)
@@ -317,6 +318,47 @@ export function copyPlayedCard(state: GameState, key: string): ActionResult {
   state.flags['cardCopyQ'] = q
   pushLog(state, 'action', `专利壁垒：复制【${def.name}】${empowered ? '（强化）' : ''}`, ['免费生效，不占 AP 与打牌数；每季度 1 次'])
   return { ok: true, msg: `已复制【${def.name}】` }
+}
+
+// ══════════════════════════════════════════════════════════
+// 标准行动（兜底菜单：非卡牌、常驻可用；AP 只买旋钮，不买三环本身）
+// ══════════════════════════════════════════════════════════
+
+/** 标准行动：抽卡（1 AP + 1w）：抽 1 张入手，受手牌上限约束 */
+export function standardDraw(state: GameState): ActionResult {
+  if (state.ap < 1) return fail('AP 不足（抽卡需 1 AP）')
+  if (state.cash < 10) return fail('现金不足（需 1w）')
+  if (state.hand.length >= state.handMax) return fail('手牌已满，先弃 1 张')
+  if (state.deck.length === 0 && state.discard.length === 0) return fail('牌池已空')
+  state.ap -= 1
+  state.cash -= 10
+  state.miscExpense += 10
+  drawToHand(state, 1)
+  pushLog(state, 'action', '标准行动【抽卡】', ['1 AP + 1w：抽 1 张入手'])
+  return { ok: true, msg: '抽 1 张入手' }
+}
+
+/** 标准行动：市场推广（2 AP）：选定产品层本月需求 +2 */
+export function standardPromote(state: GameState, tier: Tier): ActionResult {
+  if (state.ap < 2) return fail('AP 不足（市场推广需 2 AP）')
+  const demand: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  demand[tier] = 2
+  state.ap -= 2
+  state.cardMods = mergeMods(state.cardMods, { demand })
+  pushLog(state, 'action', `标准行动【市场推广】${TIER_LABEL[tier]}`, ['2 AP：本月该层需求 +2'])
+  return { ok: true, msg: `${TIER_LABEL[tier]}需求 +2` }
+}
+
+/** 标准行动：降本咨询（1 AP + 1w）：本月全员工资 −20%（计提口径，含加班费） */
+export function standardConsult(state: GameState): ActionResult {
+  if (state.ap < 1) return fail('AP 不足（降本咨询需 1 AP）')
+  if (state.cash < 10) return fail('现金不足（需 1w）')
+  state.ap -= 1
+  state.cash -= 10
+  state.miscExpense += 10
+  state.cardMods = mergeMods(state.cardMods, { wagePct: -20 })
+  pushLog(state, 'action', '标准行动【降本咨询】', ['1 AP + 1w：本月全员工资 −20%（含加班费）'])
+  return { ok: true, msg: '本月工资 −20%' }
 }
 
 /**

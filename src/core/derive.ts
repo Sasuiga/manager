@@ -3,7 +3,6 @@ import {
   BASE_CREDIT_LINE,
   BASE_DEMAND,
   BASE_HAND,
-  BASE_PLAYS,
   BASE_SALES_RESOURCE,
   BUY_LOT_SLOTS,
   BOMS,
@@ -102,10 +101,8 @@ export interface DerivedTotals {
   flags: string[]
   /** 制造成本系数 */
   costFactor: number
-  /** 本月 AP 上限 */
+  /** 本月 AP 上限（打牌并入 AP 后，AP 是唯一的行动预算） */
   apMax: number
-  /** 本月可打牌数 */
-  playsMax: number
   handMax: number
   drawN: number
   drawM: number
@@ -139,7 +136,7 @@ export function mergeMods(...list: (MonthMods | undefined)[]): MonthMods {
     out.rndCost = (out.rndCost ?? 0) + (m.rndCost ?? 0)
     out.salesResource = (out.salesResource ?? 0) + (m.salesResource ?? 0)
     out.ap = (out.ap ?? 0) + (m.ap ?? 0)
-    out.plays = (out.plays ?? 0) + (m.plays ?? 0)
+    out.wagePct = (out.wagePct ?? 0) + (m.wagePct ?? 0)
     out.orders = (out.orders ?? 0) + (m.orders ?? 0)
     out.drawBonus = (out.drawBonus ?? 0) + (m.drawBonus ?? 0)
     out.handBonus = (out.handBonus ?? 0) + (m.handBonus ?? 0)
@@ -189,7 +186,6 @@ export function cardEffectToMods(e: CardPlayEffect): { mods: MonthMods; flags: s
   if (e.orders) mods.orders = (mods.orders ?? 0) + e.orders
   if (e.orderQty) mods.orderQty = Math.max(mods.orderQty ?? 0, e.orderQty)
   if (e.ap) mods.ap = (mods.ap ?? 0) + e.ap
-  if (e.plays) mods.plays = (mods.plays ?? 0) + e.plays
   if (e.priceShift) mods.price = { ...(mods.price ?? {}), ...mergeTier(e.priceShift) }
   if (e.demand) mods.demand = { ...(mods.demand ?? {}), ...mergeTier(e.demand) }
   return { mods, flags: (e.flags ?? []).filter(Boolean) }
@@ -348,9 +344,10 @@ export function derive(state: GameState): DerivedTotals {
   // ── 薪酬 ──
   const salaryPer: Record<Dept, number> = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
   let salaryTotal = 0
+  const wageFactor = 1 + (mods.wagePct ?? 0) / 100
   for (const d of DEPT_ORDER) {
     const base = STAFF[d].salary - ip.salarySave
-    const v = Math.max(0, base + (mods.salaryPer ?? 0))
+    const v = Math.max(0, Math.round((base + (mods.salaryPer ?? 0)) * wageFactor))
     salaryPer[d] = v
     salaryTotal += v * staffCount[d]
   }
@@ -386,7 +383,6 @@ export function derive(state: GameState): DerivedTotals {
 
   // ── 运营 ──
   const apMax = BASE_AP + Math.max(0, staffCount.ops - 1) + (mods.ap ?? 0) + (state.monthFlags.includes('m2solo') ? 1 : 0)
-  const playsMax = (staffCount.ops >= 4 ? 3 : BASE_PLAYS) + (mods.plays ?? 0)
   let handMax = BASE_HAND
   if (staffCount.ops >= 3) handMax += 1
   if (staffCount.ops >= 5) handMax += 1
@@ -541,7 +537,6 @@ export function derive(state: GameState): DerivedTotals {
     flags: collectFlags(state, mods),
     costFactor: mods.costFactor ?? 1,
     apMax,
-    playsMax,
     handMax: Math.max(1, handMax),
     drawN,
     drawM,

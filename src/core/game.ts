@@ -54,8 +54,6 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
 
     ap: BASE_AP,
     apMax: BASE_AP,
-    plays: 2,
-    playsMax: 2,
     handMax: 5,
     drawN: 5,
     drawM: 3,

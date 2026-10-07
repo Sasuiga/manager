@@ -890,8 +890,6 @@ export function advanceMonth(state: GameState, rng: Rng) {
   const d = derive(state)
   state.apMax = d.apMax
   state.ap = d.apMax
-  state.playsMax = d.playsMax
-  state.plays = d.playsMax
   state.handMax = d.handMax
   state.drawN = d.drawN
   state.drawM = d.drawM

@@ -53,11 +53,11 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
       if (amt > 0) E.borrow(s, amt - (amt % 10))
     }
 
-    // ── 招聘：只招销售 2 人（订单槽 + 销售资源；采购 2 档无需人，生产靠老板自产 5 点产能）；现金不到 45w 先不招人，留给采购缓冲 ──
+    // ── 招聘：回归 bot 不招人（保利润优先；招聘/工资路径由员工层测试覆盖），现金不到 48w 不招 ──
     for (let k = 0; k < 2; k++) {
       if (s.depts.sell.staff >= 2) break
       if (!E.canHire(s, 'sell').ok) break
-      if (s.cash < 450) break
+      if (s.cash < 480) break
       E.hire(s, 'sell')
     }
 
@@ -65,12 +65,13 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
     // 弃到上限
     while (s.hand.length > s.handMax) E.discardCard(s, s.hand[s.hand.length - 1].uid)
 
-    // ── 打牌：能打就打（保留 AP 卡） ──
+    // ── 打牌：回归 bot 只打免费卡（卡牌现金成本策略留给玩家）；C5 免费签约但带来每月到货负债，5w 额度下不划算，跳过 ──
     let guard = 0
     for (const card of [...s.hand]) {
       if (guard++ > 8) break
-      // C5 长期协议：免费签约但带来每月到货负债，5w 额度下不划算，跳过
       if (card.defId === 'C5') continue
+      const cost = E.CARD_BY_ID[card.defId]?.cost ?? 0
+      if (cost > 0) continue
       if (!E.canPlay(s, card).ok) continue
       E.playCard(s, card.uid)
     }
