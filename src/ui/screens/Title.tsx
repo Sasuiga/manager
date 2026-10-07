@@ -59,11 +59,11 @@ export function EndScreen({ g, onRestart }: { g: Game; onRestart: () => void }) 
   const won = s.result === 'won'
   const net = E.netAssets(s)
 
-  const rows: [string, number, string][] = [
-    ['盈利分', sc.profit, '12 个月累计净利润 ÷ 10w × 1.5'],
-    ['资产分', sc.assets, '期末净资产 ÷ 10w × 1.0'],
-    ['目标分', sc.goal, '董事会目标累计得分'],
-    ['成就分', sc.achievement, '达成成就的加分'],
+  const rows: [string, number][] = [
+    ['盈利分', sc.profit],
+    ['资产分', sc.assets],
+    ['目标分', sc.goal],
+    ['成就分', sc.achievement],
   ]
 
   return (
@@ -95,18 +95,13 @@ export function EndScreen({ g, onRestart }: { g: Game; onRestart: () => void }) 
               {sc.total}
             </span>
           </div>
-          {rows.map(([k, v, hint]) => (
-            <div key={k}>
-              <div className="row">
-                <span className="row-key">{k}</span>
-                <span className={`row-val ${v < 0 ? 'red' : v > 0 ? 'green' : ''}`}>
-                  {v > 0 ? '+' : ''}
-                  {v}
-                </span>
-              </div>
-              <div className="hint" style={{ marginTop: 0, marginBottom: 'var(--s1)' }}>
-                {hint}
-              </div>
+          {rows.map(([k, v]) => (
+            <div className="row" key={k}>
+              <span className="row-key">{k}</span>
+              <span className={`row-val ${v < 0 ? 'red' : v > 0 ? 'green' : ''}`}>
+                {v > 0 ? '+' : ''}
+                {v}
+              </span>
             </div>
           ))}
           <div className="row">

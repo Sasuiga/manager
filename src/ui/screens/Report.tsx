@@ -235,9 +235,6 @@ function DrillSheet({
           <Row key={k} k={k} v={v} />
         ))}
       </div>
-      <div className="hint">
-        事件开销、协议手续费等在支付当月确认，结算不重复扣现金；工资当月计提应付职工薪酬、次月实付；提案（卡牌）费与招聘费计入管理费用。
-      </div>
     </Sheet>
   )
 }

@@ -93,7 +93,7 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
   }
 
   return (
-    <div style={{ marginTop: 'var(--s3)' }}>
+    <div className="card" style={{ marginTop: 'var(--s3)' }}>
       <button className="btn btn-mini" style={{ width: '100%', justifyContent: 'space-between' }} onClick={() => { setOpen(!open); setDetail(null); }}>
         <span className="btn-main xs">本月账务</span>
         <span className="btn-sub xs">{open ? '收起' : '展开'}</span>
@@ -234,16 +234,7 @@ function OpsPage({ g }: { g: Game }) {
 
   return (
     <>
-      <div className="card">
-        <div className="hstack-between">
-          <h3>运营部</h3>
-        </div>
-        <div className="title-rule" />
-        <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          招募管理人员可提升 AP 上限（下月生效）；每月实施提案辅助各业务部门开展运营。
-        </p>
-        <LedgerSection g={g} dept="ops" />
-      </div>
+      <LedgerSection g={g} dept="ops" />
 
       {/* 提案 */}
       <div className="card">
@@ -257,7 +248,7 @@ function OpsPage({ g }: { g: Game }) {
         </div>
         <div className="title-rule" />
         {s.hand.length === 0 ? (
-          <p className="muted sm">提案是空的。已实施的提案会进入已实施列表。</p>
+          <p className="muted sm">暂无提案。</p>
         ) : (
           <div className="stack">
             {s.hand.map((c) => {
@@ -442,9 +433,6 @@ function M3TargetSheet({ g, cardUid, onClose }: { g: Game; cardUid: string; onCl
   const targets = s.hand.filter((c) => c.uid !== cardUid)
   return (
     <Sheet title="复制手牌" sub="选择要复制的手牌" onClose={onClose}>
-      <div className="info">
-        复制的牌立即加入手牌，保留原牌的效果与强化状态；打出 M3 消耗 1 次实施数。
-      </div>
       <div className="stack">
         {targets.map((c) => {
           const def = CARD_BY_ID[c.defId]
@@ -496,14 +484,7 @@ function BuyPage({ g }: { g: Game }) {
 
   return (
     <>
-      <div className="card">
-        <h3>采购部</h3>
-        <div className="title-rule" />
-        <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          每月为原料选择采购档位，签长期协议锁定供货量；人员越多档位越宽、可解锁高级材料。
-        </p>
-        <LedgerSection g={g} dept="buy" />
-      </div>
+      <LedgerSection g={g} dept="buy" />
 
       {/* 产品 BOM 看板（从生产页挪来）：采购时对照配方估算「买多少原料 ≈ 产多少货」 */}
       <div className="card">
@@ -534,7 +515,6 @@ function BuyPage({ g }: { g: Game }) {
             )
           })}
         </div>
-        <div className="hint">配方按 BOM 扣料；库存为成品总件数，单位成本为最近批次入账均价。对照配方与原料库存，估算本次采购能支撑的产量。</div>
       </div>
 
       <div className="card">
@@ -617,28 +597,7 @@ function BuyPage({ g }: { g: Game }) {
             ))}
           </tbody>
         </table>
-        <p className="hint" style={{ marginTop: 'var(--s2)' }}>
-          {gs.mode === 'core'
-            ? '普通采购先形成计划，结算时按“采购入库 → 生产 → 销售”统一执行；结算前可调整。'
-            : '采购实付现金自动入账「借 库存 / 贷 现金」，金额与库存账面、生产领料出库严格勾稽。'}
-        </p>
-        <p className="hint" style={{ marginTop: 'var(--s1)' }}>
-          库存成本 = 原料账面移动加权平均单价；核心模式选档后按（账面 + 计划付款）÷（库存 + 计划到货）更新，供生产页单位成本与销售页单件毛利使用。
-        </p>
       </div>
-
-      {gs.mode === 'core' ? (
-        <div className="card">
-          <h3>采购计划汇总</h3>
-          <div className="title-rule" />
-          <Row k="计划支出" v={wan(presettle.purchasePlan)} />
-          <Row k="期末资金（回款前）" v={wan(presettle.cashAfter)} cls={presettle.cashAfter < 0 ? 'red' : ''} />
-          <Row k="已选采购档" v={`${gs.lotsUsed} / ${d.buyLots}`} />
-          {presettle.cashAfter < 0 ? (
-            <p className="hint">纯消耗使期末资金（回款前）为负，计划超出资金能力；明细见「预算」页</p>
-          ) : null}
-        </div>
-      ) : null}
 
       <div className="card">
         <h3>其他采购手段</h3>
@@ -702,9 +661,7 @@ function BuyPage({ g }: { g: Game }) {
               )
             })}
           </div>
-          <p className="hint">
-            协议每月中批自动到货、结算时统一付款（不占采购档数、占仓容）。本月协议合计约 {wan(presettle.agreementSpend)}，仓容/现金不足会整批跳过，准确金额见「预算」页。
-          </p>
+          <p className="hint">本月协议合计 {wan(presettle.agreementSpend)}，仓容或现金不足时整批跳过。</p>
         </div>
       ) : null}
 
@@ -904,7 +861,6 @@ function BuyConfirmSheet({
       {m.isNew ? (
         <div className="card">
           <div className="section-label">供应商开发</div>
-          <p className="muted sm">每次 1 AP + 3w，基础供给 +2，最多开发 3 次（上限 6）。</p>
           <Row k="已开发" v={`${m.developed}/6`} />
           <div style={{ marginTop: 'var(--s3)' }}>
             <button
@@ -972,9 +928,6 @@ function UrgentClearanceSheet({ g, mode, onClose }: { g: Game; mode: 'urgent' | 
   const cardName = mode === 'urgent' ? '紧急采购' : '清仓'
   return (
     <Sheet title={label} sub={`卡牌【${cardName}】· ${mid ? '中批' : '小批'} · 不占档数`} onClose={onClose}>
-      <div className="info">
-        每类原料限 1 次；价格{shift > 0 ? '+' : ''}{shift} 档（在当前档位基础上计算）。
-      </div>
       <div className="stack">
         {mats.filter((m) => m.supply > 0).map((m) => {
           const used = gs.extraBuys.filter((e) => e.kind === mode && e.materialId === m.id).length
@@ -1028,9 +981,6 @@ function SwapSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const valid = !used && sell && buy && sell.id !== buy.id && sellQty > 0 && buyQty > 0 && gs.cash + sellTotal >= buyTotal
   return (
     <Sheet title="原料替换" sub={`卡牌【原料替换】· 每月 1 次 · 不占档数`} onClose={onClose}>
-      <div className="info">
-        出售 5 单位（不足 5 按全部库存）按账面单价收款，购入{plus ? 7 : 5}单位按当前档位价付款；资产互换、不进损益。
-      </div>
       {used ? <p className="muted sm">本月已使用。</p> : null}
       <div className="section-label">出售（按账面单价）</div>
       <div className="stack-sm">
@@ -1078,7 +1028,6 @@ function SwapSheet({ g, onClose }: { g: Game; onClose: () => void }) {
 
 function AgreementSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const gs = g.s
-  const d = E.derive(gs)
   const mats = E.materialViews(gs).filter((m) => m.supply > 0)
   const slots = E.agreementSlots(gs)
   const months = gs.depts.buy.staff >= 5 ? 6 : 3
@@ -1089,10 +1038,6 @@ function AgreementSheet({ g, onClose }: { g: Game; onClose: () => void }) {
       sub={`协议 ${gs.agreements.length}/${slots} · 锁定期 ${months} 个月`}
       onClose={onClose}
     >
-      <div className="info">
-        每月自动到货中批，价格锁定，不占本月采购档数；每月仍需付款，并占库存。
-      </div>
-
       {gs.agreements.length ? (
         <div className="card">
           <div className="section-label">已生效</div>
@@ -1136,9 +1081,6 @@ function AgreementSheet({ g, onClose }: { g: Game; onClose: () => void }) {
           )
         })}
       </div>
-      <div className="hint">
-        采购 {d.buyLots} 档可用；采购到 5 人可将锁定期延长至 6 个月。
-      </div>
     </Sheet>
   )
 }
@@ -1160,14 +1102,7 @@ function MakePage({ g }: { g: Game }) {
 
   return (
     <>
-      <div className="card">
-        <h3>生产部</h3>
-        <div className="title-rule" />
-        <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          将产能分配到各产品线，确认后按 BOM 立即扣料入库；设备与加班可提升产能上限，人员越多单月产量越高。
-        </p>
-        <LedgerSection g={g} dept="make" />
-      </div>
+      <LedgerSection g={g} dept="make" />
 
       {/* 产能分配：与销售资源分配面板同款，已分配产能可在已解锁产品线间自由腾挪 */}
       <div className="card">
@@ -1238,7 +1173,7 @@ function MakePage({ g }: { g: Game }) {
           })}
         </div>
         <div className="hint">
-          1 点产能生产 1 件；可在已解锁产品线间自由分配，各线受产能与原料双重限制。剩余 {remainingCap} 点未分配。
+          {remainingCap} 点未分配。
         </div>
         {gs.mode === 'full' ? <div style={{ marginTop: 'var(--s3)' }}>
           <button
@@ -1272,11 +1207,6 @@ function MakePage({ g }: { g: Game }) {
             />
           )
         })}
-        <div className="hint">
-          {ucost.planned > 0
-            ? `材料按采购计划后库存单价（移动加权平均）×配方×降本系数计；固定成本 ${wan(ucost.fixedTotal)}（薪酬 ${wan(ucost.fixedParts.labor)} + 折旧 ${wan(ucost.fixedParts.depreciation)} + 加班 ${wan(ucost.fixedParts.overtime)}）按排产 ${ucost.planned} 件分摊。销售页单件毛利与预算页预计毛利按此口径。`
-            : '本月未排产：单位成本只计材料，固定成本暂不分摊。销售页单件毛利与预算页预计毛利按此口径。'}
-        </div>
       </div>
 
       <div className="card">
@@ -1367,9 +1297,6 @@ function ProductionConfirmSheet({ g, planned, onDone }: { g: Game; planned: numb
         {lines.length === 0 ? <Row k="安排" v="未分配产量" cls="red" /> : null}
         {willBonus ? <Row k="流水线" v="每 5 件额外入库 1 件（生产 5 人）" /> : null}
       </div>
-      <div className="hint">
-        确认后即按 BOM 消耗原料并入库（单位成本按账面价结转），本月账务新增「原料→存货」记录；未分配的剩余产能月末释放。
-      </div>
     </Sheet>
   )
 }
@@ -1438,7 +1365,6 @@ function EquipmentPickSheet({ g, onClose }: { g: Game; onClose: () => void }) {
           ))}
         </div>
       </div>
-      <div className="hint">设备折旧在提足原值后停止，不会把账面价值压成负数；本月可多次购置，生产页「设备清单」同步展示。</div>
     </Sheet>
   )
 }
@@ -1573,17 +1499,7 @@ function SellPage({ g }: { g: Game }) {
 
   return (
     <>
-      <div className="card">
-        <h3>销售部</h3>
-        <div className="title-rule" />
-        <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          将销售资源投向各层需求，资源越多需求盘子越大；人员越多销售资源越丰富，可解锁自然订单。
-        </p>
-        <LedgerSection g={g} dept="sell" />
-        <p className="hint" style={{ marginTop: 'var(--s2)' }}>
-          结算后自动入账「销售收入 / 销售成本」：收入 = 现金增加，成本 = 成品存货减记，与利润表严格勾稽。
-        </p>
-      </div>
+      <LedgerSection g={g} dept="sell" />
 
       {/*
         需求与售价面板放在加点面板之前：玩家下方加点时，
@@ -1660,11 +1576,6 @@ function SellPage({ g }: { g: Game }) {
             )
           })}
         </div>
-        <div className="hint">
-          {gs.mode === 'core'
-            ? '可承诺量 = 现有库存 + 本月排产 − 强制订单占用 − 已接自然订单占用。排产减少时，无法足额履约的订单会自动取消。'
-            : '可用库存 = 总库存 − 强制订单占用 − 已接自然订单占用。强制订单到月必交；自然订单点接后锁定库存，再点取消。'}
-        </div>
       </div>
 
       <div className="card">
@@ -1718,7 +1629,7 @@ function SellPage({ g }: { g: Game }) {
 
       {gs.orders.length ? (
         <div className="hint" style={{ padding: 'var(--s2) 0' }}>
-          订单来源：{gs.orders.map((o) => o.from).filter((v, i, a) => a.indexOf(v) === i).join('、')} · 强制必交 / 自然库存够才接，不足留到下月。
+          订单来源：{gs.orders.map((o) => o.from).filter((v, i, a) => a.indexOf(v) === i).join('、')}
         </div>
       ) : null}
     </>
@@ -1755,11 +1666,6 @@ function RndPage({ g }: { g: Game }) {
   return (
     <>
       <div className="card">
-        <h3>研发部</h3>
-        <div className="title-rule" />
-        <p className="card-desc" style={{ color: 'var(--muted)' }}>
-          将人员放置到在研项目（承诺制）：每人 +5 进度、+5% 成功率，确定后本月锁定，下月初可再调。
-        </p>
         <div className="grid-3" style={{ marginBottom: 'var(--s2)' }}>
           <div>
             <div className="stat-label">研发人员</div>
@@ -1778,10 +1684,10 @@ function RndPage({ g }: { g: Game }) {
           <p className="hint">{d.rndActiveCount} 个在研 × {wan(d.rndCost)} / 项目。</p>
         ) : null}
         {free > 0 ? (
-          <p className="hint">{free} 人未放置：照计提工资但不产出进度，请放到在研项目上。</p>
+          <p className="hint">{free} 人未放置，请放到在研项目上。</p>
         ) : null}
-        <LedgerSection g={g} dept="rnd" />
       </div>
+      <LedgerSection g={g} dept="rnd" />
 
       <div className="card">
         <h3>研发主题</h3>
@@ -1796,9 +1702,6 @@ function RndPage({ g }: { g: Game }) {
             <span className="btn-sub">在研 {ip.active}/{ip.total} · 三分支 · 逐层揭示</span>
           </button>
         </div>
-        <p className="hint">
-          成功率封顶 90%（中端教学 100%），放置人数越多越稳。
-        </p>
       </div>
 
       <div className="card">
@@ -2211,11 +2114,6 @@ function LoanSheet({ g, mode, onClose }: { g: Game; mode: 'borrow' | 'repay'; on
         {full > 0 && !presets.includes(full)
           ? option(full, mode === 'borrow' ? `用满额度 ${wan(full)}` : `还清 ${wan(full)}`, note(full))
           : null}
-      </div>
-      <div className="hint">
-        {mode === 'borrow'
-          ? `借款以 1w 为单位，期限 ${LOAN_TERM_MONTHS} 个月（第 ${s.month + LOAN_TERM_MONTHS - 1} 月末到期），到期未还部分强制全额归还；利息按月末余额 × 月利率计提，提前还款可降低利息费用；还清前不能借新笔。`
-          : '还款即时扣减现金，负债同步减少；利息按剩余余额计提，提前还款可降低后续利息；全部还清后才能再借新笔。'}
       </div>
     </Sheet>
   )

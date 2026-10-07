@@ -34,9 +34,7 @@ function ReportPanel({ g }: { g: Game }) {
         <div className="card">
           <h3>财务报表</h3>
           <div className="title-rule" />
-          <p className="muted sm">
-            还没有已结算的月份。完成第一次结算后，这里会出现本期与上期对照的利润表、资产负债表与财务比率。
-          </p>
+          <p className="muted sm">尚无已结算月份。</p>
         </div>
       </div>
     )
@@ -69,7 +67,6 @@ function ReportPanel({ g }: { g: Game }) {
         <h3>资产负债表</h3>
         <div className="title-rule" />
         <StmtTable head={balanceHead} curMonth={cur.month} prevMonth={prev?.month ?? 0} rows={balRows(curBal, prevBal)} />
-        <div className="hint">均为月末结账数。资产 = 负债 + 所有者权益。借款与应付职工薪酬只作负债列示，不从权益中扣减。</div>
       </div>
 
       <div className="card">
@@ -257,7 +254,6 @@ function ratioRows(cur: E.Ledger, curBal: E.BalanceSheet, prev?: E.Ledger, prevB
 function DrillSheet({ name, led, onClose }: { name: string; led: E.Ledger; onClose: () => void }) {
   const p = led.parts
   const lines: [string, string][] = []
-  let note = ''
 
   switch (name) {
     case '销售收入':
@@ -265,7 +261,6 @@ function DrillSheet({ name, led, onClose }: { name: string; led: E.Ledger; onClo
       lines.push(['现货收入', wan(p['现货收入'] ?? 0)])
       lines.push(['订单笔数', `${led.orders.length}`])
       lines.push(['现货笔数', `${led.spots.length}`])
-      note = '订单优先于现货结算；订单不足交付时剩余量失效，无惩罚。'
       break
     case '销售成本':
       lines.push(['成交件数', `${[...led.orders, ...led.spots].reduce((a, s) => a + s.qty, 0)}`])
@@ -278,13 +273,12 @@ function DrillSheet({ name, led, onClose }: { name: string; led: E.Ledger; onClo
             : 0,
         ),
       ])
-      note = '按移动加权平均单价等比例出库，与入库使用同一个成本口径。'
       break
+    case '生产费用':
     case '生产费用':
       lines.push(['生产人员薪酬', wan(p['生产人员薪酬'] ?? 0)])
       lines.push(['设备折旧', wan(p['设备折旧'] ?? 0)])
       lines.push(['加班费', wan(p['加班费'] ?? 0)])
-      note = '折旧在提足原值后停止，不会把设备账面价值压成负数。'
       break
     case '销售费用':
       lines.push(['销售人员薪酬', wan(p['销售人员薪酬'] ?? 0)])
@@ -294,7 +288,6 @@ function DrillSheet({ name, led, onClose }: { name: string; led: E.Ledger; onClo
       lines.push(['采购人员薪酬', wan(p['采购人员薪酬'] ?? 0)])
       lines.push(['招聘费（净）', wan(p['招聘费'] ?? 0)])
       lines.push(['提案费用', wan(p['提案费用'] ?? 0)])
-      note = '招聘费与提案（卡牌）实施费当期费用化进管理费用；裁员返还从招聘费中抵减。'
       break
     case '研发费用':
       lines.push(['研发人员薪酬', wan(p['研发人员薪酬'] ?? 0)])
@@ -303,7 +296,6 @@ function DrillSheet({ name, led, onClose }: { name: string; led: E.Ledger; onClo
     case '财务费用':
       lines.push(['借款利息', wan(p['借款利息'] ?? 0)])
       lines.push(['事件与杂项支出', wan(p['事件与杂项支出'] ?? 0)])
-      note = '事件开销、协议手续费等在支付当月确认，结算不重复扣现金；提案（卡牌）费已计入管理费用。'
       break
   }
 
@@ -314,7 +306,6 @@ function DrillSheet({ name, led, onClose }: { name: string; led: E.Ledger; onClo
           <Row key={k} k={k} v={v} />
         ))}
       </div>
-      {note ? <div className="hint">{note}</div> : null}
     </Sheet>
   )
 }

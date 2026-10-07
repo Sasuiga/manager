@@ -88,10 +88,6 @@ export function GoalsSheet({ g, onClose }: { g: Game; onClose: () => void }) {
           <span className="row-key">累计目标分</span>
           <span className="row-val gold">{s.goalPoints}</span>
         </div>
-        <div className="hint">
-          基本目标是硬指标：连续两个季度未达成即被免职。
-          挑战目标二选一，只影响得分，不影响去留。
-        </div>
       </div>
     </Sheet>
   )

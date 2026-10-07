@@ -218,11 +218,6 @@ export function DrawScreen({ g }: { g: Game }) {
             }
           >
             <div className="stack">
-              {view === 'hand' && discardMode ? (
-                <div className="info" style={{ marginBottom: 'var(--s2)' }}>
-                  点击提案选中，选中后高亮显示。需废 {overLimit} 项才能保留新立项的提案。
-                </div>
-              ) : null}
               {(view === 'hand' ? s.hand : view === 'discard' ? s.discard : s.deck).map((c) => {
                 const def = CARD_BY_ID[c.defId]
                 const discarded = discardSelected.includes(c.uid)

@@ -5,7 +5,7 @@
   "type": "module",
   "description": "总经理十二个月 —— 一款单机、以十二个月为周期的生产经营刷分游戏",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --port 5199 --strictPort",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
