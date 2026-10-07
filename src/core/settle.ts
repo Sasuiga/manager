@@ -6,6 +6,7 @@ import {
   CLIMATE_NAMES,
   CLIMATE_ORDER,
   LOAN_TERM_MONTHS,
+  IP_SETS,
   MATERIALS,
   MGMT_CARD_UNLOCK,
   MOMENTUM_ODDS,
@@ -152,6 +153,8 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
     if (slot.progress >= def.need) {
       rolledRate = rate
       success = rng.next() < rate
+      // 冲刺判定（K4 本月 / D1 长期）：多次掷点取高（确定性随机流）
+      for (let i = 1; i < d.rndRolls; i++) if (rng.next() < rate) success = true
       if (success) {
         slot.done = true
         slot.projectId = null
@@ -310,12 +313,23 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
       }
     }
     const deliver = o.forced ? Math.min(o.qty, p.qty) : Math.min(o.qty, p.qty)
-    const unit = priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
+    const unit = priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier] + d.orderPriceBonus)
     const unitValue = p.value / Math.max(1, p.qty)
     p.value -= unitValue * deliver
     p.qty -= deliver
     state.cash += unit * deliver
     orders.push({ tier: o.tier, qty: deliver, unitPrice: unit, unitCost: Math.round(unitValue), cost: unitValue * deliver, revenue: unit * deliver, channel: 'order' })
+    // 灵活交付（K2）：接单时承诺量含 +5/+10（可接超出库存+排产的订单），
+    // 月末交付缺口按接单时订单单价 × 20%（强化 10%）付违约金（财务费用）。
+    if (o.flex && o.flex.dueMonth === state.month && deliver < o.qty) {
+      const penalty = Math.round((o.qty - deliver) * o.flex.unitPrice * d.flexPenaltyRate)
+      if (penalty > 0) {
+        state.cash -= penalty
+        state.miscExpense += penalty
+        warnings.push(`灵活交付：订单（${TIER_LABEL[o.tier]} × ${o.qty}）缺口 ${o.qty - deliver} 件，违约金 ${((penalty / 10).toFixed(2))}w（订单单价 × ${d.flexPenaltyRate * 100}%）`)
+      }
+      o.flex = undefined
+    }
     const used = Math.min(deliver, lost[o.tier])
     lost[o.tier] -= used
     filled[o.tier] += used
@@ -329,17 +343,19 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   // 不再做跨层吸引力份额分配（§7.2.4 新模型：加点直接做大本层需求）。
   for (const t of TIERS) {
     let remaining = lost[t]
-    if (remaining <= 0) continue
+    if (remaining <= 0 && !d.spotUnlimited) continue
     const p = state.products[t]
     if (!p.built || p.qty <= 0) continue
-    const sell = Math.min(p.qty, remaining)
-    const unit = priceAtProduct(t, d.priceShift[t])
+    // 快周转（K5）：现货不受需求限制（全部库存可售）；否则可售 = min(库存, 本层剩余需求)
+    const sell = d.spotUnlimited ? p.qty : Math.min(p.qty, remaining)
+    if (sell <= 0) continue
+    const unit = priceAtProduct(t, d.spotShift[t])
     const unitValue = p.qty > 0 ? p.value / p.qty : 0
     p.value -= unitValue * sell
     p.qty -= sell
     state.cash += unit * sell
     spots.push({ tier: t, qty: sell, unitPrice: unit, unitCost: Math.round(unitValue), cost: unitValue * sell, revenue: unit * sell, channel: 'spot' })
-    lost[t] = remaining - sell
+    lost[t] = Math.max(0, remaining - sell)
     filled[t] += sell
   }
 
@@ -646,6 +662,7 @@ function maxProducible(state: GameState, tier: Tier): number {
   const d = derive(state)
   const bom = BOMS[tier]
   let max = planCapacity(state)
+  max = Math.min(max, d.productCap - state.products[tier].qty) // 安全库存（D8）：成品库存上限
   for (const [id, need] of Object.entries(bom.recipe)) {
     const per = Math.max(1, need - d.matSave)
     const avail = state.materials[id]?.qty ?? 0
@@ -875,8 +892,19 @@ export function computeScore(state: GameState): ScoreBreakdown {
   const assets = Math.round((assetsEnd / 100) * 1.0)
   const achievement = state.achievements.reduce((a, id) => a + (ACHIEVEMENT_BY_ID[id]?.points ?? 10), 0)
   const milestone = state.milestonePoints
-  const total = profit + assets + state.goalPoints + achievement + milestone
-  return { profit, assets, goal: state.goalPoints, achievement, event: 0, milestone, total, netsum: profitSum, assetsEnd }
+  /** 长期决议（D 卡）计分：每张 +3，同部门 2 张再 +5 */
+  const directive = state.directives.reduce((a) => a + 3, 0) +
+    Object.values(
+      state.directives.reduce<Record<string, number>>((acc, x) => {
+        const kind = CARD_BY_ID[x.defId]?.kind ?? 'ops'
+        acc[kind] = (acc[kind] ?? 0) + 1
+        return acc
+      }, {}),
+    ).reduce((a, n) => a + (n >= 2 ? 5 : 0), 0)
+  /** 知产套装计分：每套 +15 */
+  const ipSet = IP_SETS.filter((s) => s.ips.every((ip) => state.ipOwned.includes(ip))).reduce((a, s) => a + s.points, 0)
+  const total = profit + assets + state.goalPoints + achievement + milestone + directive + ipSet
+  return { profit, assets, goal: state.goalPoints, achievement, event: 0, milestone, directive, ipSet, total, netsum: profitSum, assetsEnd }
 }
 
 // ────────────────────────────────────────────────────────────
@@ -915,6 +943,10 @@ export function advanceMonth(state: GameState, rng: Rng) {
   const pendingFutures = state.futures
   state.futures = {}
   state.ipChangedThisMonth = false
+  // 规则卡（K 系列）月度状态：定价权 / 双档采购选择（月内有效）与决议换动限制
+  state.spotPriceChoice = null
+  state.secondLotMat = null
+  state.directiveChangedThisMonth = false
   state.rndStartsThisMonth = []
   state.flags['rndConfirmed'] = 0
   state.eventResolved = false

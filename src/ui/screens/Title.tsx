@@ -64,6 +64,8 @@ export function EndScreen({ g, onRestart }: { g: Game; onRestart: () => void }) 
     ['资产分', sc.assets],
     ['目标分', sc.goal],
     ['形状分', sc.milestone],
+    ['决议分', sc.directive],
+    ['套装分', sc.ipSet],
     ['成就分', sc.achievement],
   ]
 

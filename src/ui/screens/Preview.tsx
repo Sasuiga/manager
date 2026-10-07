@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import * as E from '../../core/engine'
-import { TIER_LABEL } from '../../data/game'
+import { TIER_LABEL, CLIMATE_NAMES } from '../../data/game'
 import { Row } from '../Sheet'
 import { wan } from '../format'
 import type { Game } from '../useGame'
@@ -53,6 +53,25 @@ export function PreviewPage({ g, onSettle }: { g: Game; onSettle: () => void }) 
               cls={r.success ? 'green' : r.success === false ? 'red' : ''}
             />
           ))}
+        </div>
+      ) : null}
+
+      {/* 市场情报（K7）：下季度气候转移概率表（动能 × 步长 的真实转移分布） */}
+      {E.derive(g.s).climateOddsVisible ? (
+        <div className="card">
+          <h3>下季度气候展望（K7 市场情报）</h3>
+          <div className="title-rule" />
+          <div className="stack-sm">
+            {(Object.entries(g.s.nextClimateOdds) as [string, number][])
+              .filter(([, v]) => v > 0)
+              .sort((a, b) => b[1] - a[1])
+              .map(([cl, v]) => (
+                <Row key={cl} k={CLIMATE_NAMES[cl as keyof typeof CLIMATE_NAMES] ?? cl} v={`${(v * 100).toFixed(1)}%`} />
+              ))}
+          </div>
+          {E.derive(g.s).climateOddsPlus ? (
+            <p className="hint">强化版：高概率风险气候（需求下降 / 供给涨价）宜提前布局库存与定价。</p>
+          ) : null}
         </div>
       ) : null}
 

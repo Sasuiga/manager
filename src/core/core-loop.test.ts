@@ -1140,7 +1140,7 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
     expect(E.productionUnitCosts(s).fixedParts.depreciation).toBe(40)
   })
 
-  it('S4 裁员：canFire 额度允许解雇 1 人并返还招聘费 50%', () => {
+  it('S4 裁员：canFire 额度允许解雇 1 人并返还 100% 基础招聘费', () => {
     const s = E.newGame(508, 'core')
     E.startGame(s)
     s.depts.ops.staff = 2
@@ -1149,6 +1149,6 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
     const cash = s.cash
     expect(E.fire(s, 'ops').ok).toBe(true)
     expect(s.depts.ops.staff).toBe(1)
-    expect(s.cash).toBe(cash + 25) // 首档招聘费 5w × 50% = 2.5w
+    expect(s.cash).toBe(cash + 50) // 首档招聘费 5w × 100% = 5w（S4 / K6 同口径）
   })
 })

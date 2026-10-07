@@ -420,6 +420,25 @@ export const IP_DEFS: IpDef[] = [
 
 export const IP_BY_ID: Record<string, IpDef> = Object.fromEntries(IP_DEFS.map((i) => [i.id, i]))
 
+/**
+ * 知产套装（结构分）：跨分支/跨阶段的 IP 组合，终局一次性计分（不给月度效果）。
+ * 单支拿不全——逼玩家规划研发路线，套装是「形状」的结构侧证据。
+ */
+export interface IpSetDef {
+  id: string
+  name: string
+  desc: string
+  ips: string[]
+  points: number
+}
+
+export const IP_SETS: IpSetDef[] = [
+  { id: 'set-supply', name: '供应链闭环', desc: 'J2 供应链联盟 + J9 大宗集采 + I3 采购网络', ips: ['J2', 'J9', 'I3'], points: 15 },
+  { id: 'set-channel', name: '渠道霸权', desc: 'J8 渠道垄断 + J11 高端渠道 + I9 订单网络', ips: ['J8', 'J11', 'I9'], points: 15 },
+  { id: 'set-brand', name: '品牌溢价', desc: 'J3 品牌壁垒 + J10 品牌溢价 + I8 质量认证', ips: ['J3', 'J10', 'I8'], points: 15 },
+  { id: 'set-mfg', name: '精工强研', desc: 'J12 精益生产 + J6 研发突破 + I1 工艺优化', ips: ['J12', 'J6', 'I1'], points: 15 },
+]
+
 // ════════════════════════════════════════════════════════════
 // 6. 财务参数
 // ════════════════════════════════════════════════════════════
@@ -535,7 +554,7 @@ export const EVENTS: GameEventDef[] = [
   { id: 'S1', climate: 'stagflation', name: '需求萎缩', type: 'instant', polarity: 'bad', scope: 'sell', text: '本月低端、中端、高端需求各 -1。', mods: { demand: T(-1, -1, -1) } },
   { id: 'S2', climate: 'stagflation', name: '成本高企', type: 'instant', polarity: 'bad', scope: 'buy', text: '本月所有原料供给 -3，价格升 1 档。', mods: { allSupply: -3, allTierShift: 1 } },
   { id: 'S3', climate: 'stagflation', name: '现金为王', type: 'instant', polarity: 'bad', scope: 'cash', needs: ['finance'], text: '本月借款利率 +2 档（+0.2%）。', mods: { rateShift: 2 } },
-  { id: 'S4', climate: 'stagflation', name: '裁员优化', type: 'instant', polarity: 'good', scope: 'ops', text: '本月可免费解雇 1 名员工，并返还其招聘费 50%。', mods: { notes: ['可在运营部解雇 1 人'] } },
+  { id: 'S4', climate: 'stagflation', name: '裁员优化', type: 'instant', polarity: 'good', scope: 'ops', text: '本月可免费解雇 1 名员工，并返还其基础招聘费（100%）。', mods: { notes: ['可在运营部解雇 1 人'] } },
   { id: 'S5', climate: 'stagflation', name: '库存积压', type: 'instant', polarity: 'neutral', scope: 'make', text: '产品卖不动，下月全部产品市价降 1 档。', mods: { notes: ['下月售价 -1 档'] } },
   {
     id: 'S6', climate: 'stagflation', name: '价格战', type: 'choice', polarity: 'bad', scope: 'sell', text: '对手已经开始降价。',
@@ -772,6 +791,10 @@ export interface CardDef {
   kind: Dept
   /** 核心卡必然入池 */
   core?: boolean
+  /** 规则卡：改本月规则/制造取舍（K 系列） */
+  rule?: boolean
+  /** 决议卡：入长期方案槽，持续到终局（D 系列） */
+  directive?: boolean
   /** 卡片效果正文 */
   text: string
   /** 门槛条件文字 */
@@ -1110,6 +1133,122 @@ export const CARDS: CardDef[] = [
     text: '支付 3w，弃 2 张手牌，获得 1 张随机强化卡。',
     empowered: '支付 3w，弃 1 张手牌，获得 2 张随机强化卡。',
     base: (c) => ({ flags: [c.empowered ? 'm4b' : 'm4'] }),
+  },
+
+  // ── 规则卡（K 系列：改本月规则，制造取舍；1 AP + 现金） ──────────
+  {
+    id: 'K1', name: '定价权', kind: 'sell', rule: true, cost: 20,
+    text: '支付 2w，本月现货售价档位由你选（基准 / 高 / 极高）；每高 1 档，各层需求 −1（订单不受影响）。',
+    empowered: '支付 2w，本月现货售价档位由你选（基准 / 高 / 极高 / 极高 +1）；需求惩罚减半（每高 1 档 −0，向下取整后生效）。',
+    base: () => ({ flags: ['spotPriceChoice'] }),
+    strong: () => ({ flags: ['spotPriceChoice', 'spotPriceChoiceNoPenalty'] }),
+  },
+  {
+    id: 'K2', name: '灵活交付', kind: 'sell', rule: true, cost: 20,
+    text: '支付 2w，本月订单承诺量 +5（可接超出「库存 + 排产」的订单）；月末交付缺口按接单时订单单价 × 20% 付违约金。',
+    empowered: '支付 2w，本月订单承诺量 +10；缺口违约金降至 10%。',
+    base: (c) => ({ flags: [c.empowered ? 'flex10' : 'flex5'] }),
+    strong: (c) => ({ flags: [c.empowered ? 'flex10' : 'flex5'] }),
+  },
+  {
+    id: 'K3', name: '双档采购', kind: 'buy', rule: true, cost: 20,
+    text: '支付 2w，本月 1 种原料可选 2 档（已选档 + 小批，第 2 档价格 +1 档，不占档数）。',
+    empowered: '支付 2w，本月 1 种原料可选 2 档（已选档 + 中批，第 2 档价格 +1 档，不占档数）。',
+    base: (c) => ({ flags: [c.empowered ? 'doubleLotMid' : 'doubleLot'] }),
+    strong: (c) => ({ flags: [c.empowered ? 'doubleLotMid' : 'doubleLot'] }),
+  },
+  {
+    id: 'K4', name: '冲刺判定', kind: 'rnd', rule: true, cost: 30,
+    text: '支付 3w，本月研发成功判定掷 2 次取高。',
+    empowered: '支付 3w，本月研发成功判定掷 3 次取高。',
+    base: (c) => ({ flags: [c.empowered ? 'rndTripleRoll' : 'rndDoubleRoll'] }),
+    strong: (c) => ({ flags: [c.empowered ? 'rndTripleRoll' : 'rndDoubleRoll'] }),
+  },
+  {
+    id: 'K5', name: '快周转', kind: 'sell', rule: true, cost: 20,
+    text: '支付 2w，本月现货不受需求限制（全部库存可售），但售价 −1 档。',
+    empowered: '支付 2w，本月现货不受需求限制（全部库存可售），售价 −1 档，且订单交付 +2 件。',
+    base: () => ({ flags: ['spotUnlimited'] }),
+    strong: () => ({ flags: ['spotUnlimited', 'spotUnlimitedPlus'] }),
+  },
+  {
+    id: 'K6', name: '编制优化', kind: 'ops', rule: true,
+    text: '本月可裁 1 人（任意部门，不耗 AP），返还 100% 基础招聘费。',
+    empowered: '本月可裁 2 人（任意部门，不耗 AP），返还 100% 基础招聘费。',
+    base: (c) => ({ flags: c.empowered ? ['canFireCard', 'canFireCard'] : ['canFireCard'] }),
+    strong: (c) => ({ flags: c.empowered ? ['canFireCard', 'canFireCard'] : ['canFireCard'] }),
+  },
+  {
+    id: 'K7', name: '市场情报', kind: 'ops', rule: true,
+    text: '预算页展示下季度气候转移概率表（动能 × 步长真实分布）。',
+    empowered: '预算页展示下季度气候转移概率表，且本季度末额外提示 1 个高概率风险气候。',
+    base: (c) => ({ flags: [c.empowered ? 'climateOddsPlus' : 'climateOdds'] }),
+    strong: (c) => ({ flags: [c.empowered ? 'climateOddsPlus' : 'climateOdds'] }),
+  },
+  {
+    id: 'K8', name: '加班补贴', kind: 'make', rule: true, cost: 20,
+    text: '支付 2w，本月加班费减半（2× 生产工资 → 1×）。',
+    empowered: '支付 2w，本月加班费减半，且加班产能 +1× 员工产能。',
+    base: (c) => ({ flags: [c.empowered ? 'overtimeHalfPlus' : 'overtimeHalf'] }),
+    strong: (c) => ({ flags: [c.empowered ? 'overtimeHalfPlus' : 'overtimeHalf'] }),
+  },
+
+  // ── 决议卡（D 系列：入长期方案槽，便宜、无风险、持续到终局；终局计分） ────
+  {
+    id: 'D1', name: '研发双判定', kind: 'rnd', directive: true, cost: 30, minStaff: { rnd: 2 },
+    text: '入长期方案槽：研发成功判定掷 2 次取高（持续到终局）。',
+    empowered: '入长期方案槽：研发成功判定掷 3 次取高（持续到终局）。',
+    base: () => ({}),
+    strong: () => ({}),
+  },
+  {
+    id: 'D2', name: '供应稳定', kind: 'buy', directive: true, cost: 30,
+    text: '入长期方案槽：气候对原料供给的负修正减半（持续到终局）。',
+    empowered: '入长期方案槽：气候对原料供给的负修正减半，且正修正 +2（持续到终局）。',
+    base: () => ({}),
+    strong: () => ({}),
+  },
+  {
+    id: 'D3', name: '弹性用工', kind: 'ops', directive: true, cost: 20,
+    text: '入长期方案槽：招聘费 −1w/人（持续到终局）。',
+    empowered: '入长期方案槽：招聘费 −2w/人（持续到终局）。',
+    base: () => ({}),
+    strong: () => ({}),
+  },
+  {
+    id: 'D4', name: '订单稳价', kind: 'sell', directive: true, cost: 40, minStaff: { sell: 2 },
+    text: '入长期方案槽：订单价 +1 档（持续到终局，与渠道类知产叠加）。',
+    empowered: '入长期方案槽：订单价 +1 档，且每月订单 +1（持续到终局）。',
+    base: () => ({}),
+    strong: () => ({}),
+  },
+  {
+    id: 'D5', name: '现货溢价', kind: 'sell', directive: true, cost: 30,
+    text: '入长期方案槽：现货售价 +1 档（订单不受影响，持续到终局）。',
+    empowered: '入长期方案槽：现货售价 +1 档，且现货需求 +1/层（持续到终局）。',
+    base: () => ({}),
+    strong: () => ({}),
+  },
+  {
+    id: 'D6', name: '低息', kind: 'ops', directive: true, cost: 30,
+    text: '入长期方案槽：借款月利率 −0.1%（与财务类知产叠加，持续到终局）。',
+    empowered: '入长期方案槽：借款月利率 −0.1%，且额度 +10w（持续到终局）。',
+    base: () => ({}),
+    strong: () => ({}),
+  },
+  {
+    id: 'D7', name: '加班补贴', kind: 'make', directive: true, cost: 20, minStaff: { make: 3 },
+    text: '入长期方案槽：加班费减半（2× 生产工资 → 1×，持续到终局）。',
+    empowered: '入长期方案槽：加班费减半，且加班产能 +1× 员工产能（持续到终局）。',
+    base: () => ({}),
+    strong: () => ({}),
+  },
+  {
+    id: 'D8', name: '安全库存', kind: 'make', directive: true, cost: 20,
+    text: '入长期方案槽：每层成品库存上限 20 件（超上限时生产截断，持续到终局）。',
+    empowered: '入长期方案槽：每层成品库存上限 30 件（超上限时生产截断，持续到终局）。',
+    base: () => ({}),
+    strong: () => ({}),
   },
 ]
 

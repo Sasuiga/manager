@@ -229,6 +229,9 @@ function OpsPage({ g }: { g: Game }) {
   const [m3, setM3] = useState<string | null>(null)
   /** J5 专利壁垒：本季可复制一张已打出的提案（免费、不占 AP/打牌数） */
   const [j5, setJ5] = useState(false)
+  /** 决议卡槽满时的替换目标（uid） */
+  const [replaceTarget, setReplaceTarget] = useState<string | null>(null)
+  const directiveSlots = E.directiveSlots(s)
   const descOf = (c: CardInstance) => {
     const def = CARD_BY_ID[c.defId]
     return c.empowered && def?.empowered ? def.empowered : def?.text ?? ''
@@ -283,6 +286,60 @@ function OpsPage({ g }: { g: Game }) {
         </div>
       </div>
 
+      {/* 长期方案（决议卡 D 系列：入槽后持续到终局，终局计分；每月最多换 1 张） */}
+      <div className="card">
+        <div className="hstack-between">
+          <h3>长期方案（{s.directives.length}/{directiveSlots}）</h3>
+          {s.directiveChangedThisMonth ? <span className="xs faint">本月换动已用</span> : null}
+        </div>
+        <div className="title-rule" />
+        {s.directives.length === 0 ? (
+          <p className="muted sm">暂无长期方案。打出 D 系决议卡入槽：便宜、无风险、持续到终局；终局每张 +3 分，同部门 2 张再 +5。</p>
+        ) : (
+          <div className="stack">
+            {s.directives.map((x, i) => {
+              const def = CARD_BY_ID[x.defId]
+              return (
+                <div key={`${x.defId}-${i}`} className="card-item">
+                  <span className="spine" />
+                  <span className="card-body">
+                    <span className="card-name">
+                      【{DEPT_SHORT[def.kind]}】{def.name}
+                      {x.empowered ? <span className="tag gold" style={{ marginLeft: 6 }}>强化</span> : null}
+                    </span>
+                    <span className="card-desc">{x.empowered && def.empowered ? def.empowered : def.text}</span>
+                    <span className="card-cost">持续到终局 · 终局 +3 分/张（同部门 2 张 +5）</span>
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {replaceTarget ? (
+          <div className="stack" style={{ marginTop: 'var(--s2)' }}>
+            <div className="section-label">选择要替换的方案（本月 1 次）</div>
+            {s.directives.map((x, i) => (
+              <button
+                key={`rep-${i}`}
+                className="btn btn-mini"
+                style={{ width: '100%', justifyContent: 'flex-start' }}
+                onClick={() => {
+                  g.act((st) => E.playCard(st, replaceTarget, { replaceIdx: i }))
+                  setReplaceTarget(null)
+                }}
+              >
+                <span className="btn-main xs">
+                  替换【{CARD_BY_ID[x.defId]?.name}】{x.empowered ? '（强化）' : ''}
+                </span>
+              </button>
+            ))}
+            <button className="btn btn-mini" style={{ width: '100%' }} onClick={() => setReplaceTarget(null)}>
+              <span className="btn-main xs">取消</span>
+            </button>
+          </div>
+        ) : null}
+      </div>
+
       {/* 提案 */}
       <div className="card">
         <div className="hstack-between">
@@ -331,10 +388,15 @@ function OpsPage({ g }: { g: Game }) {
                           setM3(c.uid)
                           return
                         }
+                        // 决议卡：槽满时需先选替换目标（每月 1 次换动）
+                        if (def.directive && s.directives.length >= E.directiveSlots(s)) {
+                          setReplaceTarget(c.uid)
+                          return
+                        }
                         g.act((st) => E.playCard(st, c.uid))
                       }}
                     >
-                      <span className="btn-main xs">实施</span>
+                      <span className="btn-main xs">{def.directive ? (s.directives.length >= E.directiveSlots(s) ? '换入方案' : '入方案槽') : '实施'}</span>
                       {!playable.ok ? <span className="btn-sub xs">{playable.msg}</span> : null}
                     </button>
                   </span>
@@ -807,6 +869,22 @@ function BuyPage({ g }: { g: Game }) {
                 <span className="btn-sub xs">取消本月采购计划</span>
               </button>
             ) : null}
+            {/* 双档采购（K3）：已选档基础上加第二档（小批/中批，+1 档价，不占档数） */}
+            {gs.mode === 'core' && d.doubleLotActive && mats.find((x) => x.id === pickLot)?.chosenLot ? (
+              <div style={{ marginTop: 'var(--s2)' }}>
+                <div className="section-label">双档采购（K3）</div>
+                {gs.secondLotMat === pickLot ? (
+                  <button className="btn btn-mini" onClick={() => g.act((st) => E.clearSecondLot(st))}>
+                    <span className="btn-main xs">第二档：{E.lotLabel(d.doubleLotSize)}（+1 档价）· 点击取消</span>
+                  </button>
+                ) : (
+                  <button className="btn btn-mini" onClick={() => g.act((st) => E.setSecondLot(st, pickLot))}>
+                    <span className="btn-main xs">加第二档：{E.lotLabel(d.doubleLotSize)}（+1 档价，不占档数）</span>
+                    {gs.secondLotMat ? <span className="btn-sub xs">替换 {mats.find((x) => x.id === gs.secondLotMat)?.name} 的第二档</span> : null}
+                  </button>
+                )}
+              </div>
+            ) : null}
           </div>
         </Sheet>
       ) : null}
@@ -1197,8 +1275,10 @@ function MakePage({ g }: { g: Game }) {
   const plannedTotal = E.plannedTotal(gs)
   const remainingCap = Math.max(0, cap - plannedTotal)
   const ucost = E.productionUnitCosts(gs)
-  const otCost = overtimeCostOf(E.derive(gs).salaryPer.make, gs.depts.make.staff)
-  const otGain = overtimeGainOf(gs.depts.make.staff, E.derive(gs).equipmentCapBonus + E.plannedEquipmentCap(gs))
+  const makeD = E.derive(gs)
+  const otCostBase = overtimeCostOf(makeD.salaryPer.make, gs.depts.make.staff)
+  const otCost = makeD.overtimeHalf ? Math.round(otCostBase / 2) : otCostBase // 加班补贴（K8 本月 / D7 长期）
+  const otGain = overtimeGainOf(gs.depts.make.staff, makeD.equipmentCapBonus + E.plannedEquipmentCap(gs)) * (makeD.overtimeGainPlus ? 2 : 1)
   const [equip, setEquip] = useState(false)
   const [confirm, setConfirm] = useState(false)
 
@@ -1323,8 +1403,8 @@ function MakePage({ g }: { g: Game }) {
             <span className="btn-main">{gs.plan.overtime ? '本月已安排加班' : '安排加班'}</span>
             <span className="btn-sub">
               {gs.depts.make.staff < 3 ? '需生产 3 人解锁' : gs.plan.overtime
-                ? `已付 ${wan(gs.overtimePaid)}（2× 生产工资，选定后不可取消、费用不退）· 本月产能 +${otGain}`
-                : `发生支付 ${wan(otCost)}（2× 生产工资）· 本月产能 +${otGain}`}
+                ? `已付 ${wan(gs.overtimePaid)}（${makeD.overtimeHalf ? '加班补贴减半后' : '2× 生产工资'}，选定后不可取消、费用不退）· 本月产能 +${otGain}${makeD.overtimeGainPlus ? '（加班补贴强化）' : ''}`
+                : `发生支付 ${wan(otCost)}（${makeD.overtimeHalf ? '加班补贴（K8/D7）减半后' : '2× 生产工资'}）· 本月产能 +${otGain}${makeD.overtimeHalf ? '（K8 加班补贴）' : ''}`}
             </span>
           </button>
           <button className="btn btn-mini" onClick={() => setEquip(true)}>
@@ -1647,6 +1727,32 @@ function SellPage({ g }: { g: Game }) {
       <div className="card">
         <h3>本月需求与售价</h3>
         <div className="title-rule" />
+        {/* 规则卡（K5 快周转 / K1 定价权）生效提示 */}
+        {d.spotUnlimited || d.spotPriceActive ? (
+          <div className="info" style={{ marginBottom: 'var(--s2)' }}>
+            {d.spotUnlimited ? (
+              <div className="xs">快周转（K5）：本月现货不受需求限制（全部库存可售）{d.spotUnlimitedPlus ? '，低端需求 +2' : '，售价 −1 档'}。</div>
+            ) : null}
+            {d.spotPriceActive ? (
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: d.spotUnlimited ? 'var(--s2)' : 0 }} className="hstack">
+                <span className="xs">定价权（K1）：现货档位</span>
+                {([0, 1, 2] as const).map((n) => (
+                  <button
+                    key={n}
+                    className={`btn btn-mini${(gs.spotPriceChoice ?? 0) === n ? ' on' : ''}`}
+                    style={{ width: 'auto' }}
+                    onClick={() => g.act((st) => E.setSpotPrice(st, n))}
+                  >
+                    <span className="btn-main xs">{['基准', '高', '极高'][n]}</span>
+                  </button>
+                ))}
+                {(gs.spotPriceChoice ?? 0) > 0 ? (
+                  <span className="xs faint">各层需求 −{Math.ceil((gs.spotPriceChoice ?? 0) * (d.spotPriceNoPenalty ? 0.5 : 1))}（强化版减半）</span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {/* 市场需求表：六列（类型 / 需求数 / 上限 / 市价 / 单件毛利 / 可承诺量），库存已扣除订单占用量，列宽与下方订单表对齐 */}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 0.9fr 1fr 1.2fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}>
           <span className="xs" style={{ color: 'var(--gold)' }}>市场需求</span>
@@ -1673,8 +1779,8 @@ function SellPage({ g }: { g: Game }) {
                 demand={d.demand[t]}
                 demandBase={d.demandBase[t]}
                 cap={cap}
-                price={d.price[t]}
-                grossProfit={estimatedGrossProfit(t, d.price[t])}
+                price={E.priceAtProduct(t, d.spotShift[t])}
+                grossProfit={estimatedGrossProfit(t, E.priceAtProduct(t, d.spotShift[t]))}
                 avail={avail}
                 orderTaken={orderTaken}
               />
@@ -1692,7 +1798,7 @@ function SellPage({ g }: { g: Game }) {
           <span className="xs faint">单件毛利</span>
           <span className="xs faint">状态</span>
           {gs.orders.map((o) => {
-            const orderPrice = E.priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
+            const orderPrice = E.priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier] + d.orderPriceBonus)
             const isAccepted = gs.acceptedOrders.includes(o.id)
             const isDeclined = gs.declinedOrders.includes(o.id)
             const canAccept = E.canAcceptOrder(gs, o.id)
@@ -1704,7 +1810,7 @@ function SellPage({ g }: { g: Game }) {
                 qty={o.qty}
                 price={orderPrice}
                 grossProfit={estimatedGrossProfit(o.tier, orderPrice)}
-                from={o.from}
+                from={o.flex ? `${o.from} · 灵活交付缺口罚 ${Math.round(d.flexPenaltyRate * 100)}%` : o.from}
                 forced={o.forced}
                 isAccepted={isAccepted}
                 isDeclined={isDeclined}
@@ -1841,6 +1947,30 @@ function RndPage({ g }: { g: Game }) {
             <span className="btn-sub">在研 {ip.active}/{ip.total} · 三分支 · 逐层揭示</span>
           </button>
         </div>
+      </div>
+
+      <div className="card">
+        <h3>知识结构（终局计分）</h3>
+        <div className="title-rule" />
+        <div className="stack">
+          {E.IP_SETS.map((set) => {
+            const have = set.ips.filter((ip) => gs.ipOwned.includes(ip)).length
+            const done = have === set.ips.length
+            return (
+              <div key={set.id} className="card-item" style={{ opacity: done ? 1 : 0.65 }}>
+                <span className="spine" />
+                <span className="card-body">
+                  <span className="card-name">{set.name}{done ? <span className="tag gold" style={{ marginLeft: 6 }}>已成套</span> : null}</span>
+                  <span className="card-desc">{set.desc}（{have}/{set.ips.length}）</span>
+                  <span className="card-cost">成套终局 +{set.points} 分</span>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        {d.rndRolls > 1 ? (
+          <div className="info" style={{ marginTop: 'var(--s2)' }}>冲刺判定生效（K4 本月 / D1 长期）：研发成功判定掷 {d.rndRolls} 次取高。</div>
+        ) : null}
       </div>
 
       <div className="card">
@@ -2290,8 +2420,8 @@ function HireBlock({ g, dept }: { g: Game; dept: E.Dept }) {
         {!check.ok ? <span className="btn-sub">{check.msg}</span> : null}
       </button>
 
-      {/* S4 裁员优化：事件授予本月裁员额度，返还招聘费 50%（一次） */}
-      {gs.monthFlags.includes('canFire') && staff > 0 ? (
+      {/* S4 裁员优化（事件）/ K6 编制优化（规则卡）：本月裁员额度，返还 100% 基础招聘费 */}
+      {gs.monthFlags.some((f) => f === 'canFire' || f === 'canFireCard') && staff > 0 ? (
         <button
           className="btn btn-mini"
           style={{ marginTop: 'var(--s2)' }}
@@ -2302,7 +2432,7 @@ function HireBlock({ g, dept }: { g: Game; dept: E.Dept }) {
           }}
         >
           <span className="btn-main">解雇 1 名{DEPT_NAME[dept]}</span>
-          <span className="btn-sub">S4 裁员优化：返还招聘费 50%（本月 1 次）</span>
+          <span className="btn-sub">返还 100% 基础招聘费（S4 事件 / K6 编制优化）</span>
         </button>
       ) : null}
 

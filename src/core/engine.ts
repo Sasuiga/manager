@@ -41,6 +41,10 @@ export {
   standardDraw,
   standardPromote,
   standardConsult,
+  directiveSlots,
+  setSpotPrice,
+  setSecondLot,
+  clearSecondLot,
   drawToHand,
   buyMaterial,
   setPurchasePlan,
@@ -439,5 +443,6 @@ export function cumulative(ledgers: Ledger[]) {
 
 export { STAFF, RND_PROJECTS, CARD_BY_ID, EQUIPMENT_SHOP, IP_BY_ID } from '../data/game'
 export { MILESTONES, MILESTONE_BY_ID, MILESTONE_SHAPES } from '../data/game'
+export { IP_SETS } from '../data/game'
 export { allMilestoneProgress, milestoneProgress } from './milestones'
 export { DEPT_NAMES, DEPT_SHORT, TIER_LABEL, TIERS, PRODUCT_PRICE } from '../data/game'
