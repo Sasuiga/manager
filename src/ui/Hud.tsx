@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import * as E from '../core/engine'
-import { CLIMATE_NAMES, MOMENTUM_NAMES } from '../data/game'
+import { CLIMATE_NAMES, MOMENTUM_NAMES, MILESTONES } from '../data/game'
 import { Icon } from './icons'
 import { Row, Sheet } from './Sheet'
 import { wan } from './format'
@@ -110,7 +110,24 @@ export function Hud({
               <span className="faint">/{hud.playsMax}</span>
             </div>
           </div>
+          <div className="stat">
+            <div className="stat-label">
+              <Icon name="cash" size={11} /> 预计总分
+            </div>
+            <div className="stat-value">{s.score.total}</div>
+          </div>
         </div>
+
+        <button className="goal-chip" onClick={onGoals} title="形状目标（常驻里程碑，两种模式都判，达成即锁定）">
+          <span className="hstack" style={{ gap: 'var(--s2)', minWidth: 0 }}>
+            <span className="faint xs nowrap">形状</span>
+            <span>
+              {s.milestones.length}
+              <span className="faint">/{MILESTONES.length}</span>
+            </span>
+          </span>
+          <Icon name="chevron" size={14} className="faint" />
+        </button>
 
         <button className="goal-chip" onClick={onGoals}>
           <span className="hstack" style={{ gap: 'var(--s2)', minWidth: 0 }}>

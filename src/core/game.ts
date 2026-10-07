@@ -59,6 +59,8 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     handMax: 5,
     drawN: 5,
     drawM: 3,
+    milestones: [],
+    milestonePoints: 0,
 
     depts: {
       ops: { staff: 0, hired: 0 },
@@ -149,7 +151,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     log: [],
 
     result: 'playing',
-    score: { profit: 0, assets: 0, goal: 0, achievement: 0, event: 0, total: 0, netsum: 0, assetsEnd: 0 },
+    score: { profit: 0, assets: 0, goal: 0, achievement: 0, event: 0, milestone: 0, total: 0, netsum: 0, assetsEnd: 0 },
     achievements: [],
     flags: {},
   }

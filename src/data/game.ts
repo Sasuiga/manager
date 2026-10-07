@@ -8,6 +8,7 @@ import type {
   GoalDef,
   IpDef,
   MaterialDef,
+  MilestoneDef,
   Money,
   Momentum,
   ResearchProjectDef,
@@ -734,6 +735,32 @@ export const GOAL_POOL: Record<Climate, { basic: GoalDef[]; challenge: GoalDef[]
     ],
   },
 }
+
+// ════════════════════════════════════════════════════════════
+// 8.5 形状目标（常驻里程碑，两种模式都判，终身一次）
+//      判定逻辑见 src/core/milestones.ts（指标复用目标系统口径）
+// ════════════════════════════════════════════════════════════
+
+
+export const MILESTONE_SHAPES: Record<MilestoneDef['shape'], string> = {
+  supply: '供应链',
+  brand: '品牌',
+  tech: '技术',
+  finance: '财务',
+}
+
+export const MILESTONES: MilestoneDef[] = [
+  { id: 'M02', shape: 'supply', name: '新材料通道', desc: '完成 1 次供应商开发（复合材或微机电基础供给 > 0）', points: 10 },
+  { id: 'M03', shape: 'supply', name: '稳供', desc: '签订并生效 1 份长期供货协议', points: 5 },
+  { id: 'M04', shape: 'brand', name: '高端结构', desc: '某季度高端 + 特殊收入占比 ≥ 30%', points: 15 },
+  { id: 'M06', shape: 'brand', name: '规模经营', desc: '某季度季度收入 ≥ 100w', points: 10 },
+  { id: 'M07', shape: 'tech', name: '技术沉淀', desc: '累计 2 项研发成功', points: 15 },
+  { id: 'M08', shape: 'tech', name: '双线产品', desc: '新解锁 2 条产品线（中端 / 高端 / 特殊中完成 2 个）', points: 10 },
+  { id: 'M09', shape: 'finance', name: '整季盈利', desc: '某季度内每个月净利润 ≥ 0', points: 10 },
+  { id: 'M10', shape: 'finance', name: '健康资产负债', desc: '季度末负债 ≤ 净资产 × 25%', points: 5 },
+]
+
+export const MILESTONE_BY_ID = Object.fromEntries(MILESTONES.map((m) => [m.id, m]))
 
 // ════════════════════════════════════════════════════════════
 // 9. 卡牌（§5.6 全表）

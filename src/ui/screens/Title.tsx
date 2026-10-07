@@ -63,6 +63,7 @@ export function EndScreen({ g, onRestart }: { g: Game; onRestart: () => void }) 
     ['盈利分', sc.profit],
     ['资产分', sc.assets],
     ['目标分', sc.goal],
+    ['形状分', sc.milestone],
     ['成就分', sc.achievement],
   ]
 
