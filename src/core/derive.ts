@@ -60,6 +60,12 @@ export interface DerivedTotals {
   price: Record<Tier, number>
   /** 本月产能 */
   capacity: number
+  /** 设备产线合计产能加成（每人，含 IP 设备产能 I2/J1）：设备层差异化 */
+  equipmentCapBonus: number
+  /** IP 设备产能（I2/J1，每台每人）：设备计划预演用 */
+  ipEquipCapacity: number
+  /** J5 专利壁垒生效（本季可复制 1 张已打牌） */
+  ipCardCopy: boolean
   /** 每名员工薪酬（角） */
   salaryPer: Record<Dept, number>
   /** 总薪酬（角） */
@@ -335,8 +341,9 @@ export function derive(state: GameState): DerivedTotals {
   const price: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const t of TIERS) price[t] = productPriceRaw(t, priceShift[t])
 
-  // ── 产能：老板自产 + 工人数 × 每人产能（基础 3，2 人/4 人解锁各 +1，每台设备 +4） ──
-  const capacity = Math.max(0, OWNER_CAPACITY + staffCount.make * makerPerStaff(staffCount.make, state.equipment.length) + (mods.capacity ?? 0))
+  // ── 产能：老板自产 + 工人数 × 每人产能（基础 3，2 人/4 人解锁各 +1，设备产线合计 cap + IP 设备产能） ──
+  const equipmentCapBonus = equipmentCapTotal(state.equipment) + state.equipment.length * ip.equipCapacity
+  const capacity = Math.max(0, OWNER_CAPACITY + staffCount.make * makerPerStaff(staffCount.make, equipmentCapBonus) + (mods.capacity ?? 0))
 
   // ── 薪酬 ──
   const salaryPer: Record<Dept, number> = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
@@ -351,7 +358,8 @@ export function derive(state: GameState): DerivedTotals {
   // ── 资金 ──
   const rate = Math.max(0, MONTHLY_RATE + (mods.rateShift ?? 0) * 0.001 - ip.rateSave * 0.001)
   const interest = Math.max(0, Math.round(state.debt * rate) - ip.interestSave)
-  const creditLine = Math.round((BASE_CREDIT_LINE + ip.creditLine + (state.flags['extraCredit'] ?? 0)) * (mods.creditFactor ?? 1))
+  const equipCredit = equipmentCreditLine(state.equipment)
+  const creditLine = Math.round((BASE_CREDIT_LINE + ip.creditLine + (state.flags['extraCredit'] ?? 0) + equipCredit) * (mods.creditFactor ?? 1))
 
   // ── 销售 ──
   // 品牌加成计入资源池（新模型下品牌 = 更多推力）
@@ -538,6 +546,12 @@ export function derive(state: GameState): DerivedTotals {
     drawN,
     drawM,
     matSave: ip.matSave,
+    /** J5 专利壁垒生效（本季可复制 1 张已打牌） */
+    ipCardCopy: ip.cardCopy,
+    /** 设备产线合计产能加成（每人，含 IP 设备产能 I2/J1） */
+    equipmentCapBonus,
+    /** IP 设备产能（I2/J1，每台每人）：设备计划预演用 */
+    ipEquipCapacity: ip.equipCapacity,
     notes: mods.notes ?? [],
     deptLedger,
   }
@@ -549,12 +563,22 @@ function productPriceRaw(tier: Tier, shift: number) {
   return arr[idx]
 }
 
-export function makerPerStaff(staff: number, equipmentCount = 0): number {
+export function makerPerStaff(staff: number, equipCapTotal = 0): number {
   let v = MAKER_CAP_BASE
   if (staff >= 2) v += 1
   if (staff >= 4) v += 1
-  v += equipmentCount * EQUIP_CAP_PER_WORKER
+  v += equipCapTotal
   return v
+}
+
+/** 设备产线合计产能加成（每人产能）：Σ 各设备型号 cap（旧数据无 cap 时按 EQUIP_CAP_PER_WORKER）。 */
+export function equipmentCapTotal(equipment: { cap?: number }[]): number {
+  return equipment.reduce((sum, e) => sum + (e.cap ?? EQUIP_CAP_PER_WORKER), 0)
+}
+
+/** 设备可提供的借款额度合计（§18-A8，随融资层生效）。 */
+export function equipmentCreditLine(equipment: { creditLine?: number }[]): number {
+  return equipment.reduce((sum, e) => sum + (e.creditLine ?? 0), 0)
 }
 
 /** 销售人员带来的销售资源总量（§7.2.4 表）。 */

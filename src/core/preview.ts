@@ -1,6 +1,6 @@
 import { TIERS } from '../data/game'
 import { derive } from './derive'
-import { plannedPurchaseCost, plannedPurchaseLine, productionUnitCosts } from './actions'
+import { plannedPurchaseCost, plannedPurchaseLine, planEquipmentCost, productionUnitCosts } from './actions'
 import { wagePayableOf } from './game'
 import { materialPriceAt, settle, type SettleReport } from './settle'
 import type { GameState, Money, Tier } from './types'
@@ -60,6 +60,8 @@ export interface PreSettleCash {
   paidPurchase: Money
   /** 采购计划（核心模式结算时付；完整模式为 0） */
   purchasePlan: Money
+  /** 设备购置计划（核心模式结算时付；完整模式为 0） */
+  equipmentPlan: Money
   /** 协议自动采购额（按结算执行同规则确定性模拟） */
   agreementSpend: Money
   /** 加班费 */
@@ -70,7 +72,7 @@ export interface PreSettleCash {
   interest: Money
   /** 上月工资实付（当月计提、次月实付） */
   wagePaid: Money
-  /** = cashOpen + gainedMisc + eventCashIn − (paidHire + paidMisc + paidCapex + paidRepay + paidPurchase + purchasePlan + agreementSpend + overtimePay + rndInvest + interest + wagePaid)；为负 = 计划超出资金能力 */
+  /** = cashOpen + gainedMisc + eventCashIn − (paidHire + paidMisc + paidCapex + paidRepay + paidPurchase + purchasePlan + equipmentPlan + agreementSpend + overtimePay + rndInvest + interest + wagePaid)；为负 = 计划超出资金能力 */
   cashAfter: Money
 }
 
@@ -92,6 +94,8 @@ export function preSettleCash(state: GameState): PreSettleCash {
   )
   /** 采购计划：核心模式尚未付款（结算时付）；完整模式已实付，记在 paidPurchase。 */
   const purchasePlan = state.mode === 'core' ? plannedPurchaseCost(state) : 0
+  /** 设备购置计划：核心模式尚未付款（结算时资本化）；完整模式为 0。 */
+  const equipmentPlan = state.mode === 'core' ? planEquipmentCost(state) : 0
   /** 加班费：安排时已发生支付（state.overtimePaid），桥接按锁定额计。 */
   const overtimePay = state.overtimePaid
   const rndInvest = Math.max(0, d.rndCostTotal)
@@ -104,7 +108,7 @@ export function preSettleCash(state: GameState): PreSettleCash {
    * 仓容口径：结算时采购计划先入库、协议后执行，因此协议的可用仓容要按「计划后库存」计算；
    * 完整模式采购已在行动时入库，直接按当前库存计算。
    */
-  const cashBase = state.cash - purchasePlan
+  const cashBase = state.cash - purchasePlan - equipmentPlan
   let cash = cashBase
   let agreementSpend = 0
   for (const ag of state.agreements) {
@@ -129,6 +133,7 @@ export function preSettleCash(state: GameState): PreSettleCash {
       paidRepay +
       paidPurchase +
       purchasePlan +
+      equipmentPlan +
       agreementSpend +
       overtimePay +
       rndInvest +
@@ -144,6 +149,7 @@ export function preSettleCash(state: GameState): PreSettleCash {
     paidRepay,
     paidPurchase,
     purchasePlan,
+    equipmentPlan,
     agreementSpend,
     overtimePay,
     rndInvest,

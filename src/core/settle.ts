@@ -17,7 +17,7 @@ import {
 } from '../data/game'
 import { derive, mergeMods, rndProjectOutcome } from './derive'
 import { balanceSheet, equipmentNet, equityOf, inventoryValue, wagePayableOf } from './game'
-import { executePlannedPurchases, issueMaterials, postProductionInbound } from './actions'
+import { executePlannedPurchases, executePlannedEquipment, issueMaterials, postProductionInbound } from './actions'
 import { Rng } from './rng'
 import type {
   BalanceSheet,
@@ -83,6 +83,8 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
 
   // 核心模式：普通采购在经营阶段只是计划，正式结算时先付款入库。
   executePlannedPurchases(state)
+  // 核心模式：设备购置计划随结算执行——当月产能与折旧生效，再进入生产段。
+  executePlannedEquipment(state)
 
   // ══════════ 0. 长期协议自动采购 ══════════
   const autoPurchase: SettleReport['autoPurchase'] = []
@@ -625,7 +627,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
 function planCapacity(state: GameState): number {
   const d = derive(state)
   let cap = d.capacity
-  if (state.plan.overtime) cap += overtimeGainOf(state.depts.make.staff, state.equipment.length)
+  if (state.plan.overtime) cap += overtimeGainOf(state.depts.make.staff, d.equipmentCapBonus)
   return Math.max(0, cap)
 }
 
@@ -893,7 +895,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.playedThisMonth = []
   state.lotsUsed = 0
   state.extraBuys = []
-  state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false }
+  state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false, equipment: [] }
   state.overtimePaid = 0
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   state.monthLedger = []
@@ -950,6 +952,8 @@ export function advanceMonth(state: GameState, rng: Rng) {
     state.nextClimateOdds = forecastOdds(nextIdx)
     // 季度临时知产到期（R4 强化「本季有效」）
     state.quarterIps = []
+    // J5 专利壁垒：本季已打牌记录随季度清零（复制额度按季刷新）
+    state.playedThisQuarter = []
   }
 
   /**

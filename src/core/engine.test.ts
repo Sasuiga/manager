@@ -380,7 +380,7 @@ describe('引擎', () => {
     const s = E.newGame(5)
     E.startGame(s)
     // 新模型开局无设备，手动挂一台已提足的验证折旧会计路径
-    s.equipment.push({ id: 'eq-test', name: '测试产线', capacity: 10, depreciation: 20, creditLine: 0, cost: 50, accumulated: 50, purchasedAt: 1 })
+    s.equipment.push({ id: 'eq-test', model: 'eq-line', name: '测试产线', cap: 4, depreciation: 20, creditLine: 0, cost: 50, accumulated: 50, purchasedAt: 1 })
     const before = E.balanceSheet(s).equipmentAccum
     const rep = E.settleMonth(s)
     // 不再计提：累计折旧停在原值，净值也不会被压成负数

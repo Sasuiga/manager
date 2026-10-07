@@ -4,7 +4,7 @@ import {
   MATERIAL_BY_ID,
   CARDS,
   DEPT_NAMES,
-  EQUIPMENT_SHOP,
+  EQUIPMENT_MODELS,
   EQUIP_CAP_PER_WORKER,
   IP_BY_ID,
   LOAN_TERM_MONTHS,
@@ -273,6 +273,7 @@ export function playCard(state: GameState, uid: string, opts?: { materialId?: st
   /** AP 效果当月生效：state.ap 在月初按当时 apMax 初始化，卡牌带来的增量需实时补加（M2/M3） */
   if (effect.ap) state.ap += effect.ap
   state.playedThisMonth.push(card)
+  state.playedThisQuarter.push(`${card.defId}:${card.empowered ? 1 : 0}`)
   state.hand.splice(idx, 1)
   state.discard.push(card)
 
@@ -289,6 +290,33 @@ export function playCard(state: GameState, uid: string, opts?: { materialId?: st
     ...(cost ? [`支付 ${(cost / 10).toFixed(2)}w`] : []),
   ])
   return { ok: true, msg: `已打出【${def.name}】` }
+}
+
+/**
+ * J5 专利壁垒：每季度可复制 1 张本季已打出的牌（效果再次生效，免费、不占 AP/打牌数）。
+ * key = `${defId}:${empowered ? 1 : 0}`，与 playedThisQuarter 一致。
+ */
+export function copyPlayedCard(state: GameState, key: string): ActionResult {
+  const d = derive(state)
+  if (!d.ipCardCopy) return fail('无专利壁垒（J5）生效')
+  const q = Math.ceil(state.month / 3)
+  if (state.flags['cardCopyQ'] === q) return fail('本季已复制')
+  if (!state.playedThisQuarter.includes(key)) return fail('该卡未在本季打出')
+  const [defId, emp] = key.split(':')
+  const def = CARD_BY_ID[defId]
+  if (!def) return fail('未知卡牌')
+  const empowered = emp === '1'
+  const ctx = cardCtx(state, empowered)
+  const effect = empowered && def.strong ? def.strong(ctx) : def.base(ctx)
+  const { mods, flags } = cardEffectToMods(effect)
+  state.cardMods = mergeMods(state.cardMods, mods)
+  state.monthFlags.push(...flags)
+  /** AP 效果当月生效（M2/M3 同口径） */
+  if (effect.ap) state.ap += effect.ap
+  applyCardSpecial(state, def.id, flags)
+  state.flags['cardCopyQ'] = q
+  pushLog(state, 'action', `专利壁垒：复制【${def.name}】${empowered ? '（强化）' : ''}`, ['免费生效，不占 AP 与打牌数；每季度 1 次'])
+  return { ok: true, msg: `已复制【${def.name}】` }
 }
 
 /**
@@ -604,7 +632,7 @@ export function setPurchasePlan(state: GameState, materialId: string, lot: LotSi
 
   const nextCost = lot ? nextQty * lotPrice(state, materialId, lot) : 0
   const costWithoutThis = plannedPurchaseCost(state) - plannedPurchaseLine(state, materialId).cost
-  if (costWithoutThis + nextCost > state.cash) return fail('可用现金不足')
+  if (costWithoutThis + nextCost + planEquipmentCost(state) > state.cash) return fail('可用现金不足（含设备计划）')
 
   mat.chosenLot = lot
   state.lotsUsed = usedWithoutThis + (lot ? 1 : 0)
@@ -653,7 +681,7 @@ export function plannedPurchaseCost(state: GameState): Money {
 }
 
 export function availableCashAfterPurchasePlan(state: GameState): Money {
-  return state.cash - plannedPurchaseCost(state)
+  return state.cash - plannedPurchaseCost(state) - planEquipmentCost(state)
 }
 
 /** 生产可用原料：核心模式包含计划采购到货，完整模式只读实际库存。 */
@@ -696,15 +724,22 @@ export interface ProductionUnitCosts {
   planned: number
 }
 
+/** 设备折旧预演：核心模式计划设备结算时入账，当月起计提全额月折旧。 */
+export function plannedEquipmentDepreciation(state: GameState): number {
+  if (state.mode !== 'core') return 0
+  return state.plan.equipment.reduce((sum, id) => sum + (EQUIPMENT_MODELS[id]?.depreciation ?? 0), 0)
+}
+
 /**
  * 生产单位成本（完全成本口径，供生产 / 销售 / 预算页共用）：
  * 材料成本按采购计划后的原料库存单价计 BOM 领料（采购计划在此影响库存成本）；
- * 固定成本（生产薪酬、本月折旧、加班费）按排产量分摊到每件。
+ * 固定成本（生产薪酬、本月折旧（含核心模式计划设备）、加班费）按排产量分摊到每件。
  */
 export function productionUnitCosts(state: GameState): ProductionUnitCosts {
   const d = derive(state)
   const labor = d.salaryPer.make * state.depts.make.staff
   const depreciation = state.equipment.reduce((sum, e) => sum + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0)
+    + plannedEquipmentDepreciation(state)
   const overtime = state.overtimePaid
   const fixedTotal = labor + depreciation + overtime
   const planned = TIERS.reduce((sum, t) => sum + state.plan.quantities[t], 0)
@@ -1047,38 +1082,108 @@ export function developSupplier(state: GameState, materialId: string): ActionRes
 // ════════════════════════════════════════════════════════════
 
 export function buyEquipment(state: GameState, shopId: string): ActionResult {
-  const shop = EQUIPMENT_SHOP.find((e) => e.id === shopId)
-  if (!shop) return fail('未知设备')
-  if (state.cash < shop.price) return fail('现金不足')
-  state.cash -= shop.price
+  const model = EQUIPMENT_MODELS[shopId]
+  if (!model) return fail('未知设备')
+  if (state.mode === 'core') return fail('核心模式先计划、结算时统一购置')
+  if (state.cash < model.price) return fail('现金不足')
+  state.cash -= model.price
+  pushEquipment(state, model.id, model.price, '商店购置')
+  return { ok: true, msg: `每名生产人员产能 +${model.cap}` }
+}
+
+/** 设备入账公共路径（商店 / 事件 / 设备计划）：资本化实付对价，型号决定产能/折旧/额度；事件白送设备传 withLedger=false（资产由营业外收入平衡）。 */
+function pushEquipment(state: GameState, modelId: string, paid: Money, source: string, withLedger = true): void {
+  const model = EQUIPMENT_MODELS[modelId]
+  if (!model) return
   state.equipment.push({
-    id: `${shop.id}-${state.month}-${state.equipment.length}`,
-    name: shop.name,
-    capacity: shop.capacity,
-    depreciation: shop.depreciation,
-    creditLine: shop.creditLine,
-    cost: shop.price,
+    id: `${modelId}-${state.month}-${state.equipment.length}`,
+    model: modelId,
+    name: model.name,
+    cap: model.cap,
+    depreciation: model.depreciation,
+    creditLine: model.creditLine,
+    cost: paid,
     accumulated: 0,
     purchasedAt: state.month,
   })
   state.flags['capexQ'] = (state.flags['capexQ'] ?? 0) + 1
-  state.monthLedger.push({
-    dept: 'make',
-    item: `设备购置 ${shop.name}`,
-    debit: '固定资产',
-    credit: '现金',
-    debitAmt: shop.price,
-    creditAmt: shop.price,
-    detail: [
-      `现金支出 ${(shop.price / 10).toFixed(2)}w 资本化为固定资产（不计入当期损益）`,
-      `月折旧 ${(shop.depreciation / 10).toFixed(2)}w 为非现金费用，逐月进生产费用`,
-    ],
-  })
-  pushLog(state, 'action', `购置设备【${shop.name}】`, [
-    `${(shop.price / 10).toFixed(2)}w`,
-    `每名生产人员产能 +${EQUIP_CAP_PER_WORKER}${state.depts.make.staff > 0 ? `（现有 ${state.depts.make.staff} 人：本月产能 +${state.depts.make.staff * EQUIP_CAP_PER_WORKER}）` : '（暂无生产人员，产能不增益）'}`,
+  if (withLedger) {
+    state.monthLedger.push({
+      dept: 'make',
+      item: `设备购置 ${model.name}`,
+      debit: '固定资产',
+      credit: '现金',
+      debitAmt: paid,
+      creditAmt: paid,
+      detail: [
+        `现金支出 ${(paid / 10).toFixed(2)}w 资本化为固定资产（不计入当期损益）[${source}]`,
+        `月折旧 ${(model.depreciation / 10).toFixed(2)}w 为非现金费用，逐月进生产费用`,
+      ],
+    })
+  }
+  pushLog(state, 'action', `购置设备【${model.name}】`, [
+    `${(paid / 10).toFixed(2)}w（${source}）`,
+    `每名生产人员产能 +${model.cap}${state.depts.make.staff > 0 ? `（现有 ${state.depts.make.staff} 人：本月产能 +${state.depts.make.staff * model.cap}）` : '（暂无生产人员，产能不增益）'}`,
   ])
-  return { ok: true, msg: `每名生产人员产能 +${EQUIP_CAP_PER_WORKER}` }
+}
+
+/** 事件/卡牌 note 中的设备型号标记（'设备 +1 · eq-xxx'）；无标记 = 商店标准设备。 */
+function equipmentModelOf(marker: string): string {
+  if (marker.includes('eq-liquidation')) return 'eq-liquidation'
+  if (marker.includes('eq-used')) return 'eq-used'
+  return 'eq-line'
+}
+
+/** 结算时执行核心模式设备购置计划：付款资本化（当月产能与折旧生效），清空计划清单。 */
+export function executePlannedEquipment(state: GameState): void {
+  if (state.mode !== 'core' || state.plan.equipment.length === 0) return
+  for (const modelId of state.plan.equipment) {
+    const model = EQUIPMENT_MODELS[modelId]
+    if (!model) continue
+    state.cash -= model.price
+    pushEquipment(state, modelId, model.price, '设备计划')
+  }
+  state.plan.equipment = []
+}
+
+/** 计划设备：各型号购置计划（核心模式）的现金预留与产能/折旧预期（含 IP 设备产能加成）。 */
+export function plannedEquipmentCap(state: GameState): number {
+  if (state.mode !== 'core') return 0
+  const d = derive(state)
+  return state.plan.equipment.reduce((sum, id) => sum + (EQUIPMENT_MODELS[id]?.cap ?? EQUIP_CAP_PER_WORKER), 0)
+    + state.plan.equipment.length * d.ipEquipCapacity
+}
+
+export function planEquipmentCost(state: GameState): Money {
+  if (state.mode !== 'core') return 0
+  return state.plan.equipment.reduce((sum, id) => sum + (EQUIPMENT_MODELS[id]?.price ?? 0), 0)
+}
+
+/** 核心模式设备购置计划：计划 count 台某型号（0 = 取消），预留现金、结算时统一付款入库。 */
+export function setPlanEquipment(state: GameState, modelId: string, count: number): ActionResult {
+  if (state.mode !== 'core') return fail('仅核心模式可调整设备购置计划')
+  const model = EQUIPMENT_MODELS[modelId]
+  if (!model) return fail('未知设备型号')
+  if (count < 0 || count > 5) return fail('单型号每月最多计划 5 台')
+  const ownPlanned = state.plan.equipment.filter((id) => id === modelId).length
+  const others = planEquipmentCost(state) - ownPlanned * model.price
+  if (others + model.price * count + plannedPurchaseCost(state) > state.cash) return fail('可用现金不足（含采购计划）')
+  const prev = state.plan.equipment.filter((id) => id !== modelId)
+  state.plan.equipment = [...prev, ...Array.from({ length: count }, () => modelId)]
+  pushLog(
+    state, 'action',
+    `设备计划：${model.name} ×${count}`,
+    count
+      ? [`预留现金 ${((model.price * count) / 10).toFixed(2)}w，结算时付款入库，当月产能与折旧生效`]
+      : ['取消设备购置计划，预留现金释放'],
+  )
+  return { ok: true, msg: count ? `已计划购置 ${model.name} ${count} 台` : `${model.name} 计划已取消` }
+}
+
+export function canSetPlanEquipment(state: GameState, modelId: string, count: number): ActionResult {
+  if (state.mode !== 'core') return OK
+  const copy = JSON.parse(JSON.stringify(state)) as GameState
+  return setPlanEquipment(copy, modelId, count)
 }
 
 /** 设置单条产品线的排产量；所有产品线共享同一个产能池。 */
@@ -1096,8 +1201,10 @@ export function plannedTotal(state: GameState): number {
 
 export function planCapacity(state: GameState): number {
   const d = derive(state)
-  let cap = d.capacity
-  if (state.plan.overtime) cap += overtimeGainOf(state.depts.make.staff, state.equipment.length)
+  const staff = state.depts.make.staff
+  const planned = plannedEquipmentCap(state)
+  let cap = d.capacity + staff * planned
+  if (state.plan.overtime) cap += overtimeGainOf(staff, d.equipmentCapBonus + planned)
   return cap
 }
 
@@ -1262,7 +1369,8 @@ export function toggleOvertime(state: GameState): ActionResult {
   state.plan.overtime = true
   state.overtimePaid = cost
   state.cash -= cost
-  const gain = overtimeGainOf(staff, state.equipment.length)
+  const d = derive(state)
+  const gain = overtimeGainOf(staff, d.equipmentCapBonus + plannedEquipmentCap(state))
   return { ok: true, msg: `加班已安排（发生支付 2× 生产工资 ${(cost / 10).toFixed(2)}w，选定后不可取消、费用不退；本月产能 +${gain}）` }
 }
 
@@ -1596,39 +1704,19 @@ export function applyEventOption(state: GameState, optionIndex: number): ActionR
     const d = derive(state)
     if (buysEquipment) {
       /**
-       * 设备按**实际支付的对价**入账（¥），而不是 opt.cost.cash 的字面值——
-       * 数据里金额一律以「角」为单位（1w = 10），写 50 就是 5w。
+       * 设备按**实际支付的对价**入账，型号由 extra 标记决定（eq-line/eq-used/eq-liquidation）。
        * 若事件白送设备（无现金对价），按公允价值确认为营业外收入，
        * 否则资产增加而权益不动，恒等式同样会失衡。
        */
+      const modelId = equipmentModelOf(opt.extra ?? '')
       const paid = opt.cost?.cash ?? 0
-      const bookValue = paid > 0 ? paid : 50
-      state.equipment.push({
-        id: `ev-eq-${state.month}-${state.equipment.length}`,
-        name: opt.extra.includes('产能 15') ? '清算设备' : '机会设备',
-        capacity: opt.extra.includes('产能 15') ? 15 : 10,
-        depreciation: opt.extra.includes('折旧减半') ? 10 : 20,
-        creditLine: 50,
-        cost: bookValue,
-        accumulated: 0,
-        purchasedAt: state.month,
-      })
-      if (paid <= 0) state.miscIncome += bookValue
       if (paid > 0) {
         // 现金对价已在调用方扣减；资本支出记账（借 固定资产 / 贷 现金），预算页「设备购置」行以台账行为准
-        state.monthLedger.push({
-          dept: 'make',
-          item: `设备购置 ${opt.extra.includes('产能 15') ? '清算设备' : '机会设备'}`,
-          debit: '固定资产',
-          credit: '现金',
-          debitAmt: paid,
-          creditAmt: paid,
-          detail: [
-            `现金支出 ${(paid / 10).toFixed(2)}w 资本化为固定资产（事件对价，不计入当期损益）`,
-          ],
-        })
+        pushEquipment(state, modelId, paid, '事件对价')
+      } else {
+        state.miscIncome += 50
+        pushEquipment(state, modelId, 50, '事件白送（公允价值）', false)
       }
-      state.flags['capexQ'] = (state.flags['capexQ'] ?? 0) + 1
     }
     if (opt.extra.includes('长期协议') || opt.extra.includes('锁定')) {
       const months = opt.detail.includes('6 个月') ? 6 : 3
@@ -1723,34 +1811,16 @@ function applyModSideEffects(state: GameState, mods: MonthMods, equipmentConside
        * 入账金额必须等于**实际支付的对价**：按固定 50 入账会让
        * 「付 80、只记 50」的差额凭空蒸发，恒等式随之失衡。
        * 若无对价（纯赠予），按公允价值确认为营业外收入。
+       * 型号由 note 标记决定（eq-line/eq-used/eq-liquidation）。
        */
-      const bookValue = equipmentConsideration > 0 ? equipmentConsideration : 50
-      state.equipment.push({
-        id: `note-eq-${state.month}-${state.equipment.length}`,
-        name: '机会设备',
-        capacity: note.includes('产能 15') ? 15 : 10,
-        depreciation: note.includes('折旧减半') ? 10 : 20,
-        creditLine: 50,
-        cost: bookValue,
-        accumulated: 0,
-        purchasedAt: state.month,
-      })
-      if (equipmentConsideration <= 0) state.miscIncome += bookValue
+      const modelId = equipmentModelOf(note)
       if (equipmentConsideration > 0) {
         // 现金对价已在调用方扣减；资本支出记账（借 固定资产 / 贷 现金），预算页「设备购置」行以台账行为准
-        state.monthLedger.push({
-          dept: 'make',
-          item: '设备购置 机会设备',
-          debit: '固定资产',
-          credit: '现金',
-          debitAmt: equipmentConsideration,
-          creditAmt: equipmentConsideration,
-          detail: [
-            `现金支出 ${(equipmentConsideration / 10).toFixed(2)}w 资本化为固定资产（事件对价，不计入当期损益）`,
-          ],
-        })
+        pushEquipment(state, modelId, equipmentConsideration, '事件对价')
+      } else {
+        state.miscIncome += 50
+        pushEquipment(state, modelId, 50, '事件白送（公允价值）', false)
       }
-      state.flags['capexQ'] = (state.flags['capexQ'] ?? 0) + 1
     }
     if (note.includes('管理人员 +1') && state.depts.ops.staff < 5) {
       state.depts.ops.staff += 1

@@ -112,8 +112,11 @@ export interface DeptState {
 
 export interface Equipment {
   id: string
+  /** 设备型号（EQUIPMENT_MODELS 键；产线型号差异化：产能/折旧/额度各不相同） */
+  model: string
   name: string
-  capacity: number
+  /** 每台设备为每名生产人员提供的产能（型号差异化；无此字段的旧数据按 EQUIP_CAP_PER_WORKER） */
+  cap: number
   /** 每月折旧（角） */
   depreciation: Money
   /** 可提供的借款额度（角） */
@@ -628,8 +631,8 @@ export interface GameState {
   extraBuys: { kind: string; materialId: string; qty: number; price: Money; used: boolean }[]
   /** 本月已采购档数 */
   lotsUsed: number
-  /** 本月生产计划：各产品线共享同一产能池。 */
-  plan: { quantities: Record<Tier, number>; overtime: boolean }
+  /** 本月生产计划：各产品线共享同一产能池。equipment = 本月设备购置计划（核心模式；型号 id 列表，结算时统一付款入库，产能/折旧当月生效） */
+  plan: { quantities: Record<Tier, number>; overtime: boolean; equipment: string[] }
   /** 加班费（发生时直接支付：安排时扣现金、选定后不可取消、费用不退还（清生产计划不影响）、月初清零；口径 = 2× 本月生产工资计提额，非工资式下月实付） */
   overtimePaid: Money
   /**
@@ -679,6 +682,8 @@ export interface GameState {
   drawn: CardInstance[]
   drawnSelected: string[]
   playedThisMonth: CardInstance[]
+  /** 本季度已打出卡牌 key（defId:empowered?1:0），季度切换清零；J5 专利壁垒每季度可复制其一 */
+  playedThisQuarter: string[]
   monthMods: MonthMods
   cardMods: MonthMods
   /** 本月打出且持续生效的临时标记 */

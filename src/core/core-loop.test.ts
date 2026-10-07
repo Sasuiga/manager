@@ -1022,3 +1022,132 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
     expect(s2.quarterIps).toHaveLength(0) // 进入新季度，本季知产到期
   })
 })
+
+describe('设备层（计划→预演→结算 + 型号差异化）', () => {
+  function fresh(seed = 501) {
+    const s = E.newGame(seed, 'core')
+    E.startGame(s)
+    E.hire(s, 'make')
+    E.hire(s, 'make')
+    return s
+  }
+
+  it('核心模式：设备购置计划预留现金、预测本月产能与折旧', () => {
+    const s = fresh()
+    const baseCap = E.planCapacity(s)
+    expect(E.setPlanEquipment(s, 'eq-line', 2).ok).toBe(true)
+    expect(s.plan.equipment).toEqual(['eq-line', 'eq-line'])
+    expect(E.planEquipmentCost(s)).toBe(100)
+    expect(E.plannedEquipmentCap(s)).toBe(8)
+    // 每人 +8（2 台 × 4）× 2 名生产人员
+    expect(E.planCapacity(s)).toBe(baseCap + 2 * 8)
+    // 现金预留：设备计划与采购计划共同占用（小包材小批成本 ~50，100+50>110 拒绝）
+    s.cash = 110
+    expect(E.canSetPurchasePlan(s, 'pkg', 'small').ok).toBe(false)
+    expect(E.setPlanEquipment(s, 'eq-line', 2).ok).toBe(true) // 原计划维持
+    s.cash = 300
+    expect(E.canSetPurchasePlan(s, 'pkg', 'small').ok).toBe(true)
+    // 完整模式不走计划；核心模式即时购置被挡（先计划、结算统一）
+    const f = E.newGame(502, 'full')
+    E.startGame(f)
+    expect(E.setPlanEquipment(f, 'eq-line', 1).ok).toBe(false)
+    expect(E.buyEquipment(s, 'eq-line').ok).toBe(false)
+  })
+
+  it('结算：设备计划统一执行——扣现金、资本化、当月折旧与产能生效', () => {
+    const s = fresh(503)
+    s.materials.pkg.qty = 40
+    s.materials.pkg.value = 400
+    s.materials.resin.qty = 20
+    s.materials.resin.value = 200
+    E.setPlanEquipment(s, 'eq-line', 2)
+    E.setPlan(s, 'low', 24)
+    const ps = E.preSettleCash(s)
+    expect(ps.equipmentPlan).toBe(100)
+    expect(ps.cashAfter).toBeLessThan(ps.cashOpen - 100 + 1)
+    const rep = E.settleMonth(s)
+    expect(s.equipment).toHaveLength(2)
+    expect(s.equipment[0].model).toBe('eq-line')
+    expect(s.equipment[0].cap).toBe(4)
+    expect(s.plan.equipment).toEqual([])
+    // 当月折旧进生产费用（2 台 × 2w）
+    expect(rep.ledger.parts['设备折旧']).toBe(40)
+    // 结算产能含本月购入设备：5 + 2 ×（3 + 1 解锁 + 8 设备）= 29
+    expect(rep.production.capacity).toBe(29)
+    // 无设备时产能 13 为瓶颈（10→20 件受原料限制）；设备后原料成为瓶颈，产出 20
+    expect(rep.production.produced).toBe(20)
+  })
+
+  it('型号差异化：D9 二手产线（折旧减半）/ X9 清算产线（每人 +6、额度 8w）', () => {
+    const d9 = E.newGame(504, 'core')
+    E.startGame(d9)
+    d9.currentEvent = EVENT_BY_ID['D9']
+    expect(E.acceptChance(d9).ok).toBe(true)
+    expect(d9.equipment).toHaveLength(1)
+    expect(d9.equipment[0].model).toBe('eq-used')
+    expect(d9.equipment[0].depreciation).toBe(10)
+    const x9 = E.newGame(505, 'core')
+    E.startGame(x9)
+    x9.currentEvent = EVENT_BY_ID['X9']
+    expect(E.acceptChance(x9).ok).toBe(true)
+    expect(x9.equipment[0].model).toBe('eq-liquidation')
+    expect(x9.equipment[0].cap).toBe(6)
+    expect(x9.equipment[0].creditLine).toBe(80)
+    // 同人数下 X9 产能增益高于 D9（每人 +6 vs +4）
+    d9.depts.make.staff = 3
+    x9.depts.make.staff = 3
+    expect(E.planCapacity(x9) - E.planCapacity(d9)).toBe(6)
+  })
+
+  it('§18-A8 关闭：设备额度计入借款额度', () => {
+    const s = E.newGame(506, 'full')
+    E.startGame(s)
+    const base = E.derive(s).creditLine
+    expect(E.buyEquipment(s, 'eq-line').ok).toBe(true)
+    expect(E.derive(s).creditLine).toBe(base + 50)
+  })
+
+  it('J5 专利壁垒：每季度可复制 1 张本季已打牌（免费、不占打牌数）', () => {
+    const s = E.newGame(507, 'core')
+    E.startGame(s)
+    expect(E.derive(s).ipCardCopy).toBe(false)
+    s.ipOwned.push('J5')
+    expect(E.derive(s).ipCardCopy).toBe(true)
+    s.hand.push({ uid: 'j5#m2', defId: 'M2', empowered: false })
+    expect(E.playCard(s, 'j5#m2').ok).toBe(true)
+    expect(s.playedThisQuarter).toContain('M2:0')
+    const ap = s.ap
+    const plays = s.plays
+    expect(E.copyPlayedCard(s, 'M2:0').ok).toBe(true)
+    expect(s.ap).toBe(ap + 1) // M2 基础版 ap +1（复制免费，不走 solo 规则）
+    expect(s.plays).toBe(plays) // 不占打牌数
+    expect(E.copyPlayedCard(s, 'M2:0').ok).toBe(false) // 本季已复制
+    // 进入 Q2：额度刷新，但 Q1 已打牌不在本季清单
+    for (let i = 0; i < 3; i++) E.nextMonth(s)
+    expect(s.month).toBe(4)
+    expect(s.playedThisQuarter).toEqual([])
+    expect(E.copyPlayedCard(s, 'M2:0').ok).toBe(false)
+  })
+
+  it('预演一致性：计划设备的当月折旧进单位固定成本（与结算口径一致）', () => {
+    const s = fresh(509)
+    const before = E.productionUnitCosts(s).fixedParts.depreciation
+    expect(before).toBe(0)
+    E.setPlanEquipment(s, 'eq-line', 2)
+    // 2 台标准设备 × 2w/月 = 4w，计划阶段即可见（结算时同额计提）
+    expect(E.plannedEquipmentDepreciation(s)).toBe(40)
+    expect(E.productionUnitCosts(s).fixedParts.depreciation).toBe(40)
+  })
+
+  it('S4 裁员：canFire 额度允许解雇 1 人并返还招聘费 50%', () => {
+    const s = E.newGame(508, 'core')
+    E.startGame(s)
+    s.depts.ops.staff = 2
+    expect(E.fire(s, 'ops').ok).toBe(false) // 无裁员额度
+    s.monthFlags.push('canFire')
+    const cash = s.cash
+    expect(E.fire(s, 'ops').ok).toBe(true)
+    expect(s.depts.ops.staff).toBe(1)
+    expect(s.cash).toBe(cash + 25) // 首档招聘费 5w × 50% = 2.5w
+  })
+})
