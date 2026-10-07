@@ -168,6 +168,11 @@ export interface Order {
    * 非强制（销售渠道自然订单）：库存足够时自动接，不足则留到下月再判断。
    */
   forced?: boolean
+  /**
+   * 灵活交付（K2 规则卡）：接单时承诺量 +5/+10（可接超出库存+排产的订单），
+   * 月末交付缺口按接单时订单单价 × 20%（强化 10%）付违约金（财务费用）。
+   */
+  flex?: { dueMonth: number; unitPrice: Money }
 }
 
 export interface SaleRecord {
@@ -604,6 +609,14 @@ export interface GameState {
   milestones: string[]
   /** 形状目标累计得分 */
   milestonePoints: Money
+  /** 长期决议（D 卡）：已入槽的决议（defId + 强化状态），持续到终局，终局计分 */
+  directives: { defId: string; empowered: boolean }[]
+  /** 决议槽每月最多换 1 张（填满空槽不计） */
+  directiveChangedThisMonth: boolean
+  /** 定价权（K1 规则卡）：本月现货售价档位选择（0 = 基准 / 1 = 高 / 2 = 极高，每高 1 档各层需求 −1） */
+  spotPriceChoice: number | null
+  /** 双档采购（K3 规则卡）：本月允许选 2 档的原料 id（小批 +1 档） */
+  secondLotMat: string | null
 
   depts: Record<Dept, DeptState>
   materials: Record<string, MaterialState>
@@ -733,6 +746,10 @@ export interface ScoreBreakdown {
   event: number
   /** 形状目标（常驻里程碑）得分 */
   milestone: number
+  /** 长期决议卡得分（每张 +3，同部门 2 张 +5） */
+  directive: number
+  /** 知产套装得分（每套 +15） */
+  ipSet: number
   total: number
   netsum: Money
   assetsEnd: Money

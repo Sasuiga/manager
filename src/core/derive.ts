@@ -30,7 +30,7 @@ import {
   TIERS,
   priceOf,
 } from '../data/game'
-import type { CardPlayEffect, Dept, GameState, MonthMods, ResearchProjectDef, Tier } from './types'
+import type { CardPlayEffect, Dept, GameState, LotSize, Money, MonthMods, ResearchProjectDef, Tier } from './types'
 
 /**
  * 派生层：把「气候 + 事件 + 已打出的卡 + 已激活知产 + 人员」汇总成一组
@@ -55,6 +55,8 @@ export interface DerivedTotals {
   salesPushCost: Record<Tier, number>
   /** 分层售价档位偏移 */
   priceShift: Record<Tier, number>
+  /** 现货价格档位（= priceShift + 决议 D5 + 规则 K1/K5 修正）：仅现货结算与展示用，订单不受影响 */
+  spotShift: Record<Tier, number>
   /** 分层单价 */
   price: Record<Tier, number>
   /** 本月产能 */
@@ -106,6 +108,46 @@ export interface DerivedTotals {
   handMax: number
   drawN: number
   drawM: number
+  // ── 决议卡（D 系列，长期）与规则卡（K 系列，本月）聚合 ──
+  /** 研发判定掷点次数（1 = 无；K4 本月 2/3，D1 长期 2/3） */
+  rndRolls: number
+  /** 加班费减半（K8 本月 / D7 长期） */
+  overtimeHalf: boolean
+  /** 加班产能 +1× 员工产能（K8 强化 / D7 强化） */
+  overtimeGainPlus: boolean
+  /** 招聘费减免（D3：1w / 强化 2w） */
+  hireSave: Money
+  /** 订单价加成档（D4：+1） */
+  orderPriceBonus: number
+  /** 每月订单 +1（D4 强化） */
+  orderBonusPlus: number
+  /** 现货需求加成（D5 强化：每层 +1） */
+  spotDemandPlus: number
+  /** 利率减免档（D6：-0.1%/月，与 I5/J7 叠加） */
+  rateSaveBonus: number
+  /** 借款额度加成（D6 强化：+10w） */
+  creditLineBonus: Money
+  /** 成品库存上限/层（D8：20 / 强化 30；无 D8 = Infinity） */
+  productCap: number
+  /** 供应稳定（D2）：气候供给负修正减半；强化另 +2 */
+  supplyStable: boolean
+  supplyPlus: number
+  /** 定价权（K1）生效中（本月可选手现货档位） */
+  spotPriceActive: boolean
+  /** 定价权需求惩罚减半（K1 强化） */
+  spotPriceNoPenalty: boolean
+  /** 灵活交付（K2）：接单承诺量 +N，下月缺口违约金（10% 强化 / 20% 基础） */
+  flexBonus: number
+  flexPenaltyRate: number
+  /** 双档采购（K3）：小批（基础）/ 中批（强化）第二档 */
+  doubleLotActive: boolean
+  doubleLotSize: LotSize
+  /** 快周转（K5）：现货不受需求限制；强化不降档 + 低端需求 +2 */
+  spotUnlimited: boolean
+  spotUnlimitedPlus: boolean
+  /** 市场情报（K7）：预算页展示下季度气候转移概率 */
+  climateOddsVisible: boolean
+  climateOddsPlus: boolean
   /** 原料单件节省（工艺优化） */
   matSave: number
   notes: string[]
@@ -289,12 +331,47 @@ export function derive(state: GameState): DerivedTotals {
   }
   const mods = mergeMods(climateMods, state.monthMods, state.cardMods)
 
+  // ── 决议卡（D 系列，长期）与规则卡（K 系列，本月）聚合 ──
+  const dirHas = (id: string) => state.directives.some((x) => x.defId === id)
+  const dirEmp = (id: string) => state.directives.some((x) => x.defId === id && x.empowered)
+  const mf = state.monthFlags
+  const rndRolls = Math.max(mf.includes('rndTripleRoll') ? 3 : mf.includes('rndDoubleRoll') ? 2 : 1, dirEmp('D1') ? 3 : dirHas('D1') ? 2 : 1)
+  const overtimeHalf = mf.includes('overtimeHalf') || mf.includes('overtimeHalfPlus') || dirHas('D7')
+  const overtimeGainPlus = mf.includes('overtimeHalfPlus') || dirEmp('D7')
+  const hireSave = dirEmp('D3') ? 20 : dirHas('D3') ? 10 : 0
+  const orderPriceBonus = dirHas('D4') ? 1 : 0
+  const orderBonusPlus = dirEmp('D4') ? 1 : 0
+  const spotDemandPlus = dirEmp('D5') ? 1 : 0
+  const rateSaveBonus = dirHas('D6') ? 1 : 0
+  const creditLineBonus = dirEmp('D6') ? 100 : 0
+  const productCap = dirEmp('D8') ? 30 : dirHas('D8') ? 20 : Infinity
+  const supplyStable = dirHas('D2')
+  const supplyPlus = dirEmp('D2') ? 2 : 0
+  const spotPriceActive = mf.includes('spotPriceChoice') || mf.includes('spotPriceChoiceNoPenalty')
+  const spotPriceNoPenalty = mf.includes('spotPriceChoiceNoPenalty')
+  const spotChoice = spotPriceActive ? (state.spotPriceChoice ?? 0) : 0
+  const spotPenalty = spotChoice === 0 ? 0 : spotPriceNoPenalty ? Math.ceil(spotChoice / 2) : spotChoice
+  const flexBonus = mf.includes('flex10') ? 10 : mf.includes('flex5') ? 5 : 0
+  const flexPenaltyRate = mf.includes('flex10') ? 0.1 : 0.2
+  const doubleLotActive = mf.includes('doubleLot') || mf.includes('doubleLotMid')
+  const doubleLotSize: LotSize = mf.includes('doubleLotMid') ? 'mid' : 'small'
+  const spotUnlimited = mf.includes('spotUnlimited') || mf.includes('spotUnlimitedPlus')
+  const spotUnlimitedPlus = mf.includes('spotUnlimitedPlus')
+  const climateOddsVisible = mf.includes('climateOdds') || mf.includes('climateOddsPlus')
+  const climateOddsPlus = mf.includes('climateOddsPlus')
+  /** 现货专用档位 = 基准价档 + 决议 D5 + 快周转 K5（基础 −1 档）+ 定价权 K1 选择 */
+  const spotShiftOf = (baseShift: number): number =>
+    baseShift + (dirHas('D5') ? 1 : 0) + (spotUnlimited && !spotUnlimitedPlus ? -1 : 0) + spotChoice
+
   // ── 原料（采购人员不再提供供应加成：增量供给走供应商开发/气候/事件）──
   const materials: DerivedTotals['materials'] = {}
   for (const m of MATERIALS) {
     const mm = mods.materials?.[m.id] ?? { supply: 0, tierShift: 0 }
     const developed = state.materialsDeveloped[m.id] ?? 0
-    const supply = Math.max(0, m.baseSupply + developed + mm.supply + (mods.allSupply ?? 0) + ip.matSupply)
+    let supplyAdj = mm.supply + (mods.allSupply ?? 0)
+    if (supplyStable && supplyAdj < 0) supplyAdj = Math.ceil(supplyAdj / 2) // 供应稳定（D2）：负修正减半
+    supplyAdj += supplyPlus
+    const supply = Math.max(0, m.baseSupply + developed + supplyAdj + ip.matSupply)
     let shift = mm.tierShift + (mods.allTierShift ?? 0)
     if (staffCount.buy >= 4) shift -= 1 // 采购 4 人：所有原料价格降 1 档
     shift += ip.buyTierShift // 大宗集采（J9）：所有原料价格降 1 档（质量认证 I8 只作用于产品售价，不作用于原料）
@@ -321,7 +398,13 @@ export function derive(state: GameState): DerivedTotals {
     salesPush[t] = Math.min(Math.floor(state.salesAlloc[t] / SALES_PUSH_COST[t]), SALES_PUSH_CAP[t])
   }
   const demand: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
-  for (const t of TIERS) demand[t] = demandBase[t] + salesPush[t]
+  for (const t of TIERS) {
+    let v = demandBase[t] + salesPush[t]
+    v -= spotPenalty // 定价权（K1）：现货提价每 1 档，该层需求 −N（强化版减半）
+    v += spotDemandPlus // 现货溢价强化（D5）：每层需求 +1
+    if (spotUnlimitedPlus && t === 'low') v += 2 // 快周转强化（K5）：低端需求 +2
+    demand[t] = Math.max(0, v)
+  }
 
   // ── 售价档位 ──
   const priceShift: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
@@ -336,6 +419,9 @@ export function derive(state: GameState): DerivedTotals {
   }
   const price: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const t of TIERS) price[t] = productPriceRaw(t, priceShift[t])
+  /** 现货专用档位（决议 D5 + 快周转 K5 + 定价权 K1；订单结算不受影响） */
+  const spotShift: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  for (const t of TIERS) spotShift[t] = spotShiftOf(priceShift[t])
 
   // ── 产能：老板自产 + 工人数 × 每人产能（基础 3，2 人/4 人解锁各 +1，设备产线合计 cap + IP 设备产能） ──
   const equipmentCapBonus = equipmentCapTotal(state.equipment) + state.equipment.length * ip.equipCapacity
@@ -353,16 +439,16 @@ export function derive(state: GameState): DerivedTotals {
   }
 
   // ── 资金 ──
-  const rate = Math.max(0, MONTHLY_RATE + (mods.rateShift ?? 0) * 0.001 - ip.rateSave * 0.001)
+  const rate = Math.max(0, MONTHLY_RATE + (mods.rateShift ?? 0) * 0.001 - (ip.rateSave + rateSaveBonus) * 0.001)
   const interest = Math.max(0, Math.round(state.debt * rate) - ip.interestSave)
   const equipCredit = equipmentCreditLine(state.equipment)
-  const creditLine = Math.round((BASE_CREDIT_LINE + ip.creditLine + (state.flags['extraCredit'] ?? 0) + equipCredit) * (mods.creditFactor ?? 1))
+  const creditLine = Math.round((BASE_CREDIT_LINE + ip.creditLine + (state.flags['extraCredit'] ?? 0) + equipCredit + creditLineBonus) * (mods.creditFactor ?? 1))
 
   // ── 销售 ──
   // 品牌加成计入资源池（新模型下品牌 = 更多推力）
   const brandBonus = (staffCount.sell >= 5 ? 3 : 0) + ip.brandBonus
   const salesResource = BASE_SALES_RESOURCE + salesResourceFromStaff(Math.min(5, staffCount.sell)) + ip.salesResource + brandBonus + (mods.salesResource ?? 0)
-  const orderCount = SALES_ORDER_COUNT[Math.min(5, staffCount.sell)] + ip.orderBonus + (mods.orders ?? 0)
+  const orderCount = SALES_ORDER_COUNT[Math.min(5, staffCount.sell)] + ip.orderBonus + (mods.orders ?? 0) + orderBonusPlus
   const orderQty = mods.orderQty ?? 10
   const orderPriceShift = 1 + ip.orderPriceShift + (mods.orderPriceShift ?? 0)
 
@@ -541,6 +627,29 @@ export function derive(state: GameState): DerivedTotals {
     drawN,
     drawM,
     matSave: ip.matSave,
+    spotShift,
+    rndRolls,
+    overtimeHalf,
+    overtimeGainPlus,
+    hireSave,
+    orderPriceBonus,
+    orderBonusPlus,
+    spotDemandPlus,
+    rateSaveBonus,
+    creditLineBonus,
+    productCap,
+    supplyStable,
+    supplyPlus,
+    spotPriceActive,
+    spotPriceNoPenalty,
+    flexBonus,
+    flexPenaltyRate,
+    doubleLotActive,
+    doubleLotSize,
+    spotUnlimited,
+    spotUnlimitedPlus,
+    climateOddsVisible,
+    climateOddsPlus,
     /** J5 专利壁垒生效（本季可复制 1 张已打牌） */
     ipCardCopy: ip.cardCopy,
     /** 设备产线合计产能加成（每人，含 IP 设备产能 I2/J1） */

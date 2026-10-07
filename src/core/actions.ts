@@ -19,7 +19,7 @@ import {
   TIER_LABEL,
 } from '../data/game'
 import { cardEffectToMods, derive, makerPerStaff, mergeMods, unitCost } from './derive'
-import { materialPriceAt } from './settle'
+import { materialPriceAt, priceAtProduct } from './settle'
 import { Rng } from './rng'
 import type {
   CardCtx,
@@ -29,6 +29,7 @@ import type {
   LotSize,
   Money,
   MonthMods,
+  Order,
   Tier,
 } from './types'
 import type { CardDef } from '../data/game'
@@ -56,6 +57,7 @@ export function hireCost(state: GameState, dept: Dept): Money {
   if (state.monthMods.notes?.includes('招聘费 +1w')) fee += 10
   if (state.monthMods.notes?.includes('招聘费 -1w')) fee = Math.max(0, fee - 10)
   if (state.monthMods.notes?.includes('招聘费 -50%')) fee = Math.round(fee / 2)
+  fee = Math.max(0, fee - derive(state).hireSave) // 弹性用工（D3 决议）：招聘费 −1w/−2w
   return fee
 }
 
@@ -119,17 +121,18 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   return { ok: true, msg: `${DEPT_NAMES[dept]}人数 → ${state.depts[dept].staff}` }
 }
 
-/** 解雇（仅事件 S4「裁员优化」允许）。 */
+/** 解雇（S4 事件 / K6 编制优化卡；本月额度内不耗 AP，返还 100% 基础招聘费）。 */
 export function fire(state: GameState, dept: Dept): ActionResult {
   if (state.depts[dept].staff <= 0) return fail('该部门没有员工')
-  if (!state.monthFlags.includes('canFire')) return fail('本月无裁员额度')
+  const quotaIdx = state.monthFlags.findIndex((f) => f === 'canFire' || f === 'canFireCard')
+  if (quotaIdx < 0) return fail('本月无裁员额度（S4 事件 / K6 卡）')
+  state.monthFlags.splice(quotaIdx, 1)
   state.depts[dept].staff -= 1
-  const refund = Math.round(STAFF[dept].hireFees[0] * 0.5)
+  const refund = STAFF[dept].hireFees[0] // 100% 基础招聘费（K6 与 S4 同口径）
   state.cash += refund
   /** 返款从本月招聘费净额中抵减（与招聘费同科目，进管理费用） */
   state.hireFeeBy[dept] -= refund
-  state.monthFlags = state.monthFlags.filter((f) => f !== 'canFire')
-  pushLog(state, 'action', `解雇 1 名${DEPT_NAMES[dept]}人员`, [`返还招聘费 ${(refund / 10).toFixed(2)}w`])
+  pushLog(state, 'action', `解雇 1 名${DEPT_NAMES[dept]}人员`, [`返还基础招聘费 ${(refund / 10).toFixed(2)}w`])
   return { ok: true, msg: `解雇 1 人，返还 ${(refund / 10).toFixed(2)}w` }
 }
 
@@ -253,13 +256,31 @@ export function canPlay(state: GameState, card: CardInstance): ActionResult {
   return OK
 }
 
-export function playCard(state: GameState, uid: string, opts?: { materialId?: string; targetUid?: string }): ActionResult {
+export function playCard(state: GameState, uid: string, opts?: { materialId?: string; targetUid?: string; replaceIdx?: number }): ActionResult {
   const idx = state.hand.findIndex((c) => c.uid === uid)
   if (idx < 0) return fail('手牌中没有这张牌')
   const card = state.hand[idx]
   const def = CARD_BY_ID[card.defId]
+  if (!def) return fail('未知卡牌')
   const check = canPlay(state, card)
   if (!check.ok) return check
+
+  // 决议卡（D 系列）：入长期方案槽（填满空槽不计换动，替换每月限 1 次）
+  const slots = directiveSlots(state)
+  const replaceIdx = opts?.replaceIdx
+  if (def.directive) {
+    if (state.directives.length >= slots) {
+      if (replaceIdx == null) return fail(`长期方案槽已满（${slots}），选 1 项决议替换`)
+      if (replaceIdx < 0 || replaceIdx >= state.directives.length) return fail('替换目标不存在')
+      if (state.directiveChangedThisMonth) return fail('本月已换过 1 次决议')
+      state.directives.splice(replaceIdx, 1)
+      state.directiveChangedThisMonth = true
+    } else if (replaceIdx != null) {
+      if (replaceIdx < 0 || replaceIdx >= state.directives.length) return fail('替换目标不存在')
+      state.directives.splice(replaceIdx, 1)
+      state.directiveChangedThisMonth = true
+    }
+  }
 
   const cost = cardPlayCost(state, def)
   state.cash -= cost
@@ -285,6 +306,13 @@ export function playCard(state: GameState, uid: string, opts?: { materialId?: st
   }
 
   applyCardSpecial(state, def.id, flags, opts)
+  if (def.directive) {
+    state.directives.push({ defId: def.id, empowered: card.empowered })
+    pushLog(state, 'action', `长期决议【${def.name}】入槽（${state.directives.length}/${slots}）`, [
+      card.empowered ? def.empowered ?? def.text : def.text,
+      '持续到终局，终局 +3 分/张（同部门 2 张 +5）',
+    ])
+  }
 
   pushLog(state, 'action', `打出【${def.name}】${card.empowered ? '（强化）' : ''}`, [
     def.text,
@@ -359,6 +387,40 @@ export function standardConsult(state: GameState): ActionResult {
   state.cardMods = mergeMods(state.cardMods, { wagePct: -20 })
   pushLog(state, 'action', '标准行动【降本咨询】', ['1 AP + 1w：本月全员工资 −20%（含加班费）'])
   return { ok: true, msg: '本月工资 −20%' }
+}
+
+// ── 决议槽 / 规则卡交互 ──
+
+/** 长期方案槽数：2 基础，运营 ≥ 4 人 +1（与知产槽分工：知产 = 研发驱动，决议 = 运营驱动） */
+export function directiveSlots(state: GameState): number {
+  return state.depts.ops.staff >= 4 ? 3 : 2
+}
+
+/** 定价权（K1）：本月现货档位选择（0 基准 / 1 高 / 2 极高；每高 1 档需求惩罚） */
+export function setSpotPrice(state: GameState, choice: 0 | 1 | 2): ActionResult {
+  if (!state.monthFlags.includes('spotPriceChoice')) return fail('定价权未生效（需打出 K1 卡）')
+  if (choice < 0 || choice > 2) return fail('档位选择无效')
+  state.spotPriceChoice = choice
+  const names = ['基准', '高', '极高']
+  pushLog(state, 'action', `定价权：现货档位 → ${names[choice]}`, choice > 0 ? [`各层需求 −${choice}（强化版减半）`] : undefined)
+  return { ok: true, msg: `现货档位 → ${names[choice]}` }
+}
+
+/** 双档采购（K3）：选定本月允许选 2 档的原料（不占档数，第二档 +1 档价） */
+export function setSecondLot(state: GameState, materialId: string): ActionResult {
+  const d = derive(state)
+  if (!d.doubleLotActive) return fail('双档采购未生效（需打出 K3 卡）')
+  if (!state.materials[materialId]) return fail('未知原料')
+  if (!state.materials[materialId].chosenLot) return fail('先选定该原料的采购档，再选第二档')
+  state.secondLotMat = materialId
+  pushLog(state, 'action', `双档采购：${nameOf(materialId)} 第二档（${lotLabel(d.doubleLotSize)}，+1 档价）`, ['不占档数，计入采购计划'])
+  return { ok: true, msg: '已选第二档' }
+}
+
+/** 取消双档采购第二档 */
+export function clearSecondLot(state: GameState): ActionResult {
+  state.secondLotMat = null
+  return OK
 }
 
 /**
@@ -714,7 +776,18 @@ export function plannedPurchaseLine(state: GameState, materialId: string) {
   if (!lot || state.mode !== 'core') return { lot: null, qty: 0, unit: 0, cost: 0 }
   const qty = plannedLotQty(state, materialId, lot)
   const unit = lotPrice(state, materialId, lot)
-  return { lot, qty, unit, cost: qty * unit }
+  let totalQty = qty
+  let totalCost = qty * unit
+  // 双档采购（K3）：第二档（小批/中批，价格 +1 档，不占档数）
+  const d = derive(state)
+  if (d.doubleLotActive && state.secondLotMat === materialId) {
+    const shift = d.doubleLotSize === 'small' ? 1 : 0
+    const q2 = plannedLotQty(state, materialId, d.doubleLotSize)
+    const u2 = priceAtShift(materialId, (d.materials[materialId]?.tierShift ?? 0) + shift + 1 + buyCardShift(state))
+    totalQty += q2
+    totalCost += q2 * u2
+  }
+  return { lot, qty: totalQty, unit, cost: totalCost }
 }
 
 export function plannedPurchaseCost(state: GameState): Money {
@@ -1246,7 +1319,10 @@ export function planCapacity(state: GameState): number {
   const staff = state.depts.make.staff
   const planned = plannedEquipmentCap(state)
   let cap = d.capacity + staff * planned
-  if (state.plan.overtime) cap += overtimeGainOf(staff, d.equipmentCapBonus + planned)
+  if (state.plan.overtime) {
+    const gain = overtimeGainOf(staff, d.equipmentCapBonus + planned)
+    cap += gain + (d.overtimeGainPlus ? gain : 0) // 加班补贴强化（K8+/D7+）：产能增益翻倍
+  }
   return cap
 }
 
@@ -1256,6 +1332,7 @@ export function maxProducible(state: GameState, tier: Tier): number {
   const bom = BOMS[tier]
   const otherCapacity = TIERS.reduce((sum, t) => sum + (t === tier ? 0 : state.plan.quantities[t]), 0)
   let max = Math.max(0, planCapacity(state) - otherCapacity)
+  max = Math.min(max, d.productCap - state.products[tier].qty) // 安全库存（D8）：成品库存上限
   for (const [id, need] of Object.entries(bom.recipe)) {
     const per = Math.max(1, need - d.matSave)
     const reserved = TIERS.reduce((sum, t) => {
@@ -1405,15 +1482,21 @@ export function toggleOvertime(state: GameState): ActionResult {
   if (state.plan.overtime) {
     return { ok: true, msg: '加班已选定，本月内不可取消（费用不退还）' }
   }
-  const cost = overtimeCostOf(derive(state).salaryPer.make, staff)
+  const d = derive(state)
+  let cost = overtimeCostOf(d.salaryPer.make, staff)
+  if (d.overtimeHalf) cost = Math.round(cost / 2) // 加班补贴（K8 本月 / D7 长期）：减半
   if (state.cash < cost) return fail('现金不足')
   // 发生时直接支付（非工资式计提下月实付）：安排即扣现金，选定后不可取消、费用不退（清生产计划不影响）
   state.plan.overtime = true
   state.overtimePaid = cost
   state.cash -= cost
-  const d = derive(state)
-  const gain = overtimeGainOf(staff, d.equipmentCapBonus + plannedEquipmentCap(state))
-  return { ok: true, msg: `加班已安排（发生支付 2× 生产工资 ${(cost / 10).toFixed(2)}w，选定后不可取消、费用不退；本月产能 +${gain}）` }
+  let gain = overtimeGainOf(staff, d.equipmentCapBonus + plannedEquipmentCap(state))
+  if (d.overtimeGainPlus) gain += overtimeGainOf(staff, d.equipmentCapBonus + plannedEquipmentCap(state)) // K8 强化 / D7 强化：加班产能 +1× 员工产能
+  const baseCost = cost * (d.overtimeHalf ? 2 : 1)
+  return {
+    ok: true,
+    msg: `加班已安排（发生支付 2× 生产工资 ${(baseCost / 10).toFixed(2)}w${d.overtimeHalf ? `，加班补贴减半后实付 ${(cost / 10).toFixed(2)}w` : ''}，选定后不可取消、费用不退；本月产能 +${gain}）`,
+  }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1433,7 +1516,12 @@ export function allocUsed(state: GameState): number {
 
 /** 当前可用于履约的产品量：核心模式包含本月排产，完整模式沿用已入库成品。 */
 export function committableProductQty(state: GameState, tier: Tier): number {
-  return state.products[tier].qty + (state.mode === 'core' ? state.plan.quantities[tier] : 0)
+  const d = derive(state)
+  return (
+    state.products[tier].qty +
+    (state.mode === 'core' ? state.plan.quantities[tier] : 0) +
+    d.flexBonus // 灵活交付（K2）：承诺量 +5/+10（可承诺下月排产，缺口违约金）
+  )
 }
 
 /** 指定订单尚可使用的履约数量，扣除强制订单和其他已接订单。 */
@@ -1477,12 +1565,20 @@ export function toggleOrder(state: GameState, orderId: string): ActionResult {
   const o = state.orders.find((x) => x.id === orderId)
   if (!o) return fail('订单不存在')
   if (o.forced) return fail('强制订单不可取消')
+  const d = derive(state)
+  const attachFlex = (ord: Order): void => {
+    if (d.flexBonus > 0 && !ord.flex) {
+      // 灵活交付（K2）：接单时记录订单单价，下月交付缺口按 20%/10% 付违约金
+      ord.flex = { dueMonth: state.month, unitPrice: priceAtProduct(ord.tier, ord.priceShift + d.priceShift[ord.tier] + d.orderPriceBonus) }
+    }
+  }
   const acceptIdx = state.acceptedOrders.indexOf(orderId)
   const declineIdx = state.declinedOrders.indexOf(orderId)
   if (acceptIdx >= 0) {
-    // 已接 → 取消，变为已放弃
+    // 已接 → 取消，变为已放弃（取消即释放 flex 承诺）
     state.acceptedOrders.splice(acceptIdx, 1)
     state.declinedOrders.push(orderId)
+    o.flex = undefined
     return { ok: true, msg: '已取消订单' }
   }
   if (!canAcceptOrder(state, orderId)) return fail('可承诺产品不足，请先增加该产品排产')
@@ -1490,10 +1586,12 @@ export function toggleOrder(state: GameState, orderId: string): ActionResult {
     // 已放弃 → 接取
     state.declinedOrders.splice(declineIdx, 1)
     state.acceptedOrders.push(orderId)
+    attachFlex(o)
     return { ok: true, msg: '已接取订单' }
   }
   // 默认状态 → 接取
   state.acceptedOrders.push(orderId)
+  attachFlex(o)
   return { ok: true, msg: '已接取订单' }
 }
 
