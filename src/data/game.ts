@@ -285,21 +285,46 @@ export const BUY_LOT_SLOTS = [2, 3, 4, 5, 6, 7]
 export const OWNER_CAPACITY = 5
 /** 每名工人的基础产能。 */
 export const MAKER_CAP_BASE = 3
-/** 每台设备给每名工人额外提供的产能（设备层恢复前的占位值；IP I2/J1 的空转授予同口径）。 */
+/** 标准设备（eq-line）为每名工人提供的产能；其他型号按 EQUIPMENT_MODELS.cap 差异化。 */
 export const EQUIP_CAP_PER_WORKER = 4
 
-/** 加成计算：每名工人的产能（基础 3；生产 2 人 +1、4 人 +1 解锁；每台设备 +4）。 */
-export function makerCapacityPerStaff(staff: number, equipmentCount = 0): number {
+/** 加成计算：每名工人的产能（基础 3；生产 2 人 +1、4 人 +1 解锁；设备按型号合计 +equipCap）。 */
+export function makerCapacityPerStaff(staff: number, equipCap = 0): number {
   let v = MAKER_CAP_BASE
   if (staff >= 2) v += 1
   if (staff >= 4) v += 1
-  v += equipmentCount * EQUIP_CAP_PER_WORKER
+  v += equipCap
   return v
 }
 
-export const EQUIPMENT_SHOP: { id: string; name: string; capacity: number; depreciation: Money; creditLine: Money; price: Money; desc: string }[] = [
-  { id: 'eq-line', name: '标准设备', capacity: 10, depreciation: 20, creditLine: 50, price: 50, desc: '每名生产人员产能 +4 · 月折旧 2w · 额度 5w' },
-]
+/**
+ * 设备产线型号（设备层差异化）：
+ * - 标准设备 eq-line：商店唯一在售型号（单型号起步，5w/月折旧 2w/每人 +4）；
+ * - 二手产线 eq-used：事件 D9 低价设备（折旧减半 1w，每人 +4 同标准）；
+ * - 清算产线 eq-liquidation：事件 X9 资产抄底（8w，每人 +6，额度 8w）——比 D9 强但更贵。
+ */
+export interface EquipmentModel {
+  id: string
+  name: string
+  /** 每台设备为每名生产人员提供的产能 */
+  cap: number
+  /** 每月折旧（角） */
+  depreciation: Money
+  /** 可提供的借款额度（角，随融资层生效） */
+  creditLine: Money
+  /** 购置成本（角；商店价。事件对价以事件 cost 为准） */
+  price: Money
+  desc: string
+}
+
+export const EQUIPMENT_MODELS: Record<string, EquipmentModel> = {
+  'eq-line': { id: 'eq-line', name: '标准设备', cap: EQUIP_CAP_PER_WORKER, depreciation: 20, creditLine: 50, price: 50, desc: '每名生产人员产能 +4 · 月折旧 2w · 额度 5w' },
+  'eq-used': { id: 'eq-used', name: '二手产线', cap: EQUIP_CAP_PER_WORKER, depreciation: 10, creditLine: 50, price: 50, desc: '每名生产人员产能 +4 · 月折旧 1w（折旧减半）· 额度 5w' },
+  'eq-liquidation': { id: 'eq-liquidation', name: '清算产线', cap: 6, depreciation: 20, creditLine: 80, price: 80, desc: '每名生产人员产能 +6 · 月折旧 2w · 额度 8w' },
+}
+
+/** 商店在售型号（单型号起步；型号差异化随事件产线落地，X9 清算产线 / D9 二手产线不进商店） */
+export const EQUIPMENT_SHOP: EquipmentModel[] = [EQUIPMENT_MODELS['eq-line']]
 
 /**
  * 加班：一次性支付 2× 本月生产工资计提额（含事件/卡牌薪酬修正），
@@ -317,9 +342,9 @@ export function overtimeCostOf(salaryPerMake: number, makeStaff: number): number
   return makeStaff >= OVERTIME_UNLOCK_STAFF ? OVERTIME_WAGE_FACTOR * salaryPerMake * makeStaff : 0
 }
 
-/** 加班增益 = 员工产能部分（人数 × 每人产能，含解锁加成 + 设备加成；<3 人为 0）。 */
-export function overtimeGainOf(makeStaff: number, equipmentCount = 0): number {
-  return makeStaff >= OVERTIME_UNLOCK_STAFF ? makeStaff * makerCapacityPerStaff(makeStaff, equipmentCount) : 0
+/** 加班增益 = 员工产能部分（人数 × 每人产能，含解锁加成 + 设备型号合计 equipCap；<3 人为 0）。 */
+export function overtimeGainOf(makeStaff: number, equipCap = 0): number {
+  return makeStaff >= OVERTIME_UNLOCK_STAFF ? makeStaff * makerCapacityPerStaff(makeStaff, equipCap) : 0
 }
 
 // ════════════════════════════════════════════════════════════
@@ -454,7 +479,7 @@ export const EVENTS: GameEventDef[] = [
   {
     id: 'P6', climate: 'boom', name: '扩产机会', type: 'choice', polarity: 'good', scope: 'make', text: '设备厂给出一步到位的报价。',
     options: [
-      { label: '购买设备（5w）', detail: '现金 -5w，立即获得 1 台产线（每名生产人员产能 +2、月折旧 0.2w；无生产人员则产能无增益）', cost: { cash: 50 }, extra: '设备 +1 · 产能 +10' },
+      { label: '购买设备（5w）', detail: '现金 -5w，立即获得 1 台标准设备（每名生产人员产能 +4、月折旧 2w、额度 5w；无生产人员则产能无增益）', cost: { cash: 50 }, extra: '设备 +1 · eq-line' },
       { label: '不购买', detail: '本月产能 +5', mods: { capacity: 5 } },
     ],
   },
@@ -562,7 +587,7 @@ export const EVENTS: GameEventDef[] = [
       { label: '收缩投入', detail: '本月研发进度 -2', mods: { rndProgress: -2 } },
     ],
   },
-  { id: 'D9', climate: 'recession', name: '低价设备', type: 'chance', polarity: 'good', scope: 'make', text: '有企业正在出清设备。', chance: { cost: { cash: 50 }, detail: '支付 5w，获得 1 条标准产线（每名生产人员产能 +2、月折旧 0.1w、折旧减半；无生产人员则产能无增益）', mods: { notes: ['设备 +1（折旧减半）'] } } },
+  { id: 'D9', climate: 'recession', name: '低价设备', type: 'chance', polarity: 'good', scope: 'make', text: '有企业正在出清设备。', chance: { cost: { cash: 50 }, detail: '支付 5w，获得 1 条二手产线（每名生产人员产能 +4、月折旧 1w（折旧减半）、额度 5w；无生产人员则产能无增益）', mods: { notes: ['设备 +1 · eq-used'] } } },
   { id: 'D10', climate: 'recession', name: '猎头抄底', type: 'chance', polarity: 'good', scope: 'ops', text: '有人才正待价而沽。', chance: { cost: { cash: 20 }, detail: '支付 2w，免费获得 1 名管理人员（不耗 AP）', mods: { notes: ['管理人员 +1'] } } },
 
   // ── 萧条 ──────────────────────────────────────────────
@@ -592,7 +617,7 @@ export const EVENTS: GameEventDef[] = [
       { label: '放弃', detail: '本月研发进度 -4', mods: { rndProgress: -4 } },
     ],
   },
-  { id: 'X9', climate: 'depression', name: '资产抄底', type: 'chance', polarity: 'good', scope: 'make', text: '破产清算现场有一台好设备。', chance: { cost: { cash: 80 }, detail: '支付 8w，获得 1 条清算产线（每名生产人员产能 +2、月折旧 0.2w；无生产人员则产能无增益）', mods: { notes: ['设备 +1 · 产能 15'] } } },
+  { id: 'X9', climate: 'depression', name: '资产抄底', type: 'chance', polarity: 'good', scope: 'make', text: '破产清算现场有一台好设备。', chance: { cost: { cash: 80 }, detail: '支付 8w，获得 1 条清算产线（每名生产人员产能 +6、月折旧 2w、额度 8w；无生产人员则产能无增益）', mods: { notes: ['设备 +1 · eq-liquidation'] } } },
   { id: 'X10', climate: 'depression', name: '政府救助', type: 'chance', polarity: 'good', scope: 'cash', text: '有一笔无息纾困贷款。', chance: { cost: { ap: 1 }, detail: '消耗 1 AP，获得 10w 无息贷款（下月偿还）', mods: { notes: ['现金 +10w', '下月偿还 10w'] } } },
 ]
 

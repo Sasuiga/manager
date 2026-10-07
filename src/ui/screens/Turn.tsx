@@ -227,6 +227,8 @@ function OpsPage({ g }: { g: Game }) {
   const [loan, setLoan] = useState<'borrow' | 'repay' | null>(null)
   /** M3 复制手牌：先选要复制的目标手牌，再打出 */
   const [m3, setM3] = useState<string | null>(null)
+  /** J5 专利壁垒：本季可复制一张已打出的提案（免费、不占 AP/打牌数） */
+  const [j5, setJ5] = useState(false)
   const descOf = (c: CardInstance) => {
     const def = CARD_BY_ID[c.defId]
     return c.empowered && def?.empowered ? def.empowered : def?.text ?? ''
@@ -302,6 +304,18 @@ function OpsPage({ g }: { g: Game }) {
           </div>
         ) : null}
       </div>
+
+      {/* J5 专利壁垒：本季可复制 1 张本季已打出的提案（免费、不占 AP/打牌数） */}
+      {d.ipCardCopy && s.playedThisQuarter.length > 0 ? (
+        <div className="card">
+          <h3>专利壁垒 · 提案复制</h3>
+          <div className="title-rule" />
+          <button className="btn btn-mini" onClick={() => setJ5(true)}>
+            <span className="btn-main">复制本季已打出提案</span>
+            <span className="btn-sub">J5：每季度 1 次，免费生效、不占 AP 与打牌数</span>
+          </button>
+        </div>
+      ) : null}
 
       {/* 融资：额度内以 1w 为单位借/还；期限 3 个月，到期未还部分强制全额归还；未还清不能借新笔；利息按月末余额 × 月利率进财务费用 */}
       <div className="card">
@@ -421,6 +435,9 @@ function OpsPage({ g }: { g: Game }) {
         <M3TargetSheet g={g} cardUid={m3} onClose={() => setM3(null)} />
       ) : null}
 
+      {/* J5 专利壁垒：复制本季已打出的提案（免费、不占 AP/打牌数） */}
+      {j5 ? <J5CopySheet g={g} onClose={() => setJ5(false)} /> : null}
+
       {/* 融资·借/还款：选档式金额菜单（同「选择采购档位」样式），选定即执行 */}
       {loan ? <LoanSheet g={g} mode={loan} onClose={() => setLoan(null)} /> : null}
     </>
@@ -458,6 +475,46 @@ function M3TargetSheet({ g, cardUid, onClose }: { g: Game; cardUid: string; onCl
           )
         })}
         {targets.length === 0 ? <p className="muted sm">没有可复制的手牌。</p> : null}
+      </div>
+    </Sheet>
+  )
+}
+
+/** J5 专利壁垒：本季已打出的提案中选择一张复制（免费生效、不占 AP/打牌数）。 */
+function J5CopySheet({ g, onClose }: { g: Game; onClose: () => void }) {
+  const s = g.s
+  const items = s.playedThisQuarter
+  return (
+    <Sheet title="复制已打出提案" sub="J5 专利壁垒：每季度 1 次，免费生效" onClose={onClose}>
+      <div className="stack">
+        {items.map((key) => {
+          const [defId, emp] = key.split(':')
+          const def = CARD_BY_ID[defId]
+          if (!def) return null
+          const empowered = emp === '1'
+          return (
+            <button
+              key={key}
+              className={`card-item d-${def.kind}`}
+              onClick={() => {
+                const r = g.act((st) => E.copyPlayedCard(st, key))
+                if (r.ok) g.setToast(r.msg ?? '已复制')
+                else g.setToast(r.msg)
+                onClose()
+              }}
+            >
+              <span className="spine" />
+              <span className="card-body">
+                <span className="card-name">
+                  【{DEPT_SHORT[def.kind]}】{def.name}
+                  {empowered ? <span className="tag gold" style={{ marginLeft: 6 }}>强化</span> : null}
+                </span>
+                <span className="card-desc">{empowered && def.empowered ? def.empowered : def.text}</span>
+              </span>
+            </button>
+          )
+        })}
+        {items.length === 0 ? <p className="muted sm">本季暂无已打出的提案。</p> : null}
       </div>
     </Sheet>
   )
@@ -1096,7 +1153,7 @@ function MakePage({ g }: { g: Game }) {
   const remainingCap = Math.max(0, cap - plannedTotal)
   const ucost = E.productionUnitCosts(gs)
   const otCost = overtimeCostOf(E.derive(gs).salaryPer.make, gs.depts.make.staff)
-  const otGain = overtimeGainOf(gs.depts.make.staff, gs.equipment.length)
+  const otGain = overtimeGainOf(gs.depts.make.staff, E.derive(gs).equipmentCapBonus + E.plannedEquipmentCap(gs))
   const [equip, setEquip] = useState(false)
   const [confirm, setConfirm] = useState(false)
 
@@ -1226,8 +1283,8 @@ function MakePage({ g }: { g: Game }) {
             </span>
           </button>
           <button className="btn btn-mini" onClick={() => setEquip(true)}>
-            <span className="btn-main">生产设备购置</span>
-            <span className="btn-sub">扩充产能与借款额度 · 每名生产人员产能 +{EQUIP_CAP_PER_WORKER}</span>
+            <span className="btn-main">{gs.mode === 'core' ? '生产设备购置计划' : '生产设备购置'}</span>
+            <span className="btn-sub">{gs.mode === 'core' ? '预留现金 · 结算时统一购置，当月产能与折旧生效' : '立即付款购置 · 当月产能与折旧生效'} · 每名生产人员产能 +{EQUIP_CAP_PER_WORKER}</span>
           </button>
         </div>
       </div>
@@ -1241,7 +1298,7 @@ function MakePage({ g }: { g: Game }) {
               key={e.id}
               k={
                 <>
-                  {e.name} <span className="faint xs">产能 {e.capacity}</span>
+                  {e.name} <span className="faint xs">每人 +{e.cap}</span>
                 </>
               }
               v={`净 ${wan(Math.max(0, e.cost - e.accumulated))} / 原值 ${wan(e.cost)}`}
@@ -1305,6 +1362,7 @@ function ProductionConfirmSheet({ g, planned, onDone }: { g: Game; planned: numb
 /** 生产设备购置弹窗：先展示当前持有设备，再给出购买选项（同「选择采购档位」选单样式），选定即购。 */
 function EquipmentPickSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const gs = g.s
+  const d = E.derive(gs)
   // 持有设备按名称合并（同名多台只列一行）
   const owned = new Map<string, { count: number; net: number; cost: number }>()
   for (const e of gs.equipment) {
@@ -1314,16 +1372,23 @@ function EquipmentPickSheet({ g, onClose }: { g: Game; onClose: () => void }) {
     cur.cost += e.cost
     owned.set(e.name, cur)
   }
+  const core = gs.mode === 'core'
+  const applyStep = (modelId: string, count: number) => {
+    const r = g.act((st) => E.setPlanEquipment(st, modelId, count))
+    if (!r.ok) g.setToast(r.msg)
+  }
   return (
     <Sheet
       title="生产设备购置"
-      sub={`每名生产人员产能 +${EQUIP_CAP_PER_WORKER} · 月折旧进生产费用 · 借款额度随融资层生效`}
+      sub={core
+        ? '计划预留现金，结算时统一购置：当月产能与折旧生效，借款额度自购置当月起算'
+        : '立即付款购置：当月产能与折旧生效，借款额度即时生效'}
       onClose={onClose}
     >
       <div className="card">
         <div className="section-label">当前设备</div>
         {gs.equipment.length === 0 ? (
-          <p className="muted sm">暂未持有设备：购买后每名生产人员产能 +{EQUIP_CAP_PER_WORKER}。</p>
+          <p className="muted sm">暂未持有设备：购置后每名生产人员产能 +{EQUIP_CAP_PER_WORKER}（标准设备）。</p>
         ) : (
           <>
             <div className="stack-sm">
@@ -1333,7 +1398,7 @@ function EquipmentPickSheet({ g, onClose }: { g: Game; onClose: () => void }) {
             </div>
             <Row
               k="合计"
-              v={`${gs.equipment.length} 台 · 每名生产人员产能 +${gs.equipment.length * EQUIP_CAP_PER_WORKER}`}
+              v={`${gs.equipment.length} 台 · 每名生产人员产能 +${d.equipmentCapBonus}`}
               bold
             />
           </>
@@ -1341,28 +1406,57 @@ function EquipmentPickSheet({ g, onClose }: { g: Game; onClose: () => void }) {
       </div>
 
       <div className="card" style={{ marginTop: 'var(--s3)' }}>
-        <div className="section-label">购买设备</div>
+        <div className="section-label">{core ? '本月购置计划' : '购买设备'}</div>
         <div className="stack">
-          {EQUIPMENT_SHOP.map((e) => (
-            <button
-              key={e.id}
-              className="btn btn-mini"
-              disabled={gs.cash < e.price}
-              onClick={() => {
-                const r = g.act((st) => E.buyEquipment(st, e.id))
-                if (r.ok) {
-                  g.setToast(`已购置 ${e.name}`)
-                  onClose()
-                }
-              }}
-            >
-              <span className="btn-main xs">{e.name} · {wan(e.price)}</span>
-              <span className="btn-sub xs">
-                产能 +{EQUIP_CAP_PER_WORKER}/人（× 生产人数） · 月折旧 {wan(e.depreciation)} · 借款额度 +{wan(e.creditLine)}
-                {gs.cash < e.price ? ' · 现金不足' : ''}
-              </span>
-            </button>
-          ))}
+          {EQUIPMENT_SHOP.map((e) => {
+            const planned = gs.plan.equipment.filter((id) => id === e.id).length
+            const stepOk = (n: number) => E.canSetPlanEquipment(gs, e.id, n).ok
+            if (core) {
+              return (
+                <div key={e.id} className="card-item">
+                  <span className="spine" />
+                  <span className="card-body">
+                    <span className="card-name">{e.name} · {wan(e.price)}/台</span>
+                    <span className="card-desc">{e.desc}</span>
+                    <span className="card-desc">
+                      计划 {planned} 台 × 生产 {gs.depts.make.staff} 人：本月产能 +{planned * e.cap * gs.depts.make.staff}
+                      {planned > 0 ? ` · 预留现金 ${wan(planned * e.price)}` : ''}
+                    </span>
+                  </span>
+                  <span style={{ display: 'flex', gap: 'var(--s1)', alignItems: 'center' }}>
+                    <button className="btn btn-mini" style={{ width: 'auto' }} disabled={planned <= 0 || !stepOk(planned - 1)} onClick={() => applyStep(e.id, planned - 1)}>−</button>
+                    <span className="mono xs" style={{ minWidth: 20, textAlign: 'center' }}>{planned}</span>
+                    <button className="btn btn-mini" style={{ width: 'auto' }} disabled={!stepOk(planned + 1)} onClick={() => applyStep(e.id, planned + 1)}>＋</button>
+                  </span>
+                </div>
+              )
+            }
+            return (
+              <button
+                key={e.id}
+                className="btn btn-mini"
+                disabled={gs.cash < e.price}
+                onClick={() => {
+                  const r = g.act((st) => E.buyEquipment(st, e.id))
+                  if (r.ok) {
+                    g.setToast(`已购置 ${e.name}`)
+                    onClose()
+                  }
+                }}
+              >
+                <span className="btn-main xs">{e.name} · {wan(e.price)}</span>
+                <span className="btn-sub xs">
+                  产能 +{e.cap}/人（× 生产人数） · 月折旧 {wan(e.depreciation)} · 借款额度 +{wan(e.creditLine)}
+                  {gs.cash < e.price ? ' · 现金不足' : ''}
+                </span>
+              </button>
+            )
+          })}
+          {core ? (
+            <p className="muted sm" style={{ margin: 0 }}>
+              计划设备在「结算」时统一付款入库（与采购计划同批执行），结算前可自由增减；预留现金在 HUD「期末资金」桥接中可见。
+            </p>
+          ) : null}
         </div>
       </div>
     </Sheet>
@@ -2150,6 +2244,22 @@ function HireBlock({ g, dept }: { g: Game; dept: E.Dept }) {
         <span className="btn-main">招聘{DEPT_NAME[dept]}</span>
         {!check.ok ? <span className="btn-sub">{check.msg}</span> : null}
       </button>
+
+      {/* S4 裁员优化：事件授予本月裁员额度，返还招聘费 50%（一次） */}
+      {gs.monthFlags.includes('canFire') && staff > 0 ? (
+        <button
+          className="btn btn-mini"
+          style={{ marginTop: 'var(--s2)' }}
+          onClick={() => {
+            const r = g.act((st) => E.fire(st, dept))
+            if (r.ok) g.setToast(r.msg ?? '已解雇')
+            else g.setToast(r.msg)
+          }}
+        >
+          <span className="btn-main">解雇 1 名{DEPT_NAME[dept]}</span>
+          <span className="btn-sub">S4 裁员优化：返还招聘费 50%（本月 1 次）</span>
+        </button>
+      ) : null}
 
       {/* 解锁轨道：staff 人时，at <= staff 的格子已点亮 */}
       <div className="unlock-track" style={{ marginTop: 'var(--s3)' }}>

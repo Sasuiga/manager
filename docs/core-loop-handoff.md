@@ -16,6 +16,7 @@
 > 最新（2026-10-01 补）：加班支付时点定案为**发生时直接支付**——安排即扣现金并锁定 `state.overtimePaid`（非工资式「计提下月实付」，也非结算时扣）；一经选定不可取消、费用不退还（清生产计划不影响）、月初清零；结算 §2 不再重复扣现金，过账段按锁定额进生产费用；生产页按钮区分「未安排=发生支付 X」「已安排=已付 X（不可取消）」，修复「付 0」展示。
 > 最新（2026-10-02）：融资层落地（main 直接改，103 测试 + build 通过）：借款加 **3 个月期限**（`LOAN_TERM_MONTHS`，第 M 月借 → `state.loanDueMonth = M+2`，到期月结算强制现金全额归还，现金仍负则资金断裂；台账「借款到期还款」行 + 警告）；**未还清不能借新**（单笔在借，还清后 `loanDueMonth` 清零可再借）；**提前还款降低计息基数**（利息本就按月末余额计提，文案明示）；基础月利率 1.2% → **5%**（`MONTHLY_RATE`，事件档位 0.1%/档不变）。融资层落地后摘掉 `needs: ['finance']` 池过滤（R4/R6/P5/O4/S3/D4/X3/S9 全模式进池），R6「额度 +5w」接进 derive（读 `flags['extraCredit']`，§18-A7 关闭）、R6 选项补上缺失的 `rateShift: 1`；设备标注额度仍未接入（§18-A8 保留）。运营页「融资」卡片加「还款期限」行（第 N 月到期 · 剩 M 个月），借/还弹窗文案同步；rulebook §14.5 重写。订单/排产测试（core-loop）对第 1 月事件噪声做了隔离（清 monthMods/currentEvent，因池变大后抽到的事件变了）。
 
+> 最新（2026-10-03）：设备层落地（restore/equipment）：设备购买进「计划→预演→结算」流水线 + 产线型号差异化 + 卡牌/事件遗留收账。① 型号化（`EQUIPMENT_MODELS`）：标准设备 eq-line（商店唯一在售：5w/折旧 2w/每人 +4/额度 5w）、二手产线 eq-used（D9：折旧减半 1w，每人 +4）、清算产线 eq-liquidation（X9：每人 +6、额度 8w，8w）——X9 不再严格弱于 D9（card-event-alignment §4 遗留关闭）；事件产线统一走 `pushEquipment`/`equipmentModelOf`（notes 标记 eq-xxx，按对价入账、白送按公允价值 5w + 营业外收入）。② 核心模式 `plan.equipment` 型号清单：`setPlanEquipment`/`canSetPlanEquipment`（单型号 ≤5 台，与采购计划共同预留现金——`setPurchasePlan`/`availableCashAfterPurchasePlan` 同步计入），`planCapacity`/`maxProducible` 含计划产能（每人 Σ型号 cap + IP I2/J1 每台加成），结算 `executePlannedEquipment` 统一付款资本化（当月产能与折旧生效），预演（克隆结算）与 preSettleCash「设备购置计划」行自动计入；完整模式保留即时 `buyEquipment`。③ §18-A8 关闭：`equipmentCreditLine` 进借款额度公式（derive）。④ 休眠知产激活：I2/J1 `equipCapacity` 每台加成进每人产能（equipmentCapBonus = Σ型号 cap + 台数×IP 加成）；加班 `overtimeGainOf` 同步口径（含 IP 与计划设备）。⑤ J5 专利壁垒消费端：`copyPlayedCard`（免费复制本季已打牌，不占 AP/打牌数；`playedThisQuarter` 季度清零、`flags['cardCopyQ']` 记已用季度，运营页入口）。⑥ S4 裁员 UI：各部门「人员招聘」卡片 canFire 时显示解雇按钮。机制报告 §7.4/§14.4/§18-A2/A6/A8 与规则书同步（109 测试 + build 通过）。剩余待办：card-event-alignment §4 价格拆解 J9/期货两行、B3 快照 bug（§18-B1），随后 §3.5 董事会目标层。
 > 后续进展：核心模式经营预演页已实现（待查看最新提交）。页面为只读汇总，不提供风险提示、经营建议或库存预测；现货需求按公开需求的 50%～100% 形成收入、毛利和期末现金区间，正式结算结果可复现并保证落在预演区间内。
 
 > 后续进展：固定经营场景测试台已实现。标题页可直接进入六种可复现局面，供人工试玩和自动化回归共同使用。
@@ -440,8 +441,8 @@ plan: {
 2. 研发 ✅（`restore/rnd`：研发放置模型 + IP 技能树 + 仅低端开局，见 §2.15，已合入 main `f2f69f4`）；
 4. 事件 ✅（`restore/event`：核心模式引入事件阶段（全类型 × 落地原则），场景保留所抽事件，季度首月董事会单张事件，已合入 main）；
 5. 卡牌 ✅（`restore/event`：核心模式同样经过立项（抽卡）阶段，C6/C7/C9/C10 四张空卡落地，AP 上限 = 3 + 管理人数−1，已合入 main；遗留见 docs/card-event-alignment.md §4）；
-3. 设备（`restore/equipment`：购买进「计划→预演→结算」流水线，单型号起步，每台每人 +2；与融资层同缓做，见「最新」决策）；
-3. 融资（随设备缓做：额度两个增量项「设备 creditLine / R6 事件 +5w」都挂在设备上，J7/I5 两个 IP 授予继续空转记为已知代价）；
+3. 设备 ✅（`restore/equipment`：购买进「计划→预演→结算」流水线（`plan.equipment`），产线型号差异化（eq-line/eq-used/eq-liquidation），设备额度接入融资（§18-A8），I2/J1 设备产能激活，J5/S4 卡牌遗留收账，见「最新」2026-10-03）；
+3. 融资 ✅（随设备缓做：额度两个增量项「设备 creditLine / R6 事件 +5w」都挂在设备上，J7/I5 两个 IP 授予继续空转记为已知代价；融资层已落地 main `fe2102a`，设备额度随设备层接入）；
 6. 董事会目标（核心模式 startGame/nextMonth 跳过 board 阶段，basicGoal/challengeGoal 恒为 null）；
 8. 成就与完整评分（五部门 5 人成就已随员工层授予，目标分在核心模式因无目标恒为 0，随董事会层补齐）。
 
@@ -646,4 +647,4 @@ git diff --check
 
 **状态**：49 测试 + build 通过，已推 origin/restore/staff；待验收后合入 main，再进 restore/equipment。
 
-**下个分支（restore/equipment）**：设备购买进「计划→预演→结算」流水线：plan.equipment 清单、预演计入产能/现金/折旧、结算入账；单型号起步（约 5w/月折旧 1w/每人 +2）。**（2026-09-28 决策：缓做，先做事件层 restore/event；融资层随设备一起缓做。）**
+**下个分支（restore/equipment）**：设备购买进「计划→预演→结算」流水线：plan.equipment 清单、预演计入产能/现金/折旧、结算入账；单型号起步（约 5w/月折旧 1w/每人 +2）。**（2026-09-28 决策：缓做，先做事件层 restore/event；融资层随设备一起缓做。）已完成（2026-10-03，见「最新」：型号化 eq-line/eq-used/eq-liquidation + 核心模式设备计划 + §18-A8 设备额度 + I2/J1 激活 + J5/S4 遗留收账）。**
