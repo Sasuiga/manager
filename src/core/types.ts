@@ -603,6 +603,10 @@ export interface GameState {
   handMax: number
   drawN: number
   drawM: number
+  /** 已达成的形状目标（终身一次，季度末判定，达成后锁定） */
+  milestones: string[]
+  /** 形状目标累计得分 */
+  milestonePoints: Money
 
   depts: Record<Dept, DeptState>
   materials: Record<string, MaterialState>
@@ -730,7 +734,20 @@ export interface ScoreBreakdown {
   goal: number
   achievement: number
   event: number
+  /** 形状目标（常驻里程碑）得分 */
+  milestone: number
   total: number
   netsum: Money
   assetsEnd: Money
+}
+
+/** 形状：玩家 12 个月里把企业跑成什么样（目标层，常驻里程碑） */
+export type MilestoneShape = 'supply' | 'brand' | 'tech' | 'finance'
+
+export interface MilestoneDef {
+  id: string
+  shape: MilestoneShape
+  name: string
+  desc: string
+  points: number
 }

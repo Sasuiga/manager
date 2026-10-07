@@ -17,7 +17,8 @@ import {
 } from '../data/game'
 import { derive, mergeMods, rndProjectOutcome } from './derive'
 import { balanceSheet, equipmentNet, equityOf, inventoryValue, wagePayableOf } from './game'
-import { executePlannedPurchases, executePlannedEquipment, issueMaterials, postProductionInbound } from './actions'
+import { executePlannedPurchases, executePlannedEquipment, issueMaterials, postProductionInbound, pushLog } from './actions'
+import { checkMilestones } from './milestones'
 import { Rng } from './rng'
 import type {
   BalanceSheet,
@@ -69,6 +70,8 @@ export interface SettleReport {
   autoPurchase: { id: string; name: string; qty: number; unit: Money; total: Money; from: string; skipped?: string }[]
   cards: { name: string; text: string }[]
   goalResults: { name: string; kind: 'basic' | 'challenge'; done: boolean; current: number; target: number; points: number; compare: 'gte' | 'lte' }[]
+  /** 本季新达成的形状目标（终身一次，未达成 = 空数组） */
+  milestones: { id: string; name: string; points: number }[]
   warnings: string[]
 }
 
@@ -156,6 +159,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
         // 承诺制：完成时释放本项目锁定的人员
         slot.assigned = 0
         state.flags['rndSuccessQ'] = (state.flags['rndSuccessQ'] ?? 0) + 1
+        state.flags['rndSuccessTotal'] = (state.flags['rndSuccessTotal'] ?? 0) + 1
         applyResearchSuccess(state, def.id)
       }
     }
@@ -550,7 +554,13 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
 
   // ══════════ 5. 季度目标结算 ══════════
   const goalResults: SettleReport['goalResults'] = []
+  const milestoneResults: SettleReport['milestones'] = []
   if (state.month % 3 === 0) {
+    // 形状目标（两种模式都判）：终身一次，达成即锁定
+    for (const m of checkMilestones(state)) {
+      milestoneResults.push(m)
+      pushLog(state, 'board', `形状目标达成【${m.name}】`, [`+${m.points} 分（终身锁定）`])
+    }
     if (state.basicGoal) {
       const cur = goalCurrent(state, state.basicGoal)
       const done = checkGoal(state.basicGoal, cur)
@@ -616,6 +626,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
     autoPurchase,
     cards: state.playedThisMonth.map((c) => ({ name: CARD_BY_ID[c.defId]?.name ?? c.defId, text: CARD_BY_ID[c.defId]?.text ?? '' })),
     goalResults,
+    milestones: milestoneResults,
     warnings,
   }
 }
@@ -863,8 +874,9 @@ export function computeScore(state: GameState): ScoreBreakdown {
   const profit = Math.round((profitSum / 100) * 1.5)
   const assets = Math.round((assetsEnd / 100) * 1.0)
   const achievement = state.achievements.reduce((a, id) => a + (ACHIEVEMENT_BY_ID[id]?.points ?? 10), 0)
-  const total = profit + assets + state.goalPoints + achievement
-  return { profit, assets, goal: state.goalPoints, achievement, event: 0, total, netsum: profitSum, assetsEnd }
+  const milestone = state.milestonePoints
+  const total = profit + assets + state.goalPoints + achievement + milestone
+  return { profit, assets, goal: state.goalPoints, achievement, event: 0, milestone, total, netsum: profitSum, assetsEnd }
 }
 
 // ────────────────────────────────────────────────────────────

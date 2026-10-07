@@ -18,13 +18,33 @@ const MONEY_METRICS: string[] = [
 ]
 const COUNT_METRICS: string[] = ['staffTotal', 'hiresQ', 'equipmentCount']
 
-/** 目标追踪：本季度基本 / 挑战目标 + 历史记录。 */
+/** 目标追踪：形状目标（常驻）+ 本季度基本 / 挑战目标 + 历史记录。 */
 export function GoalsSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const s = g.s
   const goals = E.goalDisplay(s)
+  const shape = E.allMilestoneProgress(s)
+  const shapeDone = shape.filter((m) => m.done).length
 
   return (
-    <Sheet title="董事会目标" sub={`第 ${Math.ceil(s.month / 3)} 季度 · ${E.hudView(s).climateName}`} onClose={onClose}>
+    <Sheet title="目标" sub={`第 ${Math.ceil(s.month / 3)} 季度 · ${E.hudView(s).climateName}`} onClose={onClose}>
+      <div className="card">
+        <div className="section-label">形状目标（常驻 · 达成即锁定 {shapeDone}/{shape.length}）</div>
+        {shape.map((m) => (
+          <div key={m.def.id} className="row" style={{ opacity: m.done ? 0.55 : 1 }}>
+            <span className="row-key">
+              {m.done ? <Icon name="check" size={12} className="green" /> : <Icon name="clock" size={12} className="faint" />}
+              <span style={{ marginLeft: 4 }}>{m.def.name}</span>
+            </span>
+            <span className="row-val">
+              <span className="xs faint">{E.MILESTONE_SHAPES[m.def.shape]}</span>
+              <span className="xs">{m.text}</span>
+              <span className="xs faint">+{m.def.points}</span>
+            </span>
+          </div>
+        ))}
+        <div className="xs faint" style={{ marginTop: 'var(--s1)' }}>形状目标季度末判定，终身一次；董事会目标为季度问题，未达计入耐心。</div>
+      </div>
+
       {goals.basic ? (
         <GoalCard track={goals.basic.track} current={goals.basic.current} kind="basic" />
       ) : null}
