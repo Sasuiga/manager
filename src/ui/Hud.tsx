@@ -103,15 +103,6 @@ export function Hud({
           </div>
           <div className="stat">
             <div className="stat-label">
-              <Icon name="card" size={11} /> 提案
-            </div>
-            <div className="stat-value">
-              {s.plays}
-              <span className="faint">/{hud.playsMax}</span>
-            </div>
-          </div>
-          <div className="stat">
-            <div className="stat-label">
               <Icon name="cash" size={11} /> 预计总分
             </div>
             <div className="stat-value">{s.score.total}</div>

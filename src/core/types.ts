@@ -295,10 +295,8 @@ export interface CardPlayEffect {
   orders?: number
   /** 立刻获得的订单数量（每单件数） */
   orderQty?: number
-  /** 本月 AP 修正 */
+  /** 本月 AP 修正（打牌已并入 AP 预算） */
   ap?: number
-  /** 本月打牌数修正 */
-  plays?: number
   /** 本月利息修正（角） */
   interest?: Money
   /** 特殊标记，见 actions.ts 的 applyCardSpecial */
@@ -400,9 +398,10 @@ export interface MonthMods {
   salesResource?: number
   /** 制造成本系数（0.9 = -10%） */
   costFactor?: number
-  /** 本月 AP / 打牌数修正 */
+  /** 本月 AP 修正（打牌已并入 AP 预算） */
   ap?: number
-  plays?: number
+  /** 本月工资百分比修正（-20 = 全员工资 −20%，标准行动「降本咨询」） */
+  wagePct?: number
   /** 抽卡张数 / 手牌上限修正 */
   drawBonus?: number
   handBonus?: number
@@ -598,8 +597,6 @@ export interface GameState {
 
   ap: number
   apMax: number
-  plays: number
-  playsMax: number
   handMax: number
   drawN: number
   drawM: number

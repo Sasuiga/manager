@@ -1,8 +1,8 @@
 import { useState, Fragment } from 'react'
 import * as E from '../../core/engine'
-import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, EQUIP_CAP_PER_WORKER, IP_BY_ID, DEPT_SHORT, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS, LOAN_TERM_MONTHS, overtimeCostOf, overtimeGainOf } from '../../data/game'
+import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, EQUIP_CAP_PER_WORKER, IP_BY_ID, DEPT_SHORT, DEPT_NAMES, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS, LOAN_TERM_MONTHS, overtimeCostOf, overtimeGainOf } from '../../data/game'
 import type { CardCtx } from '../../data/game'
-import type { CardInstance } from '../../core/types'
+import type { CardInstance, Dept } from '../../core/types'
 import type { Tier } from '../../core/types'
 import { Icon, type IconName } from '../icons'
 import { Medallion } from '../ornaments'
@@ -178,7 +178,7 @@ export function TurnScreen({
 
   /** 轨道红点：有未处理事项时亮起。 */
   const dots: Record<E.Dept, boolean> = {
-    ops: s.hand.length > 0 && s.plays > 0,
+    ops: s.hand.length > 0 && s.ap > 0,
     buy: E.allocUsed(s) >= 0 && d.materials.pkg && Object.values(s.materials).some((m) => !m.chosenLot && m.qty === 0),
     make: E.maxProducible(s, 'low') > 0,
     sell: s.orders.length > 0,
@@ -238,6 +238,51 @@ function OpsPage({ g }: { g: Game }) {
     <>
       <LedgerSection g={g} dept="ops" />
 
+      {/* 管理动作（标准行动：非卡牌、常驻可用；AP 只买旋钮） */}
+      <div className="card">
+        <h3>管理动作</h3>
+        <div className="title-rule" />
+        <div className="stack">
+          <div className="card-item">
+            <span className="spine" />
+            <span className="card-body">
+              <span className="card-name">抽卡</span>
+              <span className="card-desc">抽 1 张卡入手（受手牌上限约束）</span>
+              <span className="card-cost">1 AP · 1w</span>
+            </span>
+            <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => g.act((st) => E.standardDraw(st))}>
+              <span className="btn-main xs">执行</span>
+            </button>
+          </div>
+          <div className="card-item">
+            <span className="spine" />
+            <span className="card-body">
+              <span className="card-name">市场推广</span>
+              <span className="card-desc">选定产品层，本月该层需求 +2</span>
+              <span className="card-cost">2 AP</span>
+            </span>
+            <span style={{ display: 'flex', gap: 4 }}>
+              {TIER_ORDER.map((t) => (
+                <button key={t} className="btn btn-mini" style={{ width: 'auto' }} onClick={() => g.act((st) => E.standardPromote(st, t))}>
+                  <span className="btn-main xs">{TIER_LABEL[t]}+2</span>
+                </button>
+              ))}
+            </span>
+          </div>
+          <div className="card-item">
+            <span className="spine" />
+            <span className="card-body">
+              <span className="card-name">降本咨询</span>
+              <span className="card-desc">本月全员工资 −20%（含加班费）</span>
+              <span className="card-cost">1 AP · 1w</span>
+            </span>
+            <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => g.act((st) => E.standardConsult(st))}>
+              <span className="btn-main xs">执行</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* 提案 */}
       <div className="card">
         <div className="hstack-between">
@@ -269,7 +314,7 @@ function OpsPage({ g }: { g: Game }) {
                     </span>
                     <span className="card-desc">{descOf(c)}</span>
                     <span className="card-cost">
-{cost > 0 ? `实施费用 ${wan(cost)}` : '实施费用：无'}
+                      {`1 AP`}{cost > 0 ? ` · 费用 ${wan(cost)}` : ''}{def.minStaff ? ` · 需${Object.entries(def.minStaff).map(([d2, n]) => `${DEPT_NAMES[d2 as Dept] ?? d2} ≥ ${n} 人`).join('、')}` : ''}
                     </span>
                   </span>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)', justifyContent: 'center' }}>

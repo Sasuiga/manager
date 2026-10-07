@@ -810,12 +810,12 @@ describe('核心模式立项（抽卡）阶段', () => {
     expect(s.hand.length).toBeGreaterThan(0)
     E.enterOperate(s)
     expect(s.phase).toBe('operate')
-    // 打出一张可玩的牌：打牌数 −1、进入已实施列表
+    // 打出一张可玩的牌：AP −1（打牌并入 AP 预算）、进入已实施列表
     const card = s.hand.find((c) => E.canPlay(s, c).ok)
     expect(card, '手牌中应有可打出的牌').toBeTruthy()
-    const playsBefore = s.plays
+    const apBefore = s.ap
     expect(E.playCard(s, card!.uid).ok).toBe(true)
-    expect(s.plays).toBe(playsBefore - 1)
+    expect(s.ap).toBe(apBefore - 1)
     expect(s.playedThisMonth.length).toBe(1)
   })
 
@@ -863,6 +863,8 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
 
   it('C10 清仓：每原料 1 次小批 -2 档，不占档数', () => {
     const s = operateState()
+    s.depts.buy.staff = 2 // C10 门槛：采购 ≥ 2 人
+    s.cash = 600
     s.hand.push({ uid: 'c10#t', defId: 'C10', empowered: false })
     expect(E.playCard(s, 'c10#t').ok).toBe(true)
     const d = E.derive(s)
@@ -934,7 +936,8 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
     s.hand.push({ uid: 'm2#t', defId: 'M2', empowered: false })
     const apBefore = s.ap
     expect(E.playCard(s, 'm2#t').ok).toBe(true)
-    expect(s.ap).toBe(apBefore + 2) // 基础 +1（effect.ap）+ 唯一牌 +1
+    // 打牌花 1 AP，M2 给 +1（effect）+1（唯一牌）= 净 +1
+    expect(s.ap).toBe(apBefore + 1)
   })
 
   it('M3 复制手牌：复制目标入 hand，保留原牌强化状态', () => {
@@ -1117,10 +1120,8 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
     expect(E.playCard(s, 'j5#m2').ok).toBe(true)
     expect(s.playedThisQuarter).toContain('M2:0')
     const ap = s.ap
-    const plays = s.plays
     expect(E.copyPlayedCard(s, 'M2:0').ok).toBe(true)
     expect(s.ap).toBe(ap + 1) // M2 基础版 ap +1（复制免费，不走 solo 规则）
-    expect(s.plays).toBe(plays) // 不占打牌数
     expect(E.copyPlayedCard(s, 'M2:0').ok).toBe(false) // 本季已复制
     // 进入 Q2：额度刷新，但 Q1 已打牌不在本季清单
     for (let i = 0; i < 3; i++) E.nextMonth(s)

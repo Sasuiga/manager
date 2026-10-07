@@ -106,14 +106,7 @@ export function DrawScreen({ g }: { g: Game }) {
               </span>
             </button>
             <div className="stat-cell">
-              <span className="stat-label">可实施数</span>
-              <span className="stat-value">
-                {s.plays}
-                <span className="faint">/{hud.playsMax}</span>
-              </span>
-            </div>
-            <div className="stat-cell">
-              <span className="stat-label">AP</span>
+              <span className="stat-label">AP（打牌/招聘/协议共用）</span>
               <span className="stat-value">
                 {s.ap}
                 <span className="faint">/{hud.apMax}</span>
