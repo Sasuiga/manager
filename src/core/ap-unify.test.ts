@@ -67,49 +67,67 @@ describe('行动层：AP 统一（打牌并入 AP 预算）', () => {
   })
 })
 
-describe('标准行动（兜底菜单：常驻可用、AP + 现金）', () => {
-  it('抽卡：1 AP + 1w 抽 1 张入手，超手牌上限拒绝', () => {
+describe('标准行动（兜底菜单：输出形状互不重叠）', () => {
+  it('库存清理：1 AP，选定层卖至多 5 件（账面均价、不进损益）', () => {
     const s = inOperate(21)
-    const handLen = s.hand.length
+    s.products.low.qty = 8
+    s.products.low.value = 80 // 均价 10/件
     const ap = s.ap
     const cash = s.cash
-    expect(E.standardDraw(s).ok).toBe(true)
-    expect(s.hand.length).toBe(handLen + 1)
+    expect(E.liquidateStock(s, 'low').ok).toBe(true)
+    expect(s.products.low.qty).toBe(3)
+    expect(s.products.low.value).toBe(30)
+    expect(s.cash - cash).toBe(50) // 5 件 × 10
     expect(s.ap).toBe(ap - 1)
-    expect(s.cash).toBe(cash - 10)
-    s.hand.length = s.handMax
-    expect(E.standardDraw(s).ok).toBe(false)
+    // 无库存层拒绝
+    s.products.mid.qty = 0
+    expect(E.liquidateStock(s, 'mid').ok).toBe(false)
   })
 
-  it('市场推广：2 AP，选定层需求 +2（其他层不变）', () => {
+  it('渠道拜访：1 AP，自然订单 +1（8–12 件、+1 档、可接可拒）', () => {
     const s = inOperate(22)
-    const d0 = E.derive(s)
-    expect(E.standardPromote(s, 'high').ok).toBe(true)
-    expect(s.ap).toBe(1)
-    const d1 = E.derive(s)
-    expect(d1.demand.high - d0.demand.high).toBe(2)
-    expect(d1.demand.low - d0.demand.low).toBe(0)
+    const ap = s.ap
+    const n0 = s.orders.length
+    expect(E.channelVisit(s).ok).toBe(true)
+    expect(s.orders.length).toBe(n0 + 1)
+    const o = s.orders[s.orders.length - 1]
+    expect(o.forced).toBe(false)
+    expect(o.priceShift).toBe(1)
+    expect(o.qty).toBeGreaterThanOrEqual(8)
+    expect(o.qty).toBeLessThanOrEqual(12)
+    expect(s.ap).toBe(ap - 1)
   })
 
-  it('降本咨询：1 AP + 1w，本月全员工资 −20%（含加班费口径）', () => {
+  it('市场考察：1 AP，开启气候情报展示位（本月一次）', () => {
     const s = inOperate(23)
-    s.depts.ops.staff = 2
-    s.depts.make.staff = 3
-    const d0 = E.derive(s)
-    expect(E.standardConsult(s).ok).toBe(true)
-    const d1 = E.derive(s)
-    // 运营 1w/人 → 8/人；生产 0.8w/人 → 6.4/人（取整）
-    expect(d1.salaryPer.ops).toBe(Math.round(d0.salaryPer.ops * 0.8))
-    expect(d1.salaryPer.make).toBe(Math.round(d0.salaryPer.make * 0.8))
-    expect(d1.salaryTotal < d0.salaryTotal).toBe(true)
+    expect(E.derive(s).climateOddsVisible).toBe(false)
+    expect(E.marketScout(s).ok).toBe(true)
+    expect(E.derive(s).climateOddsVisible).toBe(true)
+    expect(E.marketScout(s).ok).toBe(false) // 本月已考察
   })
 
-  it('AP 不足时标准行动被拒（不扣现金）', () => {
+  it('人才市场：1 AP + 2w，免阶梯招聘费入 1 人（生产免费不适用）', () => {
     const s = inOperate(24)
-    s.ap = 0
+    const ap = s.ap
     const cash = s.cash
-    expect(E.standardDraw(s).ok).toBe(false)
+    const staff0 = s.depts.ops.staff
+    expect(E.talentFair(s, 'ops').ok).toBe(true)
+    expect(s.depts.ops.staff).toBe(staff0 + 1)
+    expect(s.ap).toBe(ap - 1)
+    expect(cash - s.cash).toBe(20)
+    expect(E.talentFair(s, 'make').ok).toBe(false) // 生产免费
+  })
+
+  it('AP 不足时标准行动被拒（不扣现金/不产生效果）', () => {
+    const s = inOperate(25)
+    s.ap = 0
+    s.products.low.qty = 5
+    s.products.low.value = 50
+    const cash = s.cash
+    expect(E.liquidateStock(s, 'low').ok).toBe(false)
+    expect(E.channelVisit(s).ok).toBe(false)
+    expect(E.marketScout(s).ok).toBe(false)
+    expect(E.talentFair(s, 'ops').ok).toBe(false)
     expect(s.cash).toBe(cash)
-    expect(E.standardPromote(s, 'low').ok).toBe(false)
   })
 })

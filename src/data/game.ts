@@ -1179,11 +1179,10 @@ export const CARDS: CardDef[] = [
     strong: (c) => ({ flags: c.empowered ? ['canFireCard', 'canFireCard'] : ['canFireCard'] }),
   },
   {
-    id: 'K7', name: '市场情报', kind: 'ops', rule: true,
-    text: '预算页展示下季度气候转移概率表（动能 × 步长真实分布）。',
-    empowered: '预算页展示下季度气候转移概率表，且本季度末额外提示 1 个高概率风险气候。',
-    base: (c) => ({ flags: [c.empowered ? 'climateOddsPlus' : 'climateOdds'] }),
-    strong: (c) => ({ flags: [c.empowered ? 'climateOddsPlus' : 'climateOdds'] }),
+    id: 'K7', name: '强化市场情报', kind: 'ops', rule: true,
+    text: '预算页展示下季度气候转移概率表，并高概率提示 1 个风险气候（标准行动「市场考察」只有基础表，此卡卖增量情报）。',
+    base: () => ({ flags: ['climateOddsPlus'] }),
+    strong: () => ({ flags: ['climateOddsPlus'] }),
   },
   {
     id: 'K8', name: '加班补贴', kind: 'make', rule: true, cost: 20,

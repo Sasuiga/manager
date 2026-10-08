@@ -178,7 +178,6 @@ export function mergeMods(...list: (MonthMods | undefined)[]): MonthMods {
     out.rndCost = (out.rndCost ?? 0) + (m.rndCost ?? 0)
     out.salesResource = (out.salesResource ?? 0) + (m.salesResource ?? 0)
     out.ap = (out.ap ?? 0) + (m.ap ?? 0)
-    out.wagePct = (out.wagePct ?? 0) + (m.wagePct ?? 0)
     out.orders = (out.orders ?? 0) + (m.orders ?? 0)
     out.drawBonus = (out.drawBonus ?? 0) + (m.drawBonus ?? 0)
     out.handBonus = (out.handBonus ?? 0) + (m.handBonus ?? 0)
@@ -430,10 +429,9 @@ export function derive(state: GameState): DerivedTotals {
   // ── 薪酬 ──
   const salaryPer: Record<Dept, number> = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
   let salaryTotal = 0
-  const wageFactor = 1 + (mods.wagePct ?? 0) / 100
   for (const d of DEPT_ORDER) {
     const base = STAFF[d].salary - ip.salarySave
-    const v = Math.max(0, Math.round((base + (mods.salaryPer ?? 0)) * wageFactor))
+    const v = Math.max(0, base + (mods.salaryPer ?? 0))
     salaryPer[d] = v
     salaryTotal += v * staffCount[d]
   }

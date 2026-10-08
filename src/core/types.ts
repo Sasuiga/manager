@@ -405,8 +405,6 @@ export interface MonthMods {
   costFactor?: number
   /** 本月 AP 修正（打牌已并入 AP 预算） */
   ap?: number
-  /** 本月工资百分比修正（-20 = 全员工资 −20%，标准行动「降本咨询」） */
-  wagePct?: number
   /** 抽卡张数 / 手牌上限修正 */
   drawBonus?: number
   handBonus?: number
