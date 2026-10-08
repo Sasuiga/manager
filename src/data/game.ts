@@ -793,8 +793,6 @@ export interface CardDef {
   core?: boolean
   /** 规则卡：改本月规则/制造取舍（K 系列） */
   rule?: boolean
-  /** 决议卡：入长期方案槽，持续到终局（D 系列） */
-  directive?: boolean
   /** 卡片效果正文 */
   text: string
   /** 门槛条件文字 */
@@ -1180,7 +1178,7 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'K7', name: '强化市场情报', kind: 'ops', rule: true,
-    text: '预算页展示下季度气候转移概率表，并高概率提示 1 个风险气候（标准行动「市场考察」只有基础表，此卡卖增量情报）。',
+    text: '预算页展示下季度气候转移概率表（动能 × 步长真实分布），并高概率提示 1 个风险气候。',
     base: () => ({ flags: ['climateOddsPlus'] }),
     strong: () => ({ flags: ['climateOddsPlus'] }),
   },
@@ -1192,63 +1190,6 @@ export const CARDS: CardDef[] = [
     strong: (c) => ({ flags: [c.empowered ? 'overtimeHalfPlus' : 'overtimeHalf'] }),
   },
 
-  // ── 决议卡（D 系列：入长期方案槽，便宜、无风险、持续到终局；终局计分） ────
-  {
-    id: 'D1', name: '研发双判定', kind: 'rnd', directive: true, cost: 30, minStaff: { rnd: 2 },
-    text: '入长期方案槽：研发成功判定掷 2 次取高（持续到终局）。',
-    empowered: '入长期方案槽：研发成功判定掷 3 次取高（持续到终局）。',
-    base: () => ({}),
-    strong: () => ({}),
-  },
-  {
-    id: 'D2', name: '供应稳定', kind: 'buy', directive: true, cost: 30,
-    text: '入长期方案槽：气候对原料供给的负修正减半（持续到终局）。',
-    empowered: '入长期方案槽：气候对原料供给的负修正减半，且正修正 +2（持续到终局）。',
-    base: () => ({}),
-    strong: () => ({}),
-  },
-  {
-    id: 'D3', name: '弹性用工', kind: 'ops', directive: true, cost: 20,
-    text: '入长期方案槽：招聘费 −1w/人（持续到终局）。',
-    empowered: '入长期方案槽：招聘费 −2w/人（持续到终局）。',
-    base: () => ({}),
-    strong: () => ({}),
-  },
-  {
-    id: 'D4', name: '订单稳价', kind: 'sell', directive: true, cost: 40, minStaff: { sell: 2 },
-    text: '入长期方案槽：订单价 +1 档（持续到终局，与渠道类知产叠加）。',
-    empowered: '入长期方案槽：订单价 +1 档，且每月订单 +1（持续到终局）。',
-    base: () => ({}),
-    strong: () => ({}),
-  },
-  {
-    id: 'D5', name: '现货溢价', kind: 'sell', directive: true, cost: 30,
-    text: '入长期方案槽：现货售价 +1 档（订单不受影响，持续到终局）。',
-    empowered: '入长期方案槽：现货售价 +1 档，且现货需求 +1/层（持续到终局）。',
-    base: () => ({}),
-    strong: () => ({}),
-  },
-  {
-    id: 'D6', name: '低息', kind: 'ops', directive: true, cost: 30,
-    text: '入长期方案槽：借款月利率 −0.1%（与财务类知产叠加，持续到终局）。',
-    empowered: '入长期方案槽：借款月利率 −0.1%，且额度 +10w（持续到终局）。',
-    base: () => ({}),
-    strong: () => ({}),
-  },
-  {
-    id: 'D7', name: '加班补贴', kind: 'make', directive: true, cost: 20, minStaff: { make: 3 },
-    text: '入长期方案槽：加班费减半（2× 生产工资 → 1×，持续到终局）。',
-    empowered: '入长期方案槽：加班费减半，且加班产能 +1× 员工产能（持续到终局）。',
-    base: () => ({}),
-    strong: () => ({}),
-  },
-  {
-    id: 'D8', name: '安全库存', kind: 'make', directive: true, cost: 20,
-    text: '入长期方案槽：每层成品库存上限 20 件（超上限时生产截断，持续到终局）。',
-    empowered: '入长期方案槽：每层成品库存上限 30 件（超上限时生产截断，持续到终局）。',
-    base: () => ({}),
-    strong: () => ({}),
-  },
 ]
 
 export const CARD_BY_ID: Record<string, CardDef> = Object.fromEntries(CARDS.map((c) => [c.id, c]))

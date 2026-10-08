@@ -313,7 +313,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
       }
     }
     const deliver = o.forced ? Math.min(o.qty, p.qty) : Math.min(o.qty, p.qty)
-    const unit = priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier] + d.orderPriceBonus)
+    const unit = priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
     const unitValue = p.value / Math.max(1, p.qty)
     p.value -= unitValue * deliver
     p.qty -= deliver
@@ -662,7 +662,6 @@ function maxProducible(state: GameState, tier: Tier): number {
   const d = derive(state)
   const bom = BOMS[tier]
   let max = planCapacity(state)
-  max = Math.min(max, d.productCap - state.products[tier].qty) // 安全库存（D8）：成品库存上限
   for (const [id, need] of Object.entries(bom.recipe)) {
     const per = Math.max(1, need - d.matSave)
     const avail = state.materials[id]?.qty ?? 0
@@ -892,19 +891,10 @@ export function computeScore(state: GameState): ScoreBreakdown {
   const assets = Math.round((assetsEnd / 100) * 1.0)
   const achievement = state.achievements.reduce((a, id) => a + (ACHIEVEMENT_BY_ID[id]?.points ?? 10), 0)
   const milestone = state.milestonePoints
-  /** 长期决议（D 卡）计分：每张 +3，同部门 2 张再 +5 */
-  const directive = state.directives.reduce((a) => a + 3, 0) +
-    Object.values(
-      state.directives.reduce<Record<string, number>>((acc, x) => {
-        const kind = CARD_BY_ID[x.defId]?.kind ?? 'ops'
-        acc[kind] = (acc[kind] ?? 0) + 1
-        return acc
-      }, {}),
-    ).reduce((a, n) => a + (n >= 2 ? 5 : 0), 0)
   /** 知产套装计分：每套 +15 */
   const ipSet = IP_SETS.filter((s) => s.ips.every((ip) => state.ipOwned.includes(ip))).reduce((a, s) => a + s.points, 0)
-  const total = profit + assets + state.goalPoints + achievement + milestone + directive + ipSet
-  return { profit, assets, goal: state.goalPoints, achievement, event: 0, milestone, directive, ipSet, total, netsum: profitSum, assetsEnd }
+  const total = profit + assets + state.goalPoints + achievement + milestone + ipSet
+  return { profit, assets, goal: state.goalPoints, achievement, event: 0, milestone, ipSet, total, netsum: profitSum, assetsEnd }
 }
 
 // ────────────────────────────────────────────────────────────
@@ -943,10 +933,9 @@ export function advanceMonth(state: GameState, rng: Rng) {
   const pendingFutures = state.futures
   state.futures = {}
   state.ipChangedThisMonth = false
-  // 规则卡（K 系列）月度状态：定价权 / 双档采购选择（月内有效）与决议换动限制
+  // 规则卡（K 系列）月度状态：定价权 / 双档采购选择（月内有效）
   state.spotPriceChoice = null
   state.secondLotMat = null
-  state.directiveChangedThisMonth = false
   state.rndStartsThisMonth = []
   state.flags['rndConfirmed'] = 0
   state.eventResolved = false

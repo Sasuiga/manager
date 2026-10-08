@@ -16,7 +16,6 @@ import {
   SALES_ORDER_COUNT,
   STAFF,
   TIERS,
-  TIER_LABEL,
 } from '../data/game'
 import { cardEffectToMods, derive, makerPerStaff, mergeMods, unitCost } from './derive'
 import { materialPriceAt, priceAtProduct } from './settle'
@@ -57,7 +56,6 @@ export function hireCost(state: GameState, dept: Dept): Money {
   if (state.monthMods.notes?.includes('招聘费 +1w')) fee += 10
   if (state.monthMods.notes?.includes('招聘费 -1w')) fee = Math.max(0, fee - 10)
   if (state.monthMods.notes?.includes('招聘费 -50%')) fee = Math.round(fee / 2)
-  fee = Math.max(0, fee - derive(state).hireSave) // 弹性用工（D3 决议）：招聘费 −1w/−2w
   return fee
 }
 
@@ -94,8 +92,8 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   return { ok: true, msg: `${DEPT_NAMES[dept]}人数 → ${state.depts[dept].staff}` }
 }
 
-/** 招聘效果共用尾部（招聘 / 人才市场）：成就、管理 AP 上限 pending、销售订单阈值当月补发。 */
-export function applyHireEffect(state: GameState, dept: Dept): void {
+/** 招聘效果共用尾部：成就、管理 AP 上限 pending、销售订单阈值当月补发。 */
+function applyHireEffect(state: GameState, dept: Dept): void {
   checkAchievements(state)
   // 管理人员增加 AP 上限（下月生效，本月记 pending）
   if (dept === 'ops') state.flags['opsHired'] = (state.flags['opsHired'] ?? 0) + 1
@@ -261,7 +259,7 @@ export function canPlay(state: GameState, card: CardInstance): ActionResult {
   return OK
 }
 
-export function playCard(state: GameState, uid: string, opts?: { materialId?: string; targetUid?: string; replaceIdx?: number }): ActionResult {
+export function playCard(state: GameState, uid: string, opts?: { materialId?: string; targetUid?: string }): ActionResult {
   const idx = state.hand.findIndex((c) => c.uid === uid)
   if (idx < 0) return fail('手牌中没有这张牌')
   const card = state.hand[idx]
@@ -269,23 +267,6 @@ export function playCard(state: GameState, uid: string, opts?: { materialId?: st
   if (!def) return fail('未知卡牌')
   const check = canPlay(state, card)
   if (!check.ok) return check
-
-  // 决议卡（D 系列）：入长期方案槽（填满空槽不计换动，替换每月限 1 次）
-  const slots = directiveSlots(state)
-  const replaceIdx = opts?.replaceIdx
-  if (def.directive) {
-    if (state.directives.length >= slots) {
-      if (replaceIdx == null) return fail(`长期方案槽已满（${slots}），选 1 项决议替换`)
-      if (replaceIdx < 0 || replaceIdx >= state.directives.length) return fail('替换目标不存在')
-      if (state.directiveChangedThisMonth) return fail('本月已换过 1 次决议')
-      state.directives.splice(replaceIdx, 1)
-      state.directiveChangedThisMonth = true
-    } else if (replaceIdx != null) {
-      if (replaceIdx < 0 || replaceIdx >= state.directives.length) return fail('替换目标不存在')
-      state.directives.splice(replaceIdx, 1)
-      state.directiveChangedThisMonth = true
-    }
-  }
 
   const cost = cardPlayCost(state, def)
   state.cash -= cost
@@ -311,13 +292,6 @@ export function playCard(state: GameState, uid: string, opts?: { materialId?: st
   }
 
   applyCardSpecial(state, def.id, flags, opts)
-  if (def.directive) {
-    state.directives.push({ defId: def.id, empowered: card.empowered })
-    pushLog(state, 'action', `长期决议【${def.name}】入槽（${state.directives.length}/${slots}）`, [
-      card.empowered ? def.empowered ?? def.text : def.text,
-      '持续到终局，终局 +3 分/张（同部门 2 张 +5）',
-    ])
-  }
 
   pushLog(state, 'action', `打出【${def.name}】${card.empowered ? '（强化）' : ''}`, [
     def.text,
@@ -354,98 +328,8 @@ export function copyPlayedCard(state: GameState, key: string): ActionResult {
 }
 
 // ══════════════════════════════════════════════════════════
-// 标准行动（兜底菜单：非卡牌、常驻可用；TTA 标准行动式——每个动作的输出形状互不重叠）
-// 对照：库存清理 = 火星标准项目（资源互换：存货 → 现金）；渠道拜访 = TTA 交易（AP → 订单）；
-//       市场考察 = 信息行动（AP → 情报）；人才市场 = 交易变体（AP + 现金 → 人员，免阶梯费）。
-// ══════════════════════════════════════════════════════════
-
-/** 标准行动：库存清理（1 AP）：任一层卖至多 5 件成品，按账面均价、不进损益（资产 → 现金；P10 卡的常驻兜底版） */
-export function liquidateStock(state: GameState, tier: Tier): ActionResult {
-  if (state.ap < 1) return fail('AP 不足（库存清理需 1 AP）')
-  const p = state.products[tier]
-  if (!p.built || p.qty <= 0) return fail(`暂无${TIER_LABEL[tier]}库存`)
-  const sell = Math.min(5, p.qty)
-  const value = (p.value / p.qty) * sell // 账面均价（移动加权平均）
-  p.qty -= sell
-  p.value -= value
-  p.avgCost = p.qty > 0 ? Math.round(p.value / p.qty) : 0
-  state.cash += value
-  state.monthLedger.push({
-    dept: 'make',
-    item: `库存清理 ${TIER_LABEL[tier]}`,
-    debit: '现金',
-    credit: `存货 ${BOMS[tier].name}`,
-    debitAmt: Math.round(value),
-    creditAmt: Math.round(value),
-    detail: [
-      `按账面均价出售 ${sell} 件（不进损益：资产 → 现金，与 P10 库存清理同口径）`,
-      '注意：已接订单仍按原计划交付，清仓可能挤占订单库存',
-    ],
-  })
-  state.ap -= 1
-  pushLog(state, 'action', `标准行动【库存清理】${TIER_LABEL[tier]}`, [`出售 ${sell} 件，现金 +${(value / 10).toFixed(2)}w（不进损益）`])
-  return { ok: true, msg: `出售 ${TIER_LABEL[tier]} ${sell} 件，现金 +${(value / 10).toFixed(2)}w` }
-}
-
-/** 标准行动：渠道拜访（1 AP）：本月自然订单 +1（8–12 件、+1 档价，可接可拒；永久版 = 销售 2/4 人 或 I9/J8） */
-export function channelVisit(state: GameState): ActionResult {
-  if (state.ap < 1) return fail('AP 不足（渠道拜访需 1 AP）')
-  const rng = Rng.fromState(state.rngState + state.month * 2687)
-  const built = TIERS.filter((t) => state.products[t].built)
-  const tier = built.length ? built[rng.int(built.length)] : 'low'
-  const qty = Math.max(8, 10 + rng.int(5) - 2) // 8–12 件，与自然订单同口径
-  state.orders.push({
-    id: `cv${state.month}-${state.orders.length}`,
-    tier,
-    qty,
-    priceShift: 1,
-    dueMonth: state.month,
-    from: '渠道拜访',
-    forced: false,
-  })
-  state.rngState = rng.state
-  state.ap -= 1
-  pushLog(state, 'action', `标准行动【渠道拜访】${TIER_LABEL[tier]} × ${qty}`, ['1 AP：自然订单 +1（订单价 +1 档，可接可拒）'])
-  return { ok: true, msg: `新增自然订单：${TIER_LABEL[tier]} × ${qty}` }
-}
-
-/** 标准行动：市场考察（1 AP）：预算页展示下季度气候转移概率表（真实分布；K7 强化版另加风险提示） */
-export function marketScout(state: GameState): ActionResult {
-  if (state.ap < 1) return fail('AP 不足（市场考察需 1 AP）')
-  if (state.monthFlags.includes('climateOdds') || state.monthFlags.includes('climateOddsPlus')) return fail('本月已获气候情报（K7 卡可叠加强化版）')
-  state.ap -= 1
-  state.monthFlags.push('climateOdds')
-  pushLog(state, 'action', '标准行动【市场考察】', ['1 AP：预算页展示下季度气候转移概率表'])
-  return { ok: true, msg: '下季度气候展望已生成（预算页查看）' }
-}
-
-/** 标准行动：人才市场（1 AP + 2w）：招聘 1 人免阶梯招聘费（一口价 2w；常规招聘费 5/4/3/2/1w，生产免费故不适用） */
-export function talentFair(state: GameState, dept: Dept): ActionResult {
-  if (state.depts[dept].staff >= 5) return fail('部门已满（5 人）')
-  if (dept === 'make') return fail('生产人员招聘免费，直接招聘即可')
-  if (state.ap < 1) return fail('AP 不足（人才市场需 1 AP）')
-  if (state.cash < 20) return fail('现金不足（人才市场一口价 2w）')
-  state.ap -= 1
-  state.cash -= 20
-  /** 一口价进招聘费科目（管理费用，与招聘/裁员同口径勾稽） */
-  state.hireFeeBy[dept] += 20
-  state.depts[dept].staff += 1
-  state.depts[dept].hired += 1 // 下次常规招聘阶梯费照升档
-  state.flags[`hireMonth:${dept}:${state.month}`] = (state.flags[`hireMonth:${dept}:${state.month}`] ?? 0) + 1
-  pushLog(state, 'action', `标准行动【人才市场】${DEPT_NAMES[dept]} +1（第 ${state.depts[dept].staff} 名，免招聘费）`, [
-    '1 AP + 2w 一口价（常规招聘费阶梯 5/4/3/2/1w）',
-    `月薪 ${(STAFF[dept].salary / 10).toFixed(2)}w（次月起计提）`,
-  ])
-  applyHireEffect(state, dept)
-  return { ok: true, msg: `${DEPT_NAMES[dept]} +1 人（免招聘费）` }
-}
-
 // ── 决议槽 / 规则卡交互 ──
 
-/** 长期方案槽数：2 基础，运营 ≥ 4 人 +1（与知产槽分工：知产 = 研发驱动，决议 = 运营驱动） */
-export function directiveSlots(state: GameState): number {
-  return state.depts.ops.staff >= 4 ? 3 : 2
-}
 
 /** 定价权（K1）：本月现货档位选择（0 基准 / 1 高 / 2 极高；每高 1 档需求惩罚） */
 export function setSpotPrice(state: GameState, choice: 0 | 1 | 2): ActionResult {
@@ -1383,7 +1267,6 @@ export function maxProducible(state: GameState, tier: Tier): number {
   const bom = BOMS[tier]
   const otherCapacity = TIERS.reduce((sum, t) => sum + (t === tier ? 0 : state.plan.quantities[t]), 0)
   let max = Math.max(0, planCapacity(state) - otherCapacity)
-  max = Math.min(max, d.productCap - state.products[tier].qty) // 安全库存（D8）：成品库存上限
   for (const [id, need] of Object.entries(bom.recipe)) {
     const per = Math.max(1, need - d.matSave)
     const reserved = TIERS.reduce((sum, t) => {
@@ -1620,7 +1503,7 @@ export function toggleOrder(state: GameState, orderId: string): ActionResult {
   const attachFlex = (ord: Order): void => {
     if (d.flexBonus > 0 && !ord.flex) {
       // 灵活交付（K2）：接单时记录订单单价，下月交付缺口按 20%/10% 付违约金
-      ord.flex = { dueMonth: state.month, unitPrice: priceAtProduct(ord.tier, ord.priceShift + d.priceShift[ord.tier] + d.orderPriceBonus) }
+      ord.flex = { dueMonth: state.month, unitPrice: priceAtProduct(ord.tier, ord.priceShift + d.priceShift[ord.tier]) }
     }
   }
   const acceptIdx = state.acceptedOrders.indexOf(orderId)

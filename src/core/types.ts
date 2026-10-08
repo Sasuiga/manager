@@ -607,10 +607,6 @@ export interface GameState {
   milestones: string[]
   /** 形状目标累计得分 */
   milestonePoints: Money
-  /** 长期决议（D 卡）：已入槽的决议（defId + 强化状态），持续到终局，终局计分 */
-  directives: { defId: string; empowered: boolean }[]
-  /** 决议槽每月最多换 1 张（填满空槽不计） */
-  directiveChangedThisMonth: boolean
   /** 定价权（K1 规则卡）：本月现货售价档位选择（0 = 基准 / 1 = 高 / 2 = 极高，每高 1 档各层需求 −1） */
   spotPriceChoice: number | null
   /** 双档采购（K3 规则卡）：本月允许选 2 档的原料 id（小批 +1 档） */
@@ -744,8 +740,6 @@ export interface ScoreBreakdown {
   event: number
   /** 形状目标（常驻里程碑）得分 */
   milestone: number
-  /** 长期决议卡得分（每张 +3，同部门 2 张 +5） */
-  directive: number
   /** 知产套装得分（每套 +15） */
   ipSet: number
   total: number

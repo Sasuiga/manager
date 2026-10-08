@@ -59,7 +59,7 @@ export function PreviewPage({ g, onSettle }: { g: Game; onSettle: () => void }) 
       {/* 市场情报（K7）：下季度气候转移概率表（动能 × 步长 的真实转移分布） */}
       {E.derive(g.s).climateOddsVisible ? (
         <div className="card">
-          <h3>下季度气候展望（K7 市场情报）</h3>
+          <h3>下季度气候展望（K7 强化市场情报）</h3>
           <div className="title-rule" />
           <div className="stack-sm">
             {(Object.entries(g.s.nextClimateOdds) as [string, number][])

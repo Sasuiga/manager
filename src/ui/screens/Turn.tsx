@@ -229,9 +229,6 @@ function OpsPage({ g }: { g: Game }) {
   const [m3, setM3] = useState<string | null>(null)
   /** J5 专利壁垒：本季可复制一张已打出的提案（免费、不占 AP/打牌数） */
   const [j5, setJ5] = useState(false)
-  /** 决议卡槽满时的替换目标（uid） */
-  const [replaceTarget, setReplaceTarget] = useState<string | null>(null)
-  const directiveSlots = E.directiveSlots(s)
   const descOf = (c: CardInstance) => {
     const def = CARD_BY_ID[c.defId]
     return c.empowered && def?.empowered ? def.empowered : def?.text ?? ''
@@ -240,133 +237,6 @@ function OpsPage({ g }: { g: Game }) {
   return (
     <>
       <LedgerSection g={g} dept="ops" />
-
-      {/* 管理动作（标准行动：非卡牌、常驻可用；TTA 式——每个动作输出形状互不重叠） */}
-      <div className="card">
-        <h3>管理动作</h3>
-        <div className="title-rule" />
-        <div className="stack">
-          <div className="card-item">
-            <span className="spine" />
-            <span className="card-body">
-              <span className="card-name">库存清理</span>
-              <span className="card-desc">选定层出售至多 5 件成品（账面均价、不进损益；已接订单仍占库存，慎清）</span>
-              <span className="card-cost">1 AP</span>
-            </span>
-            <span style={{ display: 'flex', gap: 4 }}>
-              {TIER_ORDER.map((t) => (
-                <button
-                  key={t}
-                  className="btn btn-mini"
-                  style={{ width: 'auto' }}
-                  disabled={!s.products[t].built || s.products[t].qty <= 0}
-                  onClick={() => g.act((st) => E.liquidateStock(st, t))}
-                >
-                  <span className="btn-main xs">{TIER_LABEL[t]}</span>
-                </button>
-              ))}
-            </span>
-          </div>
-          <div className="card-item">
-            <span className="spine" />
-            <span className="card-body">
-              <span className="card-name">渠道拜访</span>
-              <span className="card-desc">本月自然订单 +1（8–12 件、订单价 +1 档，可接可拒；永久版 = 销售 2/4 人或渠道类知产）</span>
-              <span className="card-cost">1 AP</span>
-            </span>
-            <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => g.act((st) => E.channelVisit(st))}>
-              <span className="btn-main xs">拜访</span>
-            </button>
-          </div>
-          <div className="card-item">
-            <span className="spine" />
-            <span className="card-body">
-              <span className="card-name">市场考察</span>
-              <span className="card-desc">预算页展示下季度气候转移概率表（K7 强化情报另加风险提示）</span>
-              <span className="card-cost">1 AP</span>
-            </span>
-            <button className="btn btn-mini" style={{ width: 'auto' }} onClick={() => g.act((st) => E.marketScout(st))}>
-              <span className="btn-main xs">考察</span>
-            </button>
-          </div>
-          <div className="card-item">
-            <span className="spine" />
-            <span className="card-body">
-              <span className="card-name">人才市场</span>
-              <span className="card-desc">任一新部门招聘 1 人免阶梯招聘费（一口价；生产人员本就免费，不适用）</span>
-              <span className="card-cost">1 AP · 2w</span>
-            </span>
-            <span style={{ display: 'flex', gap: 4 }}>
-              {(Object.keys(s.depts) as E.Dept[]).map((dept) => (
-                <button
-                  key={dept}
-                  className="btn btn-mini"
-                  style={{ width: 'auto' }}
-                  disabled={dept === 'make' || s.depts[dept].staff >= 5}
-                  title={dept === 'make' ? '生产招聘免费，直接招聘' : '人才市场：1 AP + 2w，免招聘费'}
-                  onClick={() => g.act((st) => E.talentFair(st, dept))}
-                >
-                  <span className="btn-main xs">{DEPT_SHORT[dept]}</span>
-                </button>
-              ))}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 长期方案（决议卡 D 系列：入槽后持续到终局，终局计分；每月最多换 1 张） */}
-      <div className="card">
-        <div className="hstack-between">
-          <h3>长期方案（{s.directives.length}/{directiveSlots}）</h3>
-          {s.directiveChangedThisMonth ? <span className="xs faint">本月换动已用</span> : null}
-        </div>
-        <div className="title-rule" />
-        {s.directives.length === 0 ? (
-          <p className="muted sm">暂无长期方案。打出 D 系决议卡入槽：便宜、无风险、持续到终局；终局每张 +3 分，同部门 2 张再 +5。</p>
-        ) : (
-          <div className="stack">
-            {s.directives.map((x, i) => {
-              const def = CARD_BY_ID[x.defId]
-              return (
-                <div key={`${x.defId}-${i}`} className="card-item">
-                  <span className="spine" />
-                  <span className="card-body">
-                    <span className="card-name">
-                      【{DEPT_SHORT[def.kind]}】{def.name}
-                      {x.empowered ? <span className="tag gold" style={{ marginLeft: 6 }}>强化</span> : null}
-                    </span>
-                    <span className="card-desc">{x.empowered && def.empowered ? def.empowered : def.text}</span>
-                    <span className="card-cost">持续到终局 · 终局 +3 分/张（同部门 2 张 +5）</span>
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        )}
-        {replaceTarget ? (
-          <div className="stack" style={{ marginTop: 'var(--s2)' }}>
-            <div className="section-label">选择要替换的方案（本月 1 次）</div>
-            {s.directives.map((x, i) => (
-              <button
-                key={`rep-${i}`}
-                className="btn btn-mini"
-                style={{ width: '100%', justifyContent: 'flex-start' }}
-                onClick={() => {
-                  g.act((st) => E.playCard(st, replaceTarget, { replaceIdx: i }))
-                  setReplaceTarget(null)
-                }}
-              >
-                <span className="btn-main xs">
-                  替换【{CARD_BY_ID[x.defId]?.name}】{x.empowered ? '（强化）' : ''}
-                </span>
-              </button>
-            ))}
-            <button className="btn btn-mini" style={{ width: '100%' }} onClick={() => setReplaceTarget(null)}>
-              <span className="btn-main xs">取消</span>
-            </button>
-          </div>
-        ) : null}
-      </div>
 
       {/* 提案 */}
       <div className="card">
@@ -416,15 +286,10 @@ function OpsPage({ g }: { g: Game }) {
                           setM3(c.uid)
                           return
                         }
-                        // 决议卡：槽满时需先选替换目标（每月 1 次换动）
-                        if (def.directive && s.directives.length >= E.directiveSlots(s)) {
-                          setReplaceTarget(c.uid)
-                          return
-                        }
                         g.act((st) => E.playCard(st, c.uid))
                       }}
                     >
-                      <span className="btn-main xs">{def.directive ? (s.directives.length >= E.directiveSlots(s) ? '换入方案' : '入方案槽') : '实施'}</span>
+                      <span className="btn-main xs">实施</span>
                       {!playable.ok ? <span className="btn-sub xs">{playable.msg}</span> : null}
                     </button>
                   </span>
@@ -1826,7 +1691,7 @@ function SellPage({ g }: { g: Game }) {
           <span className="xs faint">单件毛利</span>
           <span className="xs faint">状态</span>
           {gs.orders.map((o) => {
-            const orderPrice = E.priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier] + d.orderPriceBonus)
+            const orderPrice = E.priceAtProduct(o.tier, o.priceShift + d.priceShift[o.tier])
             const isAccepted = gs.acceptedOrders.includes(o.id)
             const isDeclined = gs.declinedOrders.includes(o.id)
             const canAccept = E.canAcceptOrder(gs, o.id)
