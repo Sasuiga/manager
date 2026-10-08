@@ -4,7 +4,10 @@ import {
   BASE_DEMAND,
   BASE_HAND,
   BASE_SALES_RESOURCE,
-  BUY_LOT_SLOTS,
+  BUY_RESOURCE_PER_STAFF,
+  BUY_PRICE_NEGOTIATE_CAP,
+  BUY_PRICE_NEGOTIATE_COST,
+  BUY_PRICE_NEGOTIATE_STAFF,
   BOMS,
   CARD_BY_ID,
   CLIMATE_DEMAND,
@@ -26,9 +29,13 @@ import {
   SALES_PUSH_CAP,
   SALES_PUSH_COST,
   SALES_RESOURCE_STEPS,
+  SELL_PRICE_RAISE_CAP,
+  SELL_PRICE_RAISE_STAFF,
   STAFF,
   TIERS,
   priceOf,
+  supplyPushCapOf,
+  supplyPushCostOf,
 } from '../data/game'
 import type { CardPlayEffect, Dept, GameState, LotSize, MonthMods, ResearchProjectDef, Tier } from './types'
 
@@ -84,6 +91,16 @@ export interface DerivedTotals {
   salesResource: number
   /** 品牌加成（销售 5 人 +3 / J3）：计入销售资源池。 */
   brandBonus: number
+  /** 采购资源池（点，每名采购人员每月产出） */
+  buyResource: number
+  /** 本月已用采购资源（点）：供给加点（件数×档位成本）+ 议价（档数×4） */
+  buyResourceUsed: number
+  /** 各原料生效的供给加点件数（已按 3× 基础上限截断） */
+  buySupplyPush: Record<string, number>
+  /** 各原料生效的议价档数（已按 2 档上限与 4 人门槛截断） */
+  buyPricePush: Record<string, number>
+  /** 各层生效的销售提价档数（已按 1 档上限与 4 人门槛截断；仅现货，该层需求 −1） */
+  sellPriceRaise: Record<Tier, number>
   /** 本月将到账的确定性订单数 */
   orderCount: number
   orderQty: number
@@ -334,15 +351,32 @@ export function derive(state: GameState): DerivedTotals {
   const spotShiftOf = (baseShift: number): number =>
     baseShift + (spotUnlimited && !spotUnlimitedPlus ? -1 : 0) + spotChoice
 
-  // ── 原料（采购人员不再提供供应加成：增量供给走供应商开发/气候/事件）──
+  // ── 采购资源（点，每名采购人员每月产出；供给加点与议价共用池）──
+  const buyResource = BUY_RESOURCE_PER_STAFF * staffCount.buy
+  const buySupplyPush: Record<string, number> = {}
+  const buyPricePush: Record<string, number> = {}
+  let buyResourceUsed = 0
+  for (const m of MATERIALS) {
+    const units = Math.min(state.buySupplyAlloc[m.id] ?? 0, supplyPushCapOf(m.id))
+    const tiers =
+      staffCount.buy >= BUY_PRICE_NEGOTIATE_STAFF ? Math.min(state.buyPriceAlloc[m.id] ?? 0, BUY_PRICE_NEGOTIATE_CAP) : 0
+    buySupplyPush[m.id] = units
+    buyPricePush[m.id] = tiers
+    buyResourceUsed += units * supplyPushCostOf(m.id) + tiers * BUY_PRICE_NEGOTIATE_COST
+  }
+
+  // ── 原料（采购人员不再提供供应加成：增量供给走供应商开发/气候/事件/采购资源加点）──
   const materials: DerivedTotals['materials'] = {}
   for (const m of MATERIALS) {
     const mm = mods.materials?.[m.id] ?? { supply: 0, tierShift: 0 }
     const developed = state.materialsDeveloped[m.id] ?? 0
     let supplyAdj = mm.supply + (mods.allSupply ?? 0)
+    supplyAdj += buySupplyPush[m.id] ?? 0 // 采购资源·供给加点（玩家分配，3× 基础上限，成本按档位）
+    if (state.c3PenaltyMat === m.id) supplyAdj -= 2 // C3 压价代价：选定原料供给 −2
     const supply = Math.max(0, m.baseSupply + developed + supplyAdj + ip.matSupply)
     let shift = mm.tierShift + (mods.allTierShift ?? 0)
-    if (staffCount.buy >= 4) shift -= 1 // 采购 4 人：所有原料价格降 1 档
+    // 议价（采购 ≥4 人）：4 点/档，每料上限 2 档（替代旧 4 人全局降 1 档）
+    if (staffCount.buy >= BUY_PRICE_NEGOTIATE_STAFF) shift -= buyPricePush[m.id] ?? 0
     shift += ip.buyTierShift // 大宗集采（J9）：所有原料价格降 1 档（质量认证 I8 只作用于产品售价，不作用于原料）
     shift = Math.max(-3, Math.min(3, shift))
     const cap = m.baseCapacity + ip.capacityBonus
@@ -366,10 +400,16 @@ export function derive(state: GameState): DerivedTotals {
     // 每层 1 点需求需 SALES_PUSH_COST[t] 个资源，不足整档的零头不计入（可投低端吸收）
     salesPush[t] = Math.min(Math.floor(state.salesAlloc[t] / SALES_PUSH_COST[t]), SALES_PUSH_CAP[t])
   }
+  // ── 销售提价（销售 ≥4 人）：8 点销售资源/档，每层上限 1 档；仅现货（订单不受影响），该层需求 −1 ──
+  const sellPriceRaise: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  if (staffCount.sell >= SELL_PRICE_RAISE_STAFF) {
+    for (const t of TIERS) sellPriceRaise[t] = Math.min(state.sellPriceAlloc[t] ?? 0, SELL_PRICE_RAISE_CAP)
+  }
   const demand: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const t of TIERS) {
     let v = demandBase[t] + salesPush[t]
     v -= spotPenalty // 定价权（K1）：现货提价每 1 档，该层需求 −N（强化版减半）
+    v -= sellPriceRaise[t] // 销售提价（销售 4 人）：提价每 1 档，该层需求 −1
     if (spotUnlimitedPlus && t === 'low') v += 2 // 快周转强化（K5）：低端需求 +2
     demand[t] = Math.max(0, v)
   }
@@ -387,9 +427,9 @@ export function derive(state: GameState): DerivedTotals {
   }
   const price: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const t of TIERS) price[t] = productPriceRaw(t, priceShift[t])
-  /** 现货专用档位（决议 D5 + 快周转 K5 + 定价权 K1；订单结算不受影响） */
+  /** 现货专用档位 = 基准价档 + 快周转 K5 + 定价权 K1 + 销售提价（销售 4 人）；订单结算不受影响 */
   const spotShift: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
-  for (const t of TIERS) spotShift[t] = spotShiftOf(priceShift[t])
+  for (const t of TIERS) spotShift[t] = spotShiftOf(priceShift[t]) + sellPriceRaise[t]
 
   // ── 产能：老板自产 + 工人数 × 每人产能（基础 3，2 人/4 人解锁各 +1，设备产线合计 cap + IP 设备产能） ──
   const equipmentCapBonus = equipmentCapTotal(state.equipment) + state.equipment.length * ip.equipCapacity
@@ -420,7 +460,8 @@ export function derive(state: GameState): DerivedTotals {
   const orderPriceShift = 1 + ip.orderPriceShift + (mods.orderPriceShift ?? 0)
 
   // ── 采购 ──
-  const buyLots = BUY_LOT_SLOTS[Math.min(5, staffCount.buy)] + (mods.buyLots ?? 0)
+  // 采购档数已取消：每种原料每月可自由选 1 档（99 为占位上限，永不会绑定）
+  const buyLots = 99 + (mods.buyLots ?? 0)
 
   // ── 研发：平修正（事件/卡牌/知产）+ 按项目放置人数，见 rndProjectOutcome ──
   const rndProgress = (mods.rndProgress ?? 0) + ip.rndProgress
@@ -577,6 +618,11 @@ export function derive(state: GameState): DerivedTotals {
     noBorrow,
     salesResource,
     brandBonus,
+    buyResource,
+    buyResourceUsed,
+    buySupplyPush,
+    buyPricePush,
+    sellPriceRaise,
     orderCount: Math.max(0, orderCount),
     orderQty,
     orderPriceShift,

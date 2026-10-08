@@ -133,6 +133,7 @@ function SettleFlow({ g, onDone }: { g: Game; onDone: () => void }) {
           />
           <Row k="产能" v={`${E.planCapacity(s)}`} />
           <Row k="销售资源" v={`${E.allocUsed(s)}/${hud.salesResource}`} />
+          <Row k="采购资源" v={`${hud.buyResourceUsed}/${hud.buyResource}`} />
           <Row k="现金" v={wan(s.cash)} cls={s.cash < 0 ? 'red' : ''} />
           <Row k="AP" v={`${s.ap}/${hud.apMax}`} />
         </div>

@@ -84,6 +84,10 @@ export {
   toggleOvertime,
   setAlloc,
   allocUsed,
+  setBuySupplyAlloc,
+  setBuyPriceAlloc,
+  setSellPriceAlloc,
+  setC3PenaltyMat,
   committableProductQty,
   availableForOrder,
   canAcceptOrder,
@@ -264,8 +268,12 @@ export function enterDraw(state: GameState) {
   state.handMax = d.handMax
   state.drawN = d.drawN
   state.drawM = d.drawM
-  // 每月销售资源重置
+  // 每月销售资源 / 采购资源 / 提价分配重置
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
+  state.buySupplyAlloc = {}
+  state.buyPriceAlloc = {}
+  state.sellPriceAlloc = { low: 0, mid: 0, high: 0, special: 0 }
+  state.c3PenaltyMat = null
   state.declinedOrders = []
   state.acceptedOrders = []
   // 本月订单（渠道带来）：场景预设的订单（applyCoreScenario）不重复生成
@@ -364,6 +372,8 @@ export interface HudView {
   credit: number
   creditUsed: Money
   salesResource: number
+  buyResource: number
+  buyResourceUsed: number
   staffTotal: number
 }
 
@@ -381,6 +391,8 @@ export function hudView(state: GameState): HudView {
     credit: d.creditLine - state.debt,
     creditUsed: state.debt,
     salesResource: d.salesResource,
+    buyResource: d.buyResource,
+    buyResourceUsed: d.buyResourceUsed,
     staffTotal: Object.values(state.depts).reduce((a, x) => a + x.staff, 0),
   }
 }

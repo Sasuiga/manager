@@ -619,6 +619,14 @@ export interface GameState {
 
   salesResource: number
   salesAlloc: Record<Tier, number>
+  /** 本月采购资源分配（月初清零）：原料 id -> 供给加点件数（成本 = 件数 × 档位成本） */
+  buySupplyAlloc: Record<string, number>
+  /** 本月议价（月初清零，采购 ≥4 人生效）：原料 id -> 档数（4 点/档，上限 2 档） */
+  buyPriceAlloc: Record<string, number>
+  /** 本月销售提价（月初清零，销售 ≥4 人生效）：层 -> 档数（8 销售资源/档，上限 1 档；仅现货、该层需求 −1） */
+  sellPriceAlloc: Record<Tier, number>
+  /** C3 压价代价：本月供给 −2 的原料（采购页选择；null = 尚未选定，不扣） */
+  c3PenaltyMat: string | null
   orders: Order[]
   /** 本月已放弃的自然订单 id 列表（当月失效，下月重置）。 */
   declinedOrders: string[]

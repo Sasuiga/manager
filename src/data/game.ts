@@ -220,11 +220,11 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '采购人员',
     hireFees: [50, 40, 30, 20, 10],
     salary: 10,
-    base: ['每月可选采购档数 +1'],
+    base: ['每月采购资源 +2（供给加点 / 议价共用点数）'],
     unlocks: [
       { at: 2, text: '贸易商每月随机供应品种 +1' },
       { at: 3, text: '解锁长期供货协议' },
-      { at: 4, text: '所有原料价格降 1 档，并强化卡牌效果' },
+      { at: 4, text: '解锁议价：4 点 = 1 种原料价格降 1 档（每料最多 2 档），并强化卡牌效果' },
       { at: 5, text: '可同时签 2 份长期协议，且锁定期可选 6 个月', achievement: '供应链联盟' },
     ],
   },
@@ -250,7 +250,7 @@ export const STAFF: Record<Dept, StaffDef> = {
     unlocks: [
       { at: 2, text: '每月获得 1 个确定性订单' },
       { at: 3, text: '每人销售资源 +4 → +6' },
-      { at: 4, text: '每月获得 2 个确定性订单' },
+      { at: 4, text: '每月获得 2 个确定性订单；解锁提价：8 点销售资源 = 某层价格升 1 档（仅现货、该层需求 −1）' },
       { at: 5, text: '每人 +6 → +8，并实现成本转移', achievement: '品牌' },
     ],
   },
@@ -279,8 +279,30 @@ export const BASE_PLAYS = 2
 export const BASE_AP = 3
 export const START_CASH = 400 // 40w
 
-/** 采购档位：可选档数（§6.1.2）。 */
-export const BUY_LOT_SLOTS = [2, 3, 4, 5, 6, 7]
+/**
+ * 采购档位已取消：每种原料每月可自由选 1 档（小/中/大批），
+ * 数量受当月市场供给（气候/事件/知产/采购资源加点）与库存上限约束。
+ */
+/** 采购资源（点）：每名采购人员每月产出的点数，供给加点与议价共用同一池。 */
+export const BUY_RESOURCE_PER_STAFF = 2
+/** 议价（采购 ≥4 人）：指定原料每降 1 档所需点数。 */
+export const BUY_PRICE_NEGOTIATE_STAFF = 4
+export const BUY_PRICE_NEGOTIATE_COST = 4
+/** 议价：每原料每月最多降 2 档。 */
+export const BUY_PRICE_NEGOTIATE_CAP = 2
+/** 供给加点：每 +1 供给的成本（点），按原料档位：包材 1 / 树脂 2 / 合金 3 / 复合 3 / 芯片 4 / 微机电 5。 */
+export function supplyPushCostOf(matId: string): number {
+  return MATERIAL_BY_ID[matId]?.grade ?? 1
+}
+/** 供给加点：每原料每月上限（3× 基础供给；复合/微机电基础供给为 0，上限 0，其供给走研发供应商开发）。 */
+export function supplyPushCapOf(matId: string): number {
+  return Math.max(0, 3 * (MATERIAL_BY_ID[matId]?.baseSupply ?? 0))
+}
+/** 销售提价（销售 ≥4 人）：每层现货价每升 1 档所需销售资源（订单不受影响，该层需求 −1）。 */
+export const SELL_PRICE_RAISE_STAFF = 4
+export const SELL_PRICE_RAISE_COST = 8
+/** 销售提价：每层每月最多升 1 档。 */
+export const SELL_PRICE_RAISE_CAP = 1
 
 /** 老板自产产能（玩家亲自下场的固定贡献，无工人也生效）。 */
 export const OWNER_CAPACITY = 5
@@ -837,9 +859,10 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'C3', name: '压价', kind: 'buy', cost: 20,
-    text: '支付 2w，本月采购价格降 2 档，但本月可选采购档数 -1。',
-    empowered: '支付 2w，本月采购价格降 3 档，且无档数惩罚。',
-    base: () => ({ buyTierShift: -2, buyLots: -1 }),
+    text: '支付 2w，本月采购价格降 2 档；选定 1 种原料，其本月供给 −2（采购页选惩罚对象）。',
+    cond: '选定 1 种惩罚原料（供给 −2）',
+    empowered: '支付 2w，本月采购价格降 3 档，且无供给惩罚。',
+    base: () => ({ buyTierShift: -2, flags: ['c3Penalty'] }),
     strong: () => ({ buyTierShift: -3 }),
   },
   {

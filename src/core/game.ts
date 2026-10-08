@@ -94,6 +94,10 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
 
     salesResource: BASE_SALES_RESOURCE,
     salesAlloc: { low: 0, mid: 0, high: 0, special: 0 },
+    buySupplyAlloc: {},
+    buyPriceAlloc: {},
+    sellPriceAlloc: { low: 0, mid: 0, high: 0, special: 0 },
+    c3PenaltyMat: null,
     orders: [],
     declinedOrders: [],
     acceptedOrders: [],

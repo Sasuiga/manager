@@ -1,6 +1,6 @@
 import { useState, Fragment } from 'react'
 import * as E from '../../core/engine'
-import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, EQUIP_CAP_PER_WORKER, IP_BY_ID, DEPT_SHORT, DEPT_NAMES, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS, LOAN_TERM_MONTHS, overtimeCostOf, overtimeGainOf } from '../../data/game'
+import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, EQUIP_CAP_PER_WORKER, IP_BY_ID, DEPT_SHORT, DEPT_NAMES, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIALS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS, LOAN_TERM_MONTHS, BUY_PRICE_NEGOTIATE_CAP, BUY_PRICE_NEGOTIATE_COST, BUY_PRICE_NEGOTIATE_STAFF, SELL_PRICE_RAISE_COST, SELL_PRICE_RAISE_STAFF, supplyPushCostOf, supplyPushCapOf, overtimeCostOf, overtimeGainOf } from '../../data/game'
 import type { CardCtx } from '../../data/game'
 import type { CardInstance, Dept } from '../../core/types'
 import type { Tier } from '../../core/types'
@@ -643,7 +643,7 @@ function BuyPage({ g }: { g: Game }) {
                     <button
                       className="btn btn-mini"
                       style={{ padding: '2px 8px', fontSize: '0.8em' }}
-                      disabled={m.supply <= 0 || gs.lotsUsed >= d.buyLots}
+                      disabled={m.supply <= 0}
                       onClick={() => setPickLot(m.id)}
                     >
                       采购
@@ -656,13 +656,120 @@ function BuyPage({ g }: { g: Game }) {
         </table>
       </div>
 
+      {/* 采购资源（点）：供给加点（量）+ 议价（价，采购 ≥4 人解锁），2 点/采购人员 */}
+      <div className="card">
+        <h3>采购资源</h3>
+        <div className="title-rule" />
+        <div className="stack-sm">
+          {MATERIALS.map((mdef) => {
+            const units = gs.buySupplyAlloc[mdef.id] ?? 0
+            const tiers = gs.buyPriceAlloc[mdef.id] ?? 0
+            const sCost = supplyPushCostOf(mdef.id)
+            const sCap = supplyPushCapOf(mdef.id)
+            const canPrice = gs.depts.buy.staff >= BUY_PRICE_NEGOTIATE_STAFF
+            const free = Math.max(0, d.buyResource - d.buyResourceUsed)
+            return (
+              <div
+                key={mdef.id}
+                style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}
+              >
+                <span className="sm">
+                  <b>{mdef.name}</b>
+                  <span className="faint xs"> · {sCost} 点/件</span>
+                </span>
+                <span className="hstack" style={{ gap: 'var(--s2)', justifyContent: 'flex-end' }}>
+                  <span className="xs faint">供给</span>
+                  <button
+                    className="btn btn-nav"
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: units <= 0 ? 0.4 : 1 }}
+                    disabled={units <= 0}
+                    onClick={() => g.mutate((st) => E.setBuySupplyAlloc(st, mdef.id, (st.buySupplyAlloc[mdef.id] ?? 0) - 1))}
+                  >
+                    <span>−</span>
+                  </button>
+                  <span className="mono xs" style={{ minWidth: 24, textAlign: 'center' }}>
+                    +{units}
+                  </span>
+                  <button
+                    className="btn btn-nav"
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: free < sCost || units >= sCap ? 0.4 : 1 }}
+                    disabled={free < sCost || units >= sCap}
+                    onClick={() => g.mutate((st) => E.setBuySupplyAlloc(st, mdef.id, (st.buySupplyAlloc[mdef.id] ?? 0) + 1))}
+                  >
+                    <span>+</span>
+                  </button>
+                </span>
+                <span className="hstack" style={{ gap: 'var(--s2)', justifyContent: 'flex-end' }}>
+                  <span className="xs faint">价格</span>
+                  <button
+                    className="btn btn-nav"
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: !canPrice || tiers <= 0 ? 0.4 : 1 }}
+                    disabled={!canPrice || tiers <= 0}
+                    onClick={() => g.mutate((st) => E.setBuyPriceAlloc(st, mdef.id, (st.buyPriceAlloc[mdef.id] ?? 0) - 1))}
+                  >
+                    <span>−</span>
+                  </button>
+                  <span className="mono xs" style={{ minWidth: 24, textAlign: 'center' }}>
+                    −{tiers}档
+                  </span>
+                  <button
+                    className="btn btn-nav"
+                    style={{
+                      width: 'auto',
+                      padding: '2px var(--s3)',
+                      opacity: !canPrice || free < BUY_PRICE_NEGOTIATE_COST || tiers >= BUY_PRICE_NEGOTIATE_CAP ? 0.4 : 1,
+                    }}
+                    disabled={!canPrice || free < BUY_PRICE_NEGOTIATE_COST || tiers >= BUY_PRICE_NEGOTIATE_CAP}
+                    onClick={() => g.mutate((st) => E.setBuyPriceAlloc(st, mdef.id, (st.buyPriceAlloc[mdef.id] ?? 0) + 1))}
+                  >
+                    <span>+</span>
+                  </button>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="hint">
+          本月采购资源 {d.buyResource} 点 · 已用 {d.buyResourceUsed} 点（每名采购人员 2 点；供给成本 = 件数 × 档位成本，上限 3× 基础供给
+          {gs.depts.buy.staff < BUY_PRICE_NEGOTIATE_STAFF
+            ? `；议价需采购 ${BUY_PRICE_NEGOTIATE_STAFF} 人解锁（${BUY_PRICE_NEGOTIATE_COST} 点/档，每料最多 ${BUY_PRICE_NEGOTIATE_CAP} 档）`
+            : `；议价 ${BUY_PRICE_NEGOTIATE_COST} 点/档，每料最多 ${BUY_PRICE_NEGOTIATE_CAP} 档`}
+          ）
+        </div>
+      </div>
+
+      {/* C3 压价代价：选定 1 种原料，其本月供给 −2 */}
+      {d.flags.includes('c3Penalty') ? (
+        <div className="card">
+          <h3>压价代价（C3）</h3>
+          <div className="title-rule" />
+          <p className="hint sm">
+            【压价】基础版代价：选定 1 种原料，其本月供给 −2。
+            {gs.c3PenaltyMat ? `当前选定：${mats.find((x) => x.id === gs.c3PenaltyMat)?.name ?? gs.c3PenaltyMat}` : '尚未选定（未选定则不扣）'}
+          </p>
+          <div className="stack-sm">
+            {mats.map((m) => (
+              <button
+                key={m.id}
+                className={`btn btn-mini ${gs.c3PenaltyMat === m.id ? '' : 'btn-nav'}`}
+                style={{ width: '100%' }}
+                onClick={() => g.mutate((st) => E.setC3PenaltyMat(st, st.c3PenaltyMat === m.id ? null : m.id))}
+              >
+                <span className="btn-main">{m.name}</span>
+                <span className="btn-sub xs">{gs.c3PenaltyMat === m.id ? '受罚（点取消）' : '供给 −2'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="card">
         <h3>其他采购手段</h3>
         <div className="title-rule" />
         <div className="stack">
           <button className="btn btn-mini" onClick={() => setTrader(true)}>
             <span className="btn-main">查看贸易商</span>
-            <span className="btn-sub">随机品种 · 小批 · 不占档数</span>
+            <span className="btn-sub">随机品种 · 小批 · 额外批次</span>
           </button>
           <button
             className="btn btn-mini"
@@ -677,19 +784,19 @@ function BuyPage({ g }: { g: Game }) {
           {urgentOn ? (
             <button className="btn btn-mini" onClick={() => setUrgent(true)}>
               <span className="btn-main">紧急采购</span>
-              <span className="btn-sub">卡牌【紧急采购】· 每原料 1 次 · 不占档数</span>
+              <span className="btn-sub">卡牌【紧急采购】· 每原料 1 次 · 额外批次</span>
             </button>
           ) : null}
           {clearanceOn ? (
             <button className="btn btn-mini" onClick={() => setClearance(true)}>
               <span className="btn-main">清仓采购</span>
-              <span className="btn-sub">卡牌【清仓】· 每原料 1 次 · 不占档数</span>
+              <span className="btn-sub">卡牌【清仓】· 每原料 1 次 · 额外批次</span>
             </button>
           ) : null}
           {swapOn ? (
             <button className="btn btn-mini" onClick={() => setSwap(true)}>
               <span className="btn-main">原料替换</span>
-              <span className="btn-sub">卡牌【原料替换】· 每月 1 次 · 不占档数</span>
+              <span className="btn-sub">卡牌【原料替换】· 每月 1 次 · 不占原料档</span>
             </button>
           ) : null}
         </div>
@@ -733,7 +840,7 @@ function BuyPage({ g }: { g: Game }) {
               const disabled = gs.mode === 'core'
                 ? !E.canSetPurchasePlan(gs, pickLot, lot).ok
                 : mats.find((x) => x.id === pickLot)?.chosenLot !== null ||
-                  qty <= 0 || gs.lotsUsed >= d.buyLots || total > gs.cash
+                  qty <= 0 || total > gs.cash
               return (
                 <button
                   key={lot}
@@ -772,7 +879,7 @@ function BuyPage({ g }: { g: Game }) {
                   </button>
                 ) : (
                   <button className="btn btn-mini" onClick={() => g.act((st) => E.setSecondLot(st, pickLot))}>
-                    <span className="btn-main xs">加第二档：{E.lotLabel(d.doubleLotSize)}（+1 档价，不占档数）</span>
+                    <span className="btn-main xs">加第二档：{E.lotLabel(d.doubleLotSize)}（+1 档价，不占原料档）</span>
                     {gs.secondLotMat ? <span className="btn-sub xs">替换 {mats.find((x) => x.id === gs.secondLotMat)?.name} 的第二档</span> : null}
                   </button>
                 )}
@@ -956,7 +1063,7 @@ function TraderSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const offers = E.traderOffer(gs)
   const quota = E.traderQuota(gs)
   return (
-    <Sheet title="贸易商" sub="小批 · 价格更高 · 不占本月档数" onClose={onClose}>
+    <Sheet title="贸易商" sub="小批 · 价格更高 · 额外批次" onClose={onClose}>
       {quota > 1 ? (
         <p className="muted sm" style={{ marginBottom: 'var(--s2)' }}>
           卡牌【贸易商】生效中：每品种额外 {quota - 1} 次购买机会
@@ -1000,7 +1107,7 @@ function UrgentClearanceSheet({ g, mode, onClose }: { g: Game; mode: 'urgent' | 
   const label = mode === 'urgent' ? '紧急采购' : '清仓采购'
   const cardName = mode === 'urgent' ? '紧急采购' : '清仓'
   return (
-    <Sheet title={label} sub={`卡牌【${cardName}】· ${mid ? '中批' : '小批'} · 不占档数`} onClose={onClose}>
+    <Sheet title={label} sub={`卡牌【${cardName}】· ${mid ? '中批' : '小批'} · 额外批次`} onClose={onClose}>
       <div className="stack">
         {mats.filter((m) => m.supply > 0).map((m) => {
           const used = gs.extraBuys.filter((e) => e.kind === mode && e.materialId === m.id).length
@@ -1053,7 +1160,7 @@ function SwapSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const buyTotal = buyUnit * buyQty
   const valid = !used && sell && buy && sell.id !== buy.id && sellQty > 0 && buyQty > 0 && gs.cash + sellTotal >= buyTotal
   return (
-    <Sheet title="原料替换" sub={`卡牌【原料替换】· 每月 1 次 · 不占档数`} onClose={onClose}>
+    <Sheet title="原料替换" sub={`卡牌【原料替换】· 每月 1 次 · 不占原料档`} onClose={onClose}>
       {used ? <p className="muted sm">本月已使用。</p> : null}
       <div className="section-label">出售（按账面单价）</div>
       <div className="stack-sm">
@@ -1598,6 +1705,8 @@ function SellPage({ g }: { g: Game }) {
   /** 预估单件毛利（统一口径）= 单价 − 生产单位成本（计划后库存材料成本 + 固定成本分摊）；与预算页同口径、同数值（不取整），市价与订单价按单件同口径对比。 */
   const estimatedGrossProfit = (tier: Tier, price: number) => price - unitCosts.tiers[tier].total
   const used = E.allocUsed(gs)
+  /** 提价加点消耗的销售资源点（8 点/档，销售 ≥4 人解锁） */
+  const priceRaiseUsed = TIER_ORDER.reduce((a, t) => a + (gs.sellPriceAlloc[t] ?? 0) * SELL_PRICE_RAISE_COST, 0)
   /** 各层强制订单量（事件/卡牌产生，必交）。 */
   const forcedQtyBy: Record<string, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const o of gs.orders) {
@@ -1724,7 +1833,7 @@ function SellPage({ g }: { g: Game }) {
           {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
             const cost = d.salesPushCost[t]
             const cap = d.salesPushCap[t]
-            const remaining = d.salesResource - used
+            const remaining = d.salesResource - used - priceRaiseUsed
             const alloc = gs.salesAlloc[t]
             const units = Math.floor(alloc / cost)
             const plusDisabled = remaining < cost || units >= cap
@@ -1760,8 +1869,32 @@ function SellPage({ g }: { g: Game }) {
             )
           })}
         </div>
+        {gs.depts.sell.staff >= SELL_PRICE_RAISE_STAFF ? (
+          <div style={{ marginTop: 'var(--s2)' }}>
+            <div className="section-label">提价（{SELL_PRICE_RAISE_COST} 点/档 · 仅现货 · 该层需求 −1）</div>
+            <div className="stack-sm" style={{ marginTop: 'var(--s1)' }}>
+              {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
+                const on = (gs.sellPriceAlloc[t] ?? 0) > 0
+                const free = Math.max(0, d.salesResource - used - priceRaiseUsed)
+                return (
+                  <div key={`raise-${t}`} className="hstack-between">
+                    <span className="sm">{TIER_LABEL[t]}</span>
+                    <button
+                      className={`btn btn-mini ${on ? '' : 'btn-nav'}`}
+                      style={{ width: 'auto', padding: '2px var(--s2)', opacity: !on && free < SELL_PRICE_RAISE_COST ? 0.4 : 1 }}
+                      disabled={!on && free < SELL_PRICE_RAISE_COST}
+                      onClick={() => g.mutate((st) => E.setSellPriceAlloc(st, t, on ? 0 : 1))}
+                    >
+                      {on ? '提价 +1 档生效中（点取消）' : '提价 +1 档（现货）'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
         <div className="hint">
-          剩余可分配 {Math.max(0, d.salesResource - used)} 点
+          剩余可分配 {Math.max(0, d.salesResource - used - priceRaiseUsed)} 点
         </div>
       </div>
 

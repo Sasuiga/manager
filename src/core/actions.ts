@@ -1,5 +1,8 @@
 import {
   BOMS,
+  BUY_PRICE_NEGOTIATE_CAP,
+  BUY_PRICE_NEGOTIATE_COST,
+  BUY_PRICE_NEGOTIATE_STAFF,
   CARD_BY_ID,
   MATERIAL_BY_ID,
   CARDS,
@@ -14,7 +17,11 @@ import {
   overtimeGainOf,
   RND_PROJECTS,
   SALES_ORDER_COUNT,
+  SELL_PRICE_RAISE_COST,
+  SELL_PRICE_RAISE_STAFF,
   STAFF,
+  supplyPushCapOf,
+  supplyPushCostOf,
   TIERS,
 } from '../data/game'
 import { cardEffectToMods, derive, makerPerStaff, mergeMods, unitCost } from './derive'
@@ -440,6 +447,11 @@ function applyCardSpecial(state: GameState, defId: string, flags: string[], opts
         state.hand.push({ uid: `${def.id}#m4${state.hand.length}`, defId: def.id, empowered: true })
         pushLog(state, 'action', `获得强化卡【${def.name}】`)
       }
+      break
+    }
+    case 'C3': {
+      // 压价代价（基础版）：重置惩罚对象，采购页选定 1 种原料本月供给 −2（强化版无代价）
+      state.c3PenaltyMat = null
       break
     }
     case 'C5':
@@ -1446,6 +1458,66 @@ export function setAlloc(state: GameState, tier: Tier, value: number) {
 
 export function allocUsed(state: GameState): number {
   return TIERS.reduce((a, t) => a + state.salesAlloc[t], 0)
+}
+
+// ════════════════════════════════════════════════════════════
+// 采购资源（点）：供给加点 / 议价共用池（月初清零）
+// ════════════════════════════════════════════════════════════
+
+/** 设置某原料本月供给加点件数（0 清除；成本 = 件数 × 档位成本，与议价共用池）。 */
+export function setBuySupplyAlloc(state: GameState, matId: string, units: number): void {
+  const d = derive(state)
+  const cost = supplyPushCostOf(matId)
+  const cap = supplyPushCapOf(matId)
+  if (cap <= 0) {
+    state.buySupplyAlloc[matId] = 0
+    return
+  }
+  let usedOthers = 0
+  for (const m of MATERIALS) {
+    if (m.id === matId) continue
+    usedOthers += d.buySupplyPush[m.id] * supplyPushCostOf(m.id) + d.buyPricePush[m.id] * BUY_PRICE_NEGOTIATE_COST
+  }
+  const remaining = Math.max(0, d.buyResource - usedOthers)
+  const maxUnits = Math.min(cap, Math.floor(remaining / cost))
+  state.buySupplyAlloc[matId] = Math.max(0, Math.min(maxUnits, units))
+}
+
+/** 设置某原料本月议价档数（0 清除；需采购 ≥4；4 点/档，每料上限 2 档）。 */
+export function setBuyPriceAlloc(state: GameState, matId: string, tiers: number): void {
+  const d = derive(state)
+  if (state.depts.buy.staff < BUY_PRICE_NEGOTIATE_STAFF) {
+    if (state.buyPriceAlloc[matId]) state.buyPriceAlloc[matId] = 0
+    return
+  }
+  let usedOthers = 0
+  for (const m of MATERIALS) {
+    if (m.id === matId) continue
+    usedOthers += d.buySupplyPush[m.id] * supplyPushCostOf(m.id) + d.buyPricePush[m.id] * BUY_PRICE_NEGOTIATE_COST
+  }
+  const current = d.buyPricePush[matId] * BUY_PRICE_NEGOTIATE_COST
+  const remaining = Math.max(0, d.buyResource - usedOthers - current)
+  const maxTiers = Math.min(BUY_PRICE_NEGOTIATE_CAP, Math.floor(remaining / BUY_PRICE_NEGOTIATE_COST))
+  state.buyPriceAlloc[matId] = Math.max(0, Math.min(maxTiers, tiers))
+}
+
+/** 设置某层本月提价档数（0/1；需销售 ≥4；消耗 8 销售资源，与需求加点共用池；仅现货、该层需求 −1）。 */
+export function setSellPriceAlloc(state: GameState, tier: Tier, on: 0 | 1): void {
+  const d = derive(state)
+  if (state.depts.sell.staff < SELL_PRICE_RAISE_STAFF) {
+    if (state.sellPriceAlloc[tier]) state.sellPriceAlloc[tier] = 0
+    return
+  }
+  let priceUsed = 0
+  for (const t of TIERS) if (t !== tier) priceUsed += (state.sellPriceAlloc[t] ?? 0) * SELL_PRICE_RAISE_COST
+  const current = (state.sellPriceAlloc[tier] ?? 0) * SELL_PRICE_RAISE_COST
+  const remaining = Math.max(0, d.salesResource - allocUsed(state) - priceUsed - current)
+  state.sellPriceAlloc[tier] = on === 1 && remaining >= SELL_PRICE_RAISE_COST ? 1 : 0
+}
+
+/** C3 压价代价：选定本月供给 −2 的原料（null = 尚未选定，不扣）。 */
+export function setC3PenaltyMat(state: GameState, matId: string | null): void {
+  state.c3PenaltyMat = matId
 }
 
 /** 当前可用于履约的产品量：核心模式包含本月排产，完整模式沿用已入库成品。 */

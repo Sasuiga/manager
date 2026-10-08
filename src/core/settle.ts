@@ -122,7 +122,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
         debitAmt: added * unit,
         creditAmt: added * unit,
         detail: [
-          `${added} 件 × ${(unit / 10).toFixed(2)}w（协议锁价，不占本月采购档数）`,
+          `${added} 件 × ${(unit / 10).toFixed(2)}w（协议锁价，不占原料档）`,
           '现金实付全额转入库存（移动加权平均计价）',
         ],
       })
