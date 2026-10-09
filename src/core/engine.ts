@@ -269,7 +269,7 @@ export function enterDraw(state: GameState) {
   state.focusMat = null
   state.declinedOrders = []
   state.acceptedOrders = []
-  // 本月订单（渠道带来）：场景预设的订单（applyCoreScenario）不重复生成
+  // 本月订单（渠道带来）：已接订单不重复生成
   if (state.orders.length === 0) generateMonthlyOrders(state)
   state.phase = 'draw'
   // 开局（第 1 月）起始手牌已由 newGame 预置，跳过再抽一次

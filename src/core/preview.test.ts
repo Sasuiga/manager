@@ -20,7 +20,7 @@ function bridge(state: GameState, run: ReturnType<typeof settle>): number {
 describe('结算前现金（preSettleCash）', () => {
   it('六个核心场景：桥接精确成立，协议模拟与结算一致', () => {
     for (const def of E.CORE_SCENARIOS) {
-      const s = E.newGame(def.seed, 'core') as GameState
+      const s = E.newGame(def.seed) as GameState
       E.startGame(s)
       E.applyCoreScenario(s, def.id)
       s.depts.make.staff = Math.max(s.depts.make.staff, 4)
@@ -52,7 +52,7 @@ describe('结算前现金（preSettleCash）', () => {
 
   it('有回款且有税：税务区间随回款区间浮动，且与真实结算一致', () => {
     const def = E.CORE_SCENARIOS.find((s) => s.id === 'expensive_high_demand')!
-    const s = E.newGame(def.seed, 'core') as GameState
+    const s = E.newGame(def.seed) as GameState
     E.startGame(s)
     E.applyCoreScenario(s, def.id)
     s.depts.make.staff = Math.max(s.depts.make.staff, 4)
@@ -78,8 +78,8 @@ describe('结算前现金（preSettleCash）', () => {
     expect(p.tax.max).toBe(high.ledger.parts['所得税'] ?? 0)
   })
 
-  it('完整模式：行动阶段实付/实收全分解，期初真值下桥接精确成立', () => {
-    const s = E.newGame(7, 'full') as GameState
+  it('行动阶段实付/实收全分解，期初真值下桥接精确成立', () => {
+    const s = E.newGame(7) as GameState
     E.startGame(s)
     s.depts.buy.staff = 3
     s.depts.buy.hired = 3
@@ -88,7 +88,7 @@ describe('结算前现金（preSettleCash）', () => {
     E.buyEquipment(s, 'eq-line') // 设备 50（资本化，行动阶段实付）
     E.signAgreement(s, 'pkg', 3) // 协议手续费 10（杂项，行动阶段实付）
     E.repay(s, 60) // 还款 60（资本性，行动阶段实付）
-    E.buyMaterial(s, 'pkg', 'mid') // 完整模式采购实付（行动阶段入账）
+    E.buyMaterial(s, 'pkg', 'mid') // 采购形成计划（结算时统一支付，不进行动阶段实付）
 
     const p = E.preSettleCash(s)
     // 行动阶段恒等式：期初现金 + 事件收益 + 事件现金（不计损益） − 各项已付 ≡ 当前现金（招聘费未蒸发在「期初」里）
@@ -97,7 +97,8 @@ describe('结算前现金（preSettleCash）', () => {
     expect(p.paidCapex).toBe(50)
     expect(p.paidRepay).toBe(60)
     expect(p.paidMisc).toBe(10)
-    expect(p.paidPurchase).toBeGreaterThan(0)
+    expect(p.paidPurchase).toBe(0) // 普通采购已计划化
+    expect(p.purchasePlan).toBeGreaterThan(0)
 
     // 期间桥接：本期期末资金（回款前）+ 回款 − 税 = 结算现金期末（= 下期期初）
     const clone = () => JSON.parse(JSON.stringify(s)) as GameState
@@ -106,7 +107,7 @@ describe('结算前现金（preSettleCash）', () => {
   })
 
   it('下期挂账负债：应付职工薪酬 = 本月工资计提，利息按当前借款估算，挂账收付转下月', () => {
-    const s = E.newGame(7, 'full') as GameState
+    const s = E.newGame(7) as GameState
     E.startGame(s)
     s.depts.make.staff = 4
     s.depts.make.hired = 4
@@ -130,7 +131,7 @@ describe('结算前现金（preSettleCash）', () => {
   })
 
   it('X10 政府纾困：事件现金流入进桥接（不计损益，恒等式不破）', () => {
-    const s = E.newGame(13, 'core') as GameState
+    const s = E.newGame(13) as GameState
     E.startGame(s)
     const cashBefore = s.cash
     s.currentEvent = EVENTS.find((e) => e.id === 'X10')!

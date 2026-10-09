@@ -625,48 +625,13 @@ function priceAtShift(materialId: string, shift: number): Money {
   return arr[Math.max(0, Math.min(4, 2 + shift))]
 }
 
+/** 采购：只形成计划（选档、预留现金），结算时统一付款入库（完整模式即时采购路径已退场）。 */
 export function buyMaterial(state: GameState, materialId: string, lot: LotSize): ActionResult {
-  if (state.mode === 'core') return setPurchasePlan(state, materialId, lot)
-  const d = derive(state)
-  const mat = state.materials[materialId]
-  if (!mat) return fail('未知原料')
-  if (mat.chosenLot) return fail('每类原料每月最多选一档')
-  if (state.lotsUsed >= d.buyLots) return fail('本月可选档数已用完')
-  const qty = lotQty(state, materialId, lot)
-  if (qty <= 0) return fail('该原料无供给')
-  const unit = lotPrice(state, materialId, lot)
-  const total = unit * qty
-  if (state.cash < total) return fail('现金不足')
-
-  state.lotsUsed += 1
-  mat.chosenLot = lot
-  const added = addMaterial(state, materialId, qty, unit, state.monthFlags.includes('noCap'))
-  if (added > 0) {
-    const name = nameOf(materialId)
-    // 采购入库记账：借 库存 / 贷 现金。金额 = 实付现金（受仓库上限截断后的入库量 × 单价），
-    // 与库存账面价值增加额、现金扣减额三者严格相等，供生产领料/销售成本逐层勾稽。
-    state.monthLedger.push({
-      dept: 'buy',
-      item: `采购 ${name} ${lotLabel(lot)} ×${added}`,
-      debit: `库存 ${name}`,
-      credit: '现金',
-      debitAmt: added * unit,
-      creditAmt: added * unit,
-      detail: [
-        `${added} 件 × ${(unit / 10).toFixed(2)}w = ${((added * unit) / 10).toFixed(2)}w`,
-        '现金实付全额转入库存（移动加权平均计价），与生产领料出库勾稽',
-      ],
-    })
-  }
-  pushLog(state, 'action', `采购 ${nameOf(materialId)} · ${lotLabel(lot)}`, [
-    `${added} 单位 × ${(unit / 10).toFixed(2)}w = ${((added * unit) / 10).toFixed(2)}w`,
-  ])
-  return { ok: true, msg: `入库 ${added} 单位` }
+  return setPurchasePlan(state, materialId, lot)
 }
 
 /** 核心模式普通采购只形成计划，不立即扣款或入库。 */
 export function setPurchasePlan(state: GameState, materialId: string, lot: LotSize | null): ActionResult {
-  if (state.mode !== 'core') return fail('仅核心模式可调整采购计划')
   const mat = state.materials[materialId]
   if (!mat) return fail('未知原料')
   const previous = mat.chosenLot
@@ -702,7 +667,6 @@ export function setPurchasePlan(state: GameState, materialId: string, lot: LotSi
 }
 
 export function canSetPurchasePlan(state: GameState, materialId: string, lot: LotSize | null): ActionResult {
-  if (state.mode !== 'core') return OK
   const copy = JSON.parse(JSON.stringify(state)) as GameState
   return setPurchasePlan(copy, materialId, lot)
 }
@@ -717,7 +681,7 @@ export function plannedLotQty(state: GameState, materialId: string, lot: LotSize
 
 export function plannedPurchaseLine(state: GameState, materialId: string) {
   const lot = state.materials[materialId]?.chosenLot ?? null
-  if (!lot || state.mode !== 'core') return { lot: null, qty: 0, unit: 0, cost: 0 }
+  if (!lot) return { lot: null, qty: 0, unit: 0, cost: 0 }
   const qty = plannedLotQty(state, materialId, lot)
   const unit = lotPrice(state, materialId, lot)
   let totalQty = qty
@@ -735,7 +699,6 @@ export function plannedPurchaseLine(state: GameState, materialId: string) {
 }
 
 export function plannedPurchaseCost(state: GameState): Money {
-  if (state.mode !== 'core') return 0
   return Object.keys(state.materials).reduce((sum, id) => sum + plannedPurchaseLine(state, id).cost, 0)
 }
 
@@ -743,10 +706,10 @@ export function availableCashAfterPurchasePlan(state: GameState): Money {
   return state.cash - plannedPurchaseCost(state) - planEquipmentCost(state)
 }
 
-/** 生产可用原料：核心模式包含计划采购到货，完整模式只读实际库存。 */
+/** 生产可用原料：现有库存 + 计划采购到货。 */
 export function materialAvailableForProduction(state: GameState, materialId: string): number {
   const current = state.materials[materialId]?.qty ?? 0
-  return current + (state.mode === 'core' ? plannedPurchaseLine(state, materialId).qty : 0)
+  return current + plannedPurchaseLine(state, materialId).qty
 }
 
 /**
@@ -785,7 +748,6 @@ export interface ProductionUnitCosts {
 
 /** 设备折旧预演：核心模式计划设备结算时入账，当月起计提全额月折旧。 */
 export function plannedEquipmentDepreciation(state: GameState): number {
-  if (state.mode !== 'core') return 0
   return state.plan.equipment.reduce((sum, id) => sum + (EQUIPMENT_MODELS[id]?.depreciation ?? 0), 0)
 }
 
@@ -819,7 +781,6 @@ export function productionUnitCosts(state: GameState): ProductionUnitCosts {
 
 /** 正式结算时执行核心模式采购计划。 */
 export function executePlannedPurchases(state: GameState) {
-  if (state.mode !== 'core') return
   for (const id of Object.keys(state.materials)) {
     const line = plannedPurchaseLine(state, id)
     if (!line.lot || line.qty <= 0) continue
@@ -861,7 +822,6 @@ function plannedMaterialNeed(state: GameState, materialId: string): number {
  * 生产计划为空时不触发任何联动。
  */
 export function purchasePlanClearsProduction(state: GameState, materialId: string, lot: LotSize | null): boolean {
-  if (state.mode !== 'core') return false
   const mat = state.materials[materialId]
   if (!mat) return false
   const nextQty = lot ? plannedLotQty(state, materialId, lot) : 0
@@ -1144,7 +1104,6 @@ export function developSupplier(state: GameState, materialId: string): ActionRes
 export function buyEquipment(state: GameState, shopId: string): ActionResult {
   const model = EQUIPMENT_MODELS[shopId]
   if (!model) return fail('未知设备')
-  if (state.mode === 'core') return fail('核心模式先计划、结算时统一购置')
   if (state.cash < model.price) return fail('现金不足')
   state.cash -= model.price
   pushEquipment(state, model.id, model.price, '商店购置')
@@ -1194,9 +1153,9 @@ function equipmentModelOf(marker: string): string {
   return 'eq-line'
 }
 
-/** 结算时执行核心模式设备购置计划：付款资本化（当月产能与折旧生效），清空计划清单。 */
+/** 结算时执行设备购置计划：付款资本化（当月产能与折旧生效），清空计划清单。 */
 export function executePlannedEquipment(state: GameState): void {
-  if (state.mode !== 'core' || state.plan.equipment.length === 0) return
+  if (state.plan.equipment.length === 0) return
   for (const modelId of state.plan.equipment) {
     const model = EQUIPMENT_MODELS[modelId]
     if (!model) continue
@@ -1208,20 +1167,17 @@ export function executePlannedEquipment(state: GameState): void {
 
 /** 计划设备：各型号购置计划（核心模式）的现金预留与产能/折旧预期（含 IP 设备产能加成）。 */
 export function plannedEquipmentCap(state: GameState): number {
-  if (state.mode !== 'core') return 0
   const d = derive(state)
   return state.plan.equipment.reduce((sum, id) => sum + (EQUIPMENT_MODELS[id]?.cap ?? EQUIP_CAP_PER_WORKER), 0)
     + state.plan.equipment.length * d.ipEquipCapacity
 }
 
 export function planEquipmentCost(state: GameState): Money {
-  if (state.mode !== 'core') return 0
   return state.plan.equipment.reduce((sum, id) => sum + (EQUIPMENT_MODELS[id]?.price ?? 0), 0)
 }
 
 /** 核心模式设备购置计划：计划 count 台某型号（0 = 取消），预留现金、结算时统一付款入库。 */
 export function setPlanEquipment(state: GameState, modelId: string, count: number): ActionResult {
-  if (state.mode !== 'core') return fail('仅核心模式可调整设备购置计划')
   const model = EQUIPMENT_MODELS[modelId]
   if (!model) return fail('未知设备型号')
   if (count < 0 || count > 5) return fail('单型号每月最多计划 5 台')
@@ -1241,7 +1197,6 @@ export function setPlanEquipment(state: GameState, modelId: string, count: numbe
 }
 
 export function canSetPlanEquipment(state: GameState, modelId: string, count: number): ActionResult {
-  if (state.mode !== 'core') return OK
   const copy = JSON.parse(JSON.stringify(state)) as GameState
   return setPlanEquipment(copy, modelId, count)
 }
@@ -1386,38 +1341,9 @@ export function postProductionInbound(
  * 与月末结算（§1 生产段）同口径：账面价等比例结转 + costFactor 折价入账，
  * 因此之后无论再结算几次，同一批货的成本都不会重复进利润表（确认后各线计划已清零）。
  */
-export function confirmProduction(state: GameState): ActionResult {
-  if (state.mode === 'core') {
-    // 核心模式采用「采购计划 → 生产计划 → 销售计划 → 统一结算」，生产在结算时一次执行。
-    return fail('核心模式生产在结算时统一执行')
-  }
-  if (plannedTotal(state) <= 0) return fail('尚未安排产量')
-  const d = derive(state)
-  const completed: string[] = []
-  for (const tier of TIERS) {
-    const want = state.plan.quantities[tier]
-    if (want <= 0 || !state.products[tier].built) continue
-    // 其他产品线仍占用产能与原料，本线清零后计算自身可执行量。
-    state.plan.quantities[tier] = 0
-    const qty = Math.min(want, maxProducible(state, tier))
-    if (qty <= 0) continue
-    const bom = BOMS[tier]
-    const materialCost = issueMaterials(state, tier, qty, d.matSave)
-    const bonus = state.depts.make.staff >= 5 ? Math.floor(qty / 5) : 0
-    const batchCost = Math.round(materialCost * d.costFactor)
-    const unitCostIn = qty > 0 ? batchCost / qty : 0
-    const p = state.products[tier]
-    p.value += batchCost + bonus * unitCostIn
-    p.qty += qty + bonus
-    p.avgCost = p.qty > 0 ? Math.round(p.value / p.qty) : 0
-    postProductionInbound(state, tier, qty, bonus, batchCost, unitCostIn)
-    if (bonus > 0) pushLog(state, 'action', `流水线效应：${bom.name} 额外入库 ${bonus} 件`)
-    completed.push(`${bom.name} ${qty + bonus} 件`)
-  }
-  for (const tier of TIERS) state.plan.quantities[tier] = 0
-  return completed.length
-    ? { ok: true, msg: `${completed.join('、')}已入库` }
-    : fail('原料不足，先采购')
+/** 生产在结算时统一执行（计划 → 预演 → 结算）；「确认生产安排」即时扣料路径已退场。 */
+export function confirmProduction(_state: GameState): ActionResult {
+  return fail('生产在结算时统一执行，先排产、无需即时确认')
 }
 
 export function toggleOvertime(state: GameState): ActionResult {
@@ -1524,12 +1450,12 @@ export function setFocusMat(state: GameState, matId: string | null): void {
   state.focusMat = matId
 }
 
-/** 当前可用于履约的产品量：核心模式包含本月排产，完整模式沿用已入库成品。 */
+/** 当前可用于履约的产品量：现有库存 + 本月排产（+ 灵活交付加成）。 */
 export function committableProductQty(state: GameState, tier: Tier): number {
   const d = derive(state)
   return (
     state.products[tier].qty +
-    (state.mode === 'core' ? state.plan.quantities[tier] : 0) +
+    state.plan.quantities[tier] +
     d.flexBonus // 灵活交付（K2）：承诺量 +5/+10（可承诺下月排产，缺口违约金）
   )
 }
