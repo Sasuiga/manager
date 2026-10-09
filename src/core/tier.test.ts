@@ -6,7 +6,7 @@ import type { Equipment, GameState } from './types'
 
 /** 干净的经营局面（各部门 0 人，3 AP，500 现金）。 */
 function inOperate(seed = 100): GameState {
-  const s = newGame(seed, 'core')
+  const s = newGame(seed)
   E.startGame(s)
   s.eventResolved = true
   E.enterDraw(s)

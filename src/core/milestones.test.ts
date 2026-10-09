@@ -37,8 +37,8 @@ function mkSale(tier: SaleRecord['tier'], qty: number, revenue: number): SaleRec
 }
 
 /** Q1 账目就绪、置于第 3 月末的干净局面 */
-function atQ1End(mode: GameState['mode'] = 'core'): { s: GameState; ledgers: Ledger[] } {
-  const s = newGame(1, mode)
+function atQ1End(): { s: GameState; ledgers: Ledger[] } {
+  const s = newGame(1)
   const ledgers = [mkLedger(1), mkLedger(2), mkLedger(3)]
   s.ledgers = ledgers
   s.month = 3
@@ -151,17 +151,15 @@ describe('形状目标：季度末判定、终身一次（两种模式通用）'
     expect(s.milestonePoints).toBe(pointsAfterQ1)
   })
 
-  it('核心模式与完整模式都判定', () => {
-    for (const mode of ['core', 'full'] as const) {
-      const { s } = atQ1End(mode)
-      s.flags['agreementsSigned'] = 1
-      judge(s)
-      expect(s.milestones, mode).toContain('M03')
-    }
+  it('形状目标判定与运行模式无关（单一模式）', () => {
+    const { s } = atQ1End()
+    s.flags['agreementsSigned'] = 1
+    judge(s)
+    expect(s.milestones).toContain('M03')
   })
 
   it('正式结算管道在季度末自动判分（不经手工 judge）', () => {
-    const s = newGame(1, 'core')
+    const s = newGame(1)
     s.materialsDeveloped['micro'] = 2
     s.month = 3
     s.ledgers = [mkLedger(1), mkLedger(2)]
@@ -172,7 +170,7 @@ describe('形状目标：季度末判定、终身一次（两种模式通用）'
   })
 
   it('研发成功累加 rndSuccessTotal（M07 的数据来源）', () => {
-    const s = newGame(1, 'core')
+    const s = newGame(1)
     s.depts.rnd.staff = 1
     s.rnd['bom-mid'] = { projectId: 'bom-mid', progress: 10, done: false, assigned: 1 }
     settleMonth(s) // 第 1 月：中端 BOM 1 人 100% 成功

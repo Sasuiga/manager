@@ -58,9 +58,9 @@ export interface PreSettleCash {
   paidRepay: Money
   /** 采购/贸易商采购实付（完整模式采购行动阶段入账；核心模式仅贸易商实付，普通采购为计划） */
   paidPurchase: Money
-  /** 采购计划（核心模式结算时付；完整模式为 0） */
+  /** 采购计划（结算时付；完整模式即时采购路径已退场） */
   purchasePlan: Money
-  /** 设备购置计划（核心模式结算时付；完整模式为 0） */
+  /** 设备购置计划（结算时付） */
   equipmentPlan: Money
   /** 协议自动采购额（按结算执行同规则确定性模拟） */
   agreementSpend: Money
@@ -88,14 +88,14 @@ export function preSettleCash(state: GameState): PreSettleCash {
   const eventCashIn = state.eventCashGift
   const paidCapex = ledgerSpend((row) => row.item.startsWith('设备购置'))
   const paidRepay = ledgerSpend((row) => row.item === '还款')
-  /** 采购实付：普通采购（完整模式）+ 贸易商采购；协议手续费/供应商开发在 paidMisc，不重复计。 */
+  /** 采购实付：贸易商采购（普通采购已计划化，记在 purchasePlan）；协议手续费/供应商开发在 paidMisc，不重复计。 */
   const paidPurchase = ledgerSpend(
     (row) => row.dept === 'buy' && (row.item.startsWith('采购') || row.item.startsWith('贸易商采购')),
   )
-  /** 采购计划：核心模式尚未付款（结算时付）；完整模式已实付，记在 paidPurchase。 */
-  const purchasePlan = state.mode === 'core' ? plannedPurchaseCost(state) : 0
-  /** 设备购置计划：核心模式尚未付款（结算时资本化）；完整模式为 0。 */
-  const equipmentPlan = state.mode === 'core' ? planEquipmentCost(state) : 0
+  /** 采购计划：结算时尚未付款；即时采购路径已退场，普通采购恒走计划。 */
+  const purchasePlan = plannedPurchaseCost(state)
+  /** 设备购置计划：结算时未付款（资本化）。 */
+  const equipmentPlan = planEquipmentCost(state)
   /** 加班费：安排时已发生支付（state.overtimePaid），桥接按锁定额计。 */
   const overtimePay = state.overtimePaid
   const rndInvest = Math.max(0, d.rndCostTotal)
@@ -103,7 +103,7 @@ export function preSettleCash(state: GameState): PreSettleCash {
   const wagePaid = wagePayableOf(state)
   /**
    * 协议自动采购的确定性模拟：与结算执行同规则（仓库容量上限 + 回款前现金检查，不足则整月跳过）。
-   * 核心模式采购计划尚未付款，现金基础先扣计划支出；完整模式采购已实付（在 paidPurchase），不再重复扣。
+   * 采购计划尚未付款，现金基础先扣计划支出；即时采购路径已退场，不再重复扣。
    *
    * 仓容口径：结算时采购计划先入库、协议后执行，因此协议的可用仓容要按「计划后库存」计算；
    * 完整模式采购已在行动时入库，直接按当前库存计算。
@@ -115,7 +115,7 @@ export function preSettleCash(state: GameState): PreSettleCash {
     if (ag.monthsLeft <= 0) continue
     const unit = materialPriceAt(ag.materialId, ag.priceTierShift)
     const cap = d.materials[ag.materialId]?.cap ?? state.materials[ag.materialId]?.cap ?? 0
-    const planQty = state.mode === 'core' ? plannedPurchaseLine(state, ag.materialId).qty : 0
+    const planQty = plannedPurchaseLine(state, ag.materialId).qty
     const room = Math.max(0, cap - state.materials[ag.materialId].qty - planQty)
     const want = Math.min(ag.qty, room)
     if (want <= 0) continue

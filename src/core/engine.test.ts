@@ -251,7 +251,7 @@ describe('引擎', () => {
     expect(s.cash).toBe(cashBefore - 100) // 5 × 2w
   })
 
-  it('每类原料每月只能选一个档位', () => {
+  it('采购计划允许换档（完整模式即时采购「每月只能选一档」已退场）', () => {
     const s = E.newGame(9)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
@@ -260,8 +260,10 @@ describe('引擎', () => {
     E.enterOperate(s)
     const first = E.buyMaterial(s, 'pkg', 'small')
     expect(first.ok).toBe(true)
+    expect(s.materials.pkg.chosenLot).toBe('small')
     const second = E.buyMaterial(s, 'pkg', 'mid')
-    expect(second.ok).toBe(false)
+    expect(second.ok).toBe(true)
+    expect(s.materials.pkg.chosenLot).toBe('mid')
   })
 
   it('档位数量随档位递增（稀缺原料 1 件粒度，不出现小批 ≥ 大批）', () => {
@@ -488,7 +490,7 @@ describe('引擎', () => {
     expect(lowSpot).toBe(Math.max(0, Math.min(7, d.demand.low - 3)))
   })
 
-  it('确认生产：按 BOM 立即扣料入库，记账原料→存货', () => {
+  it('生产结算：结算时统一执行，按 BOM 扣料入库、记账原料→存货', () => {
     const s = E.newGame(1)
     E.startGame(s)
     if (s.challengeOffered.length) E.chooseChallenge(s, 0)
@@ -501,30 +503,25 @@ describe('引擎', () => {
     s.materials.pkg.value = 10 * 10
     s.materials.resin.qty = 5
     s.materials.resin.value = 5 * 20
-    const before = s.products.low
-    const qtyBefore = before.qty
-    const valBefore = before.value
     E.setPlan(s, 'low', 5)
     const r = E.confirmProduction(s)
-    expect(r.ok).toBe(true)
+    expect(r.ok).toBe(false) // 即时确认路径已退场，生产在结算时统一执行
+    const rep = E.settleMonth(s)
+    expect(rep.production.produced).toBe(5)
     expect(s.materials.pkg.qty).toBe(0)
     expect(s.materials.resin.qty).toBe(0)
     expect(s.plan.quantities.low).toBe(0)
-    // 原料账面 10×10 + 5×20 = 200，costFactor 1 时成品入库同额
-    expect(before.qty).toBe(qtyBefore + 5)
-    expect(before.value - valBefore).toBe(200)
-    // 部门账务出现「原料出库 → 存货入库」两笔
+    // 部门账务出现「原料出库 → 存货入库」两笔（原料账面 200 全额转入存货）
     const make = s.monthLedger.filter((l) => l.dept === 'make')
     expect(make.filter((l) => l.item.includes('原料出库 包材'))).toHaveLength(1)
     expect(make.filter((l) => l.item.includes('原料出库 树脂'))).toHaveLength(1)
     expect(make.filter((l) => l.item.includes('存货入库 标准品'))).toHaveLength(1)
-    // 已全部生产完：再确认提示无剩余量
-    const r2 = E.confirmProduction(s)
-    expect(r2.ok).toBe(false)
+    // 计划已清零，不会重复生产
+    expect(E.plannedTotal(s)).toBe(0)
   })
 
   it('多产品排产：共享产能与原料，并一次确认多条产品线', () => {
-    const s = E.newGame(11, 'core')
+    const s = E.newGame(11)
     E.startGame(s)
     // 本测试验证共享产能/原料，手动解锁中端（研发解锁由「研发放置」测试覆盖）
     s.products.mid.built = true
@@ -562,11 +559,15 @@ describe('引擎', () => {
     const valBefore = s.materials.pkg.value
     const r = E.buyMaterial(s, 'pkg', 'mid')
     expect(r.ok).toBe(true)
+    // 采购只形成计划：计划时不扣现金、不入库
+    expect(s.cash).toBe(cashBefore)
+    expect(s.materials.pkg.value).toBe(valBefore)
+    E.settleMonth(s)
     const cashPaid = cashBefore - s.cash
     expect(cashPaid).toBeGreaterThan(0)
     // 库存账面增加额 = 现金实付（移动加权平均入库）
     expect(s.materials.pkg.value - valBefore).toBe(cashPaid)
-    // 本月账务出现采购行：借 库存 包材 / 贷 现金，金额与实付严格相等
+    // 结算后本月账务出现采购行：借 库存 包材 / 贷 现金，金额与实付严格相等
     const entry = s.monthLedger.find((l) => l.dept === 'buy' && l.item.startsWith('采购 包材'))
     expect(entry).toBeTruthy()
     expect(entry!.debit).toBe('库存 包材')
@@ -667,14 +668,13 @@ describe('引擎', () => {
     }
     const gapBefore = gapOf()
     E.setPlan(s, 'low', 5)
-    expect(E.confirmProduction(s).ok).toBe(true) // 5 件 → bonus 1 件
-    // bonus 按本批单位成本计入存货（资产 +40），必须同步贷记营业外收入
-    // （miscIncome 在结算 §4 才确认为留存收益，故先验状态、再结算后验恒等式）
-    expect(s.miscIncome).toBe(40)
+    const rep = E.settleMonth(s)
+    expect(rep.production.produced).toBe(6) // 排产 5 件 + 流水线 bonus 1 件
+    // bonus 按本批单位成本计入存货（资产 +40），同步贷记营业外收入（结算 §4 确认进留存收益并清零）
     const bonusRow = s.monthLedger.find((l) => l.dept === 'make' && l.item.startsWith('流水线入库'))
     expect(bonusRow).toBeTruthy()
     expect(bonusRow!.credit).toBe('营业外收入')
-    E.settleMonth(s)
+    expect(s.miscIncome).toBe(0)
     expect(gapOf()).toBe(gapBefore)
   })
 

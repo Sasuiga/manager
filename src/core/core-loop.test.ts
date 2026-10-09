@@ -4,7 +4,7 @@ import { Rng } from './rng'
 import { EVENT_BY_ID, OPENING_BASIC } from '../data/game'
 
 function preparedCoreState() {
-  const s = E.newGame(20260923, 'core')
+  const s = E.newGame(20260923)
   E.startGame(s)
   E.hire(s, 'make')
   E.hire(s, 'make')
@@ -65,8 +65,8 @@ describe('核心循环预演', () => {
     expect(report.ledger.cashEnd).toBeLessThanOrEqual(p.cashEnd.max)
   })
 
-  it('完整模式保持原有确定性现货需求', () => {
-    const s = E.newGame(7, 'full')
+  it('现货成交确定（预演 min ≡ max）', () => {
+    const s = E.newGame(7)
     s.orders = []
     s.materials.pkg.qty = 20
     s.materials.pkg.value = 200
@@ -85,8 +85,8 @@ describe('固定经营场景', () => {
   it('六个场景均可复现并保持三环初始状态干净', () => {
     expect(E.CORE_SCENARIOS).toHaveLength(6)
     for (const def of E.CORE_SCENARIOS) {
-      const a = E.newGame(def.seed, 'core')
-      const b = E.newGame(def.seed, 'core')
+      const a = E.newGame(def.seed)
+      const b = E.newGame(def.seed)
       E.startGame(a)
       E.startGame(b)
       E.applyCoreScenario(a, def.id)
@@ -104,7 +104,7 @@ describe('固定经营场景', () => {
   it('固定场景表达各自的市场约束', () => {
     const make = (id: E.CoreScenarioId) => {
       const def = E.CORE_SCENARIOS.find((s) => s.id === id)!
-      const s = E.newGame(def.seed, 'core')
+      const s = E.newGame(def.seed)
       E.startGame(s)
       E.applyCoreScenario(s, id)
       return s
@@ -127,7 +127,7 @@ describe('固定经营场景', () => {
 
 describe('订单与排产联动', () => {
   function orderState() {
-    const s = E.newGame(88, 'core')
+    const s = E.newGame(88)
     E.startGame(s)
     // 事件噪声隔离：清掉第 1 月抽到的事件及其修正（订单/排产测试只关心经营机制）
     s.monthMods = {}
@@ -185,7 +185,7 @@ describe('订单与排产联动', () => {
 
 describe('三線招聘（人员能力与解锁轨道）', () => {
   function fresh(seed = 901) {
-    const s = E.newGame(seed, 'core')
+    const s = E.newGame(seed)
     E.startGame(s)
     return s
   }
@@ -279,7 +279,7 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
 
 describe('核心模式采购计划', () => {
   it('选择采购档位只预留现金与到货量，不立即扣款入库', () => {
-    const s = E.newGame(91, 'core')
+    const s = E.newGame(91)
     E.startGame(s)
     const cash = s.cash
     const qty = E.plannedLotQty(s, 'pkg', 'mid')
@@ -294,7 +294,7 @@ describe('核心模式采购计划', () => {
   })
 
   it('生产可以使用计划到货；减少采购会保留生产计划，取消采购则清空生产计划', () => {
-    const s = E.newGame(92, 'core')
+    const s = E.newGame(92)
     E.startGame(s)
     s.cash = 2000 // 补足现金：大批采购金额超出 40w 初始资金，避免干扰计划机制测试
     E.hire(s, 'make')
@@ -318,7 +318,7 @@ describe('核心模式采购计划', () => {
   })
 
   it('清空生产计划不影响已选定的加班，并同步已接订单', () => {
-    const s = E.newGame(95, 'core')
+    const s = E.newGame(95)
     E.startGame(s)
     s.cash = 2000 // 补足现金：大批采购金额超出 40w 初始资金，避免干扰计划机制测试
     E.hire(s, 'make')
@@ -336,7 +336,7 @@ describe('核心模式采购计划', () => {
   })
 
   it('正式结算按采购计划先入库，再执行生产与销售', () => {
-    const s = E.newGame(93, 'core')
+    const s = E.newGame(93)
     E.startGame(s)
     s.cash = 2000 // 补足现金：大批采购金额超出 40w 初始资金，避免干扰计划机制测试
     s.orders = []
@@ -356,7 +356,7 @@ describe('核心模式采购计划', () => {
   })
 
   it('核心模式生产不在确认时立即执行，结算时统一过账', () => {
-    const s = E.newGame(96, 'core')
+    const s = E.newGame(96)
     E.startGame(s)
     s.cash = 2000 // 补足现金：大批采购金额超出 40w 初始资金，避免干扰计划机制测试
     expect(E.buyMaterial(s, 'pkg', 'large').ok).toBe(true)
@@ -366,7 +366,7 @@ describe('核心模式采购计划', () => {
     const before = s.materials.resin.qty
     const r = E.confirmProduction(s)
     expect(r.ok).toBe(false)
-    expect(r.msg).toBe('核心模式生产在结算时统一执行')
+    expect(r.msg).toBe('生产在结算时统一执行，先排产、无需即时确认')
     expect(s.materials.resin.qty).toBe(before) // 未扣料
     expect(s.products.low.qty).toBe(0) // 未入库
     expect(E.plannedTotal(s)).toBe(3) // 计划保留，结算时执行
@@ -378,7 +378,7 @@ describe('核心模式采购计划', () => {
   })
 
   it('预演读取采购计划，但不实际执行采购', () => {
-    const s = E.newGame(94, 'core')
+    const s = E.newGame(94)
     E.startGame(s)
     E.buyMaterial(s, 'pkg', 'mid')
     const before = JSON.stringify(s)
@@ -390,7 +390,7 @@ describe('核心模式采购计划', () => {
 
 describe('研发放置与 IP 技能树', () => {
   function rndState(seed = 210) {
-    const s = E.newGame(seed, 'core')
+    const s = E.newGame(seed)
     E.startGame(s)
     s.orders = []
     s.acceptedOrders = []
@@ -565,7 +565,7 @@ describe('研发放置与 IP 技能树', () => {
 
 describe('IP 技能树 3 + 3×2 + 3×2×2 分支与逐层揭示', () => {
   function ipState(seed = 218) {
-    const s = E.newGame(seed, 'core')
+    const s = E.newGame(seed)
     E.startGame(s)
     s.orders = []
     s.acceptedOrders = []
@@ -621,7 +621,7 @@ describe('IP 技能树 3 + 3×2 + 3×2×2 分支与逐层揭示', () => {
 describe('场景预置研发', () => {
   it('各场景开局预置 1 名研发、仅低端解锁、知产树为空', () => {
     for (const def of E.CORE_SCENARIOS) {
-      const s = E.newGame(def.seed, 'core')
+      const s = E.newGame(def.seed)
       E.startGame(s)
       E.applyCoreScenario(s, def.id)
       expect(s.depts.rnd.staff, def.id).toBe(1)
@@ -701,7 +701,7 @@ describe('统一成本口径（采购计划 → 单位成本 → 单件毛利 �
 describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
   it('池过滤：融资事件全模式保留（融资层已落地）；卡牌参数事件两模式均保留（核心也有立项抽卡阶段）', () => {
     const fullPool = new Set(E.buildEventPool(E.newGame(1), Rng.fromState(1)).map((e) => e.id))
-    const corePool = new Set(E.buildEventPool(E.newGame(1, 'core'), Rng.fromState(1)).map((e) => e.id))
+    const corePool = new Set(E.buildEventPool(E.newGame(1), Rng.fromState(1)).map((e) => e.id))
     for (const id of ['R4', 'P5', 'O4', 'S3', 'D4', 'X3', 'R6', 'S9']) {
       expect(fullPool.has(id), `${id} 融资层已落地（借/还入口 + 3 个月期限 + 5% 月利率），保留`).toBe(true)
       expect(corePool.has(id), id).toBe(true)
@@ -716,7 +716,7 @@ describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
   })
 
   it('P10 猎头：机会事件消费端——本月可额外招聘 1 人不耗 AP', () => {
-    const s = E.newGame(1, 'core')
+    const s = E.newGame(1)
     E.startGame(s)
     s.phase = 'event'
     s.currentEvent = EVENT_BY_ID['P10']
@@ -732,7 +732,7 @@ describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
 
   it('核心 12 月流程：每月恰好 1 张事件（全类型），经立项阶段后进经营，恒等式全程成立', () => {
     const run = (seed: number) => {
-      const s = E.newGame(seed, 'core')
+      const s = E.newGame(seed)
       E.startGame(s)
       const ids: string[] = []
       const r2 = (n: number) => Math.round(n * 100) / 100
@@ -782,7 +782,7 @@ describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
   })
 
   it('场景基线：董事会先行（事件在确认后抽取、seed 固定可复现），预设订单不被事件确认时重复生成', () => {
-    const s = E.newGame(3303, 'core')
+    const s = E.newGame(3303)
     E.startGame(s)
     E.applyCoreScenario(s, 'order_heavy')
     expect(s.phase).toBe('board') // Q1 首月董事会：目标已下达、事件未抽
@@ -804,7 +804,7 @@ describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
 
 describe('核心模式立项（抽卡）阶段', () => {
   it('事件 → 立项（抽 N 选 M）→ 经营：每月固定流转，手牌可打出', () => {
-    const s = E.newGame(777, 'core')
+    const s = E.newGame(777)
     E.startGame(s)
     E.beginMonthEvent(s) // 第 1 月季度首月：董事会先行，确认后抽事件
     expect(s.phase).toBe('event')
@@ -827,7 +827,7 @@ describe('核心模式立项（抽卡）阶段', () => {
   })
 
   it('卡牌采购价修正：打出 C1 批量采购后采购价降 1 档（展示档位不含卡牌修正，避免与 buyCardShift 重复）', () => {
-    const s = E.newGame(777, 'core')
+    const s = E.newGame(777)
     E.startGame(s)
     s.eventResolved = true
     E.enterDraw(s)
@@ -849,7 +849,7 @@ describe('核心模式立项（抽卡）阶段', () => {
 
 describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）', () => {
   function operateState(seed = 777) {
-    const s = E.newGame(seed, 'core')
+    const s = E.newGame(seed)
     E.startGame(s)
     s.eventResolved = true
     E.enterDraw(s)
@@ -1043,7 +1043,7 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
 
 describe('设备层（计划→预演→结算 + 型号差异化）', () => {
   function fresh(seed = 501) {
-    const s = E.newGame(seed, 'core')
+    const s = E.newGame(seed)
     E.startGame(s)
     E.hire(s, 'make')
     E.hire(s, 'make')
@@ -1065,11 +1065,13 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
     expect(E.setPlanEquipment(s, 'eq-line', 2).ok).toBe(true) // 原计划维持
     s.cash = 300
     expect(E.canSetPurchasePlan(s, 'pkg', 'small').ok).toBe(true)
-    // 完整模式不走计划；核心模式即时购置被挡（先计划、结算统一）
-    const f = E.newGame(502, 'full')
+    // 统一后两条路径并存：计划路径（UI 主路径）与即时购置（测试/事件用）
+    const f = E.newGame(502)
     E.startGame(f)
-    expect(E.setPlanEquipment(f, 'eq-line', 1).ok).toBe(false)
-    expect(E.buyEquipment(s, 'eq-line').ok).toBe(false)
+    expect(E.setPlanEquipment(f, 'eq-line', 1).ok).toBe(true)
+    expect(f.plan.equipment).toEqual(['eq-line'])
+    expect(E.buyEquipment(s, 'eq-line').ok).toBe(true)
+    expect(s.equipment).toHaveLength(1)
   })
 
   it('结算：设备计划统一执行——扣现金、资本化、当月折旧与产能生效', () => {
@@ -1097,14 +1099,14 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
   })
 
   it('型号差异化：D9 二手产线（折旧减半）/ X9 清算产线（每人 +6、额度 8w）', () => {
-    const d9 = E.newGame(504, 'core')
+    const d9 = E.newGame(504)
     E.startGame(d9)
     d9.currentEvent = EVENT_BY_ID['D9']
     expect(E.acceptChance(d9).ok).toBe(true)
     expect(d9.equipment).toHaveLength(1)
     expect(d9.equipment[0].model).toBe('eq-used')
     expect(d9.equipment[0].depreciation).toBe(10)
-    const x9 = E.newGame(505, 'core')
+    const x9 = E.newGame(505)
     E.startGame(x9)
     x9.currentEvent = EVENT_BY_ID['X9']
     expect(E.acceptChance(x9).ok).toBe(true)
@@ -1118,7 +1120,7 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
   })
 
   it('§18-A8 关闭：设备额度计入借款额度', () => {
-    const s = E.newGame(506, 'full')
+    const s = E.newGame(506)
     E.startGame(s)
     const base = E.derive(s).creditLine
     expect(E.buyEquipment(s, 'eq-line').ok).toBe(true)
@@ -1126,7 +1128,7 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
   })
 
   it('J5 专利壁垒：每季度可复制 1 张本季已打牌（免费、不占打牌数）', () => {
-    const s = E.newGame(507, 'core')
+    const s = E.newGame(507)
     E.startGame(s)
     expect(E.derive(s).ipCardCopy).toBe(false)
     s.ipOwned.push('J5')
@@ -1157,7 +1159,7 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
   })
 
   it('S4 裁员：canFire 额度允许解雇 1 人并返还 100% 基础招聘费', () => {
-    const s = E.newGame(508, 'core')
+    const s = E.newGame(508)
     E.startGame(s)
     s.depts.ops.staff = 2
     expect(E.fire(s, 'ops').ok).toBe(false) // 无裁员额度
@@ -1171,7 +1173,7 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
 
 describe('部门资源：采购资源（供给加点 / 议价）与销售提价', () => {
   function buyState(seed = 901, staff = 4) {
-    const s = E.newGame(seed, 'core')
+    const s = E.newGame(seed)
     E.startGame(s)
     s.ap = 99
     for (let i = 0; i < staff; i++) expect(E.hire(s, 'buy').ok).toBe(true)
@@ -1182,7 +1184,7 @@ describe('部门资源：采购资源（供给加点 / 议价）与销售提价'
     const s = buyState(901, 5) // 池 10 点
     let d = E.derive(s)
     expect(d.buyResource).toBe(10)
-    const baseChip = E.derive(E.newGame(901, 'core')).materials.chip.supply
+    const baseChip = E.derive(E.newGame(901)).materials.chip.supply
     E.setBuySupplyAlloc(s, 'chip', 2) // 2 件 × 4 点 = 8 点
     d = E.derive(s)
     expect(d.materials.chip.supply).toBe(baseChip + 2)
@@ -1248,7 +1250,7 @@ describe('董事会目标层（核心模式：board 阶段恢复）', () => {
   }
 
   it('开局：第 1 月季度首月董事会先行——基本目标 + 2 个挑战候选，确认后抽事件', () => {
-    const s = E.newGame(1, 'core')
+    const s = E.newGame(1)
     E.startGame(s)
     expect(s.phase).toBe('board')
     expect(s.basicGoal).not.toBeNull()
@@ -1263,7 +1265,7 @@ describe('董事会目标层（核心模式：board 阶段恢复）', () => {
   })
 
   it('季度切换：4/7/10 月再进董事会，目标重抽并跟随当季气候池', () => {
-    const s = E.newGame(7, 'core')
+    const s = E.newGame(7)
     E.startGame(s)
     const seq: number[] = []
     for (let m = 1; m <= 12; m++) {
@@ -1285,7 +1287,7 @@ describe('董事会目标层（核心模式：board 阶段恢复）', () => {
   })
 
   it('连续两个季度未达基本目标 → 出局（与完整模式同规则）', () => {
-    const s = E.newGame(11, 'core')
+    const s = E.newGame(11)
     E.startGame(s)
     for (let m = 1; m <= 12; m++) {
       if (s.result !== 'playing') break
@@ -1306,7 +1308,7 @@ describe('董事会目标层（核心模式：board 阶段恢复）', () => {
   })
 
   it('季度末目标计分：goalPoints 累计并进总分（computeScore.goal）', () => {
-    const s = E.newGame(11, 'core')
+    const s = E.newGame(11)
     E.startGame(s)
     for (let m = 1; m <= 6; m++) {
       if (s.phase === 'board') E.beginMonthEvent(s) // 不取挑战（challengeGoal 恒 null）

@@ -4,8 +4,8 @@ import * as E from './engine'
 import type { GameState } from './types'
 
 /** 进入经营阶段的干净局面（跳过抽卡） */
-function inOperate(seed: number, mode: GameState['mode'] = 'core'): GameState {
-  const s = newGame(seed, mode)
+function inOperate(seed: number): GameState {
+  const s = newGame(seed)
   E.startGame(s)
   s.eventResolved = true
   E.startGame(s)

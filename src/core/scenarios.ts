@@ -1,6 +1,10 @@
 import { mergeMods } from './derive'
 import type { Climate, GameState, MonthMods, Order, Tier } from './types'
 
+/**
+ * 固定经营场景基线（测试夹具，2026-10-09 起标题页入口移除，仅供自动化测试复用）。
+ * 六个可复现局面：固定 seed/气候/现金/订单/供给修正，用于预演桥接与回归测试。
+ */
 export type CoreScenarioId =
   | 'cheap_low_demand'
   | 'expensive_high_demand'
@@ -25,9 +29,8 @@ export const CORE_SCENARIOS: CoreScenarioDef[] = [
   { id: 'cash_constrained', name: '现金受限', desc: '可用现金较少，需要控制采购规模。', seed: 6606 },
 ]
 
-/** 将核心模式重置为可复现的固定经营局面。 */
+/** 将开局重置为可复现的固定经营局面。 */
 export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
-  if (state.mode !== 'core') return
   const setup = SCENARIO_SETUP[id]
   state.climate = setup.climate
   state.cash = setup.cash
@@ -59,34 +62,21 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.wagePayableBy = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
   // 研发：各场景预置 1 名研发（教学：前 2~3 个月可解锁中端），清空项目/放置/知产
   state.depts.rnd.staff = setup.rndStaff ?? 1
-  state.depts.rnd.hired = state.depts.rnd.staff
+  for (const slot of Object.values(state.rnd)) {
+    slot.projectId = null
+    slot.progress = 0
+    slot.done = false
+    slot.assigned = 0
+  }
   state.ipOwned = []
   state.quarterIps = []
-  state.rndStartsThisMonth = []
-  state.flags['rndConfirmed'] = 0
-  for (const s of Object.values(state.rnd)) {
-    s.projectId = null
-    s.progress = 0
-    s.done = false
-    s.assigned = 0
-  }
-  for (const mat of Object.values(state.materials)) {
-    mat.qty = 0
-    mat.value = 0
-    mat.chosenLot = null
-  }
-  for (const product of Object.values(state.products)) {
-    product.qty = 0
-    product.value = 0
-    product.avgCost = 0
-  }
 }
 
 interface ScenarioSetup {
   climate: Climate
   cash: number
   mods?: MonthMods
-  orders: { tier: Tier; qty: number; priceShift?: number }[]
+  orders: { tier: Tier; qty: number }[]
   /** 开局销售人数：为场景预设订单提供「来源」，与人员模型自洽。 */
   sellStaff?: number
   /** 开局研发人数：默认 1（中端解锁教学）；现金受限等场景可覆写。 */

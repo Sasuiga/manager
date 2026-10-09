@@ -6,7 +6,7 @@ import { CARD_BY_ID, IP_SETS, MILESTONES } from '../data/game'
 import type { GameState } from './types'
 
 function core(seed: number): GameState {
-  const s = newGame(seed, 'core')
+  const s = newGame(seed)
   E.startGame(s)
   s.eventResolved = true
   E.startGame(s)
@@ -105,7 +105,7 @@ describe('规则卡（K 系列：改本月规则、制造取舍）', () => {
   })
 
   it('牌库含规则卡（全提案卡 1 副入池 + 0 档卡 2 副）', () => {
-    const s = newGame(20, 'core')
+    const s = newGame(20)
     E.buildDeck(s, new Rng(20))
     // 73 张提案卡各 1 副；0 档卡 12 张各再 1 副 → 85
     expect(s.deck.length).toBe(85)

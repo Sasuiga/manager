@@ -8,9 +8,6 @@
 /** 资金，单位：0.1w（角）。整数运算。 */
 export type Money = number
 
-/** 运行模式：full 为完整游戏，core 用于验证采购—生产—销售核心循环。 */
-export type GameMode = 'full' | 'core'
-
 /** 产品层次。 */
 export type Tier = 'low' | 'mid' | 'high' | 'special'
 
@@ -629,7 +626,6 @@ export interface LogEntry {
 }
 
 export interface GameState {
-  mode: GameMode
   seed: number
   /** 确定性随机的当前状态，序列化后仍可精确续接 */
   rngState: number

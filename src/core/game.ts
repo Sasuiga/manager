@@ -22,17 +22,15 @@ import type {
   CardInstance,
   Climate,
   GameState,
-  GameMode,
   Momentum,
   Money,
 } from './types'
 
 /** 构建一局新游戏。 */
-export function newGame(seed: number, mode: GameMode = 'full'): GameState {
+export function newGame(seed: number): GameState {
   const rng = new Rng(seed)
   const climate = CLIMATE_ORDER[rng.int(6)]
   const state: GameState = {
-    mode,
     seed,
     rngState: rng.state,
     month: 1,
