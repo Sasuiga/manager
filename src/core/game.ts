@@ -104,8 +104,6 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
 
     rnd: Object.fromEntries(RND_PROJECTS.map((p) => [p.id, { projectId: null, progress: 0, done: false, assigned: 0 }])),
     ipOwned: [],
-    ipActive: [null],
-    ipChangedThisMonth: false,
     quarterIps: [],
     materialsDeveloped: Object.fromEntries(NEW_MATERIALS.map((m) => [m.id, 0])),
     agreements: [],

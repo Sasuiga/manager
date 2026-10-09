@@ -1728,32 +1728,6 @@ export function confirmRndAssignments(state: GameState, drafts: Record<string, n
   return { ok: true, msg: '研发放置已确认，本月锁定' }
 }
 
-export function ipSlots(state: GameState): number {
-  const s = state.depts.rnd.staff
-  let n = 1
-  if (s >= 3) n = 2
-  if (s >= 5) n = 3
-  n += derive(state).ipSlotsPlus ?? 0 // R10 知识产权保护 / 员工联动：激活槽 +N
-  return n
-}
-
-export function activateIp(state: GameState, ipId: string, slot: number): ActionResult {
-  if (!state.ipOwned.includes(ipId)) return fail('未拥有该知识产权')
-  if (state.ipChangedThisMonth) return fail('本月已更换过一次')
-  if (state.ipActive[slot] === ipId) return fail('该槽位已激活此项')
-  if (state.ipActive.includes(ipId)) return fail('该知识产权已在其他槽位激活')
-  state.ipActive[slot] = ipId
-  state.ipChangedThisMonth = true
-  pushLog(state, 'action', `激活知识产权【${IP_BY_ID[ipId]?.name}】`)
-  return { ok: true, msg: `已激活【${IP_BY_ID[ipId]?.name}】` }
-}
-
-export function deactivateIp(state: GameState, slot: number): ActionResult {
-  if (state.ipChangedThisMonth) return fail('本月已更换过一次')
-  state.ipActive[slot] = null
-  state.ipChangedThisMonth = true
-  return { ok: true, msg: '已卸下' }
-}
 
 // ════════════════════════════════════════════════════════════
 // 资金

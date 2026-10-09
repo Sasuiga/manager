@@ -959,7 +959,6 @@ export function advanceMonth(state: GameState, rng: Rng) {
   // C9 期货先取出（应用在本函数末段、气候更新之后；此处只清状态）
   const pendingFutures = state.futures
   state.futures = {}
-  state.ipChangedThisMonth = false
   // 规则卡（K 系列）月度状态：定价权 / 双档采购选择（月内有效）
   state.spotPriceChoice = null
   state.secondLotMat = null

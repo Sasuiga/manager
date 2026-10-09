@@ -69,7 +69,7 @@
 ### 既有卡处置
 
 - **K8 加班补贴删除**（并入 P12，效果同口径：`overtimeHalf` / `overtimeHalfPlus` flag 复用）；
-- **R10 知识产权保护** 重标为 rnd 3 档增效卡（`ipSlotsPlus` mod 取代 `ipSlotPlus` flag，`ipSlots()` 读 derive）；
+- **R10 知识产权保护** 重标为 rnd 3 档增效卡（`ipSlotsPlus` mod 取代 `ipSlotPlus` flag，`ipSlots()` 读 derive）；（2026-10-09：槽位制移除，改为在研项目成功率 +25%/强化 +40%，走 `rndRate` 字段，`ipSlotsPlus` 退场，见交接文档）；
 - **M2 +1 AP** 标为 ops 1 档增效卡（效果不变）；
 - 其余 50 张既有卡按效果强度标 0~3 档（见 `CARDS` 中 `tier` 字段），数值不变。
 

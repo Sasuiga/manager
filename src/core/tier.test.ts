@@ -246,12 +246,12 @@ describe('员工联动卡（增效 / 改良 / 替换）', () => {
     expect(E.hireCost(s, 'buy')).toBe(25) // 50 × 0.5
   })
 
-  it('增效：R10 IP 激活槽 +1；C14 协议槽 +1', () => {
+  it('增效：R10 成功率 +25%；C14 协议槽 +1', () => {
     const s = inOperate()
     s.depts.rnd.staff = 5
     push(s, 'R10')
     expect(E.playCard(s, s.hand[0].uid).ok).toBe(true)
-    expect(E.ipSlots(s)).toBe(4) // 3（rnd 5 人）+ 1
+    expect(E.derive(s).rndRate).toBe(25) // 在研项目成功率 +25%（受封顶限制）
     s.depts.buy.staff = 5
     s.ap = 5
     push(s, 'C14')

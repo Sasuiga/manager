@@ -123,8 +123,6 @@ export interface DerivedTotals {
   buyResPerStaff: number
   /** 员工联动（改良）：本月招聘费系数（1 = 不变） */
   hireFeeFactor: number
-  /** 员工联动（增效）：本月 IP 激活槽 +N */
-  ipSlotsPlus: number
   /** 员工联动（增效）：本月长期协议槽 +N */
   agreeSlotsPlus: number
   /** 销售推需求效果是否减半（S15 提价月） */
@@ -224,7 +222,6 @@ export function mergeMods(...list: (MonthMods | undefined)[]): MonthMods {
     out.rndProgPerStaff = (out.rndProgPerStaff ?? 0) + (m.rndProgPerStaff ?? 0)
     out.rndRatePerStaff = (out.rndRatePerStaff ?? 0) + (m.rndRatePerStaff ?? 0)
     out.rndRateCapPlus = (out.rndRateCapPlus ?? 0) + (m.rndRateCapPlus ?? 0)
-    out.ipSlotsPlus = (out.ipSlotsPlus ?? 0) + (m.ipSlotsPlus ?? 0)
     out.agreeSlotsPlus = (out.agreeSlotsPlus ?? 0) + (m.agreeSlotsPlus ?? 0)
     out.orderQtyPlus = (out.orderQtyPlus ?? 0) + (m.orderQtyPlus ?? 0)
     // 员工联动（覆盖型：成本取最小 / 上限取最大 / 倍率取最大）
@@ -288,7 +285,6 @@ export function cardEffectToMods(e: CardPlayEffect): { mods: MonthMods; flags: s
   if (e.rndProgPerStaff) mods.rndProgPerStaff = (mods.rndProgPerStaff ?? 0) + e.rndProgPerStaff
   if (e.rndRatePerStaff) mods.rndRatePerStaff = (mods.rndRatePerStaff ?? 0) + e.rndRatePerStaff
   if (e.rndRateCapPlus) mods.rndRateCapPlus = (mods.rndRateCapPlus ?? 0) + e.rndRateCapPlus
-  if (e.ipSlotsPlus) mods.ipSlotsPlus = (mods.ipSlotsPlus ?? 0) + e.ipSlotsPlus
   if (e.agreeSlotsPlus) mods.agreeSlotsPlus = (mods.agreeSlotsPlus ?? 0) + e.agreeSlotsPlus
   if (e.hireFeeFactor != null) mods.hireFeeFactor = Math.min(mods.hireFeeFactor ?? 1, e.hireFeeFactor)
   if (e.negotiateCost != null) mods.negotiateCost = Math.min(mods.negotiateCost ?? Infinity, e.negotiateCost)
@@ -310,9 +306,8 @@ function mergeTier(r: Record<Tier, number>): Partial<Record<Tier, number>> {
 /** 当前已激活的知识产权列表（含事件/卡牌带来的季度与月度临时知产）。 */
 export function activeIps(state: GameState): string[] {
   const out: string[] = []
-  // 核心模式无知产激活槽位：已拥有即生效；完整模式保留槽位制
-  const effective = state.mode === 'core' ? state.ipOwned : state.ipActive
-  for (const id of effective) if (id) out.push(id)
+  // 拥有即生效（槽位制已废）：永久知产拥有全部生效
+  for (const id of state.ipOwned) out.push(id)
   for (const id of state.quarterIps ?? []) if (!out.includes(id)) out.push(id)
   for (const id of state.monthMods.tempIps ?? []) {
     if (id === 'normal' || id === 'strong') {
@@ -740,7 +735,6 @@ export function derive(state: GameState): DerivedTotals {
     sellResPerStaff: mods.sellResPerStaff ?? 0,
     buyResPerStaff: mods.buyResPerStaff ?? 0,
     hireFeeFactor: mods.hireFeeFactor ?? 1,
-    ipSlotsPlus: mods.ipSlotsPlus ?? 0,
     agreeSlotsPlus: mods.agreeSlotsPlus ?? 0,
     sellPushHalf,
     rndActiveCount,

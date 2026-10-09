@@ -320,8 +320,6 @@ export interface CardPlayEffect {
   rndProgFactor?: number
   /** 员工联动（改良）：本月研发成功率封顶 +N 百分点（如 90→95） */
   rndRateCapPlus?: number
-  /** 员工联动（增效）：本月 IP 激活槽 +N */
-  ipSlotsPlus?: number
   /** 员工联动（增效）：本月长期协议槽 +N */
   agreeSlotsPlus?: number
   /** 员工联动（改良）：本月招聘费系数（覆盖，取最小；0.5 = −50%） */
@@ -454,8 +452,6 @@ export interface MonthMods {
   rndProgFactor?: number
   /** 员工联动：本月研发成功率封顶 +N 百分点 */
   rndRateCapPlus?: number
-  /** 员工联动：本月 IP 激活槽 +N */
-  ipSlotsPlus?: number
   /** 员工联动：本月长期协议槽 +N */
   agreeSlotsPlus?: number
   /** 员工联动：本月招聘费系数（覆盖，取最小） */
@@ -699,10 +695,8 @@ export interface GameState {
 
   rnd: Record<string, ResearchSlot>
   ipOwned: string[]
-  ipActive: (string | null)[]
   /** 季度临时知产（R4 强化：研发 ≥5 人时「本季有效」），季度切换时清空 */
   quarterIps: string[]
-  ipChangedThisMonth: boolean
   materialsDeveloped: Record<string, number>
   agreements: Agreement[]
   /** 期货锁价：材料 id -> 锁定的价格档位 */

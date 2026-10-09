@@ -556,7 +556,7 @@ describe('研发放置与 IP 技能树', () => {
     expect(E.setRndAssign(s, 'ip-supply-2', 1).ok).toBe(false)
     s.rnd['ip-supply-1'].done = true
     expect(E.setRndAssign(s, 'ip-supply-2', 1).ok).toBe(true)
-    // 核心模式：解锁即生效（无激活槽位），I3 供给 +2
+    // 拥有即生效（槽位制已废），I3 供给 +2
     const before = E.derive(s).materials.resin.supply
     s.ipOwned.push('I3')
     expect(E.derive(s).materials.resin.supply).toBe(before + 2)

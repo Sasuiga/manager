@@ -1948,8 +1948,6 @@ function RndPage({ g }: { g: Game }) {
   const d = E.derive(gs)
   const staff = gs.depts.rnd.staff
   const assigned = E.rndAssignedTotal(gs)
-  const slots = E.ipSlots(gs)
-  const [ips, setIps] = useState(false)
   const [theme, setTheme] = useState<'prod' | 'ip' | null>(null)
 
   const themeStats = (kind: E.ResearchKind) => {
@@ -2036,13 +2034,7 @@ function RndPage({ g }: { g: Game }) {
       <div className="card">
         <div className="hstack-between">
           <h3>知识产权</h3>
-          {gs.mode === 'full' ? (
-            <span className="xs faint mono">
-              槽位 {gs.ipActive.filter(Boolean).length}/{slots}
-            </span>
-          ) : (
-            <span className="xs faint mono">生效 {ipRows.length}</span>
-          )}
+          <span className="xs faint mono">生效 {ipRows.length}</span>
         </div>
         <div className="title-rule" />
         {ipRows.length === 0 ? (
@@ -2052,7 +2044,6 @@ function RndPage({ g }: { g: Game }) {
             {ipRows.map((id) => {
               const quarter = quarterIpIds.includes(id)
               const monthTemp = monthTempIps.includes(id)
-              const on = gs.mode === 'core' || gs.ipActive.includes(id)
               const def = IP_BY_ID[id]
               return (
                 <div key={id} className="card">
@@ -2063,19 +2054,10 @@ function RndPage({ g }: { g: Game }) {
                         <span className="tag gold" style={{ marginLeft: 6 }}>临时 · 本季</span>
                       ) : monthTemp ? (
                         <span className="tag gold" style={{ marginLeft: 6 }}>临时 · 本月</span>
-                      ) : on ? (
-                        <span className="tag gold" style={{ marginLeft: 6 }}>{gs.mode === 'core' ? '生效中' : '已激活'}</span>
-                      ) : null}
+                      ) : (
+                        <span className="tag gold" style={{ marginLeft: 6 }}>生效中</span>
+                      )}
                     </span>
-                    {gs.mode === 'full' && !quarter && !monthTemp ? (
-                      <button
-                        className="btn btn-mini"
-                        style={{ width: 'auto' }}
-                        onClick={() => setIps(true)}
-                      >
-                        <span className="btn-main xs">管理</span>
-                      </button>
-                    ) : null}
                   </div>
                   {def?.desc ? <p className="hint" style={{ marginTop: 'var(--s1)' }}>{def.desc}</p> : null}
                 </div>
@@ -2087,7 +2069,6 @@ function RndPage({ g }: { g: Game }) {
 
       {theme === 'prod' ? <RndBomSheet g={g} onClose={() => setTheme(null)} /> : null}
       {theme === 'ip' ? <RndIpSheet g={g} onClose={() => setTheme(null)} /> : null}
-      {ips ? <IpSheet g={g} onClose={() => setIps(false)} /> : null}
     </>
   )
 }
@@ -2342,51 +2323,6 @@ function RndProjectRow({
         </>
       ) : null}
     </div>
-  )
-}
-
-function IpSheet({ g, onClose }: { g: Game; onClose: () => void }) {
-  const gs = g.s
-  const slots = E.ipSlots(gs)
-  return (
-    <Sheet title="知识产权" sub={`槽位 ${slots} · 每月最多更换 1 次`} onClose={onClose}>
-      <div className="stack">
-        {gs.ipOwned.map((id) => {
-          const def = IP_BY_ID[id]
-          const activeSlot = gs.ipActive.indexOf(id)
-          return (
-            <div key={id} className="card">
-              <div className="hstack-between">
-                <span className="mat-name">{def?.name ?? id}</span>
-                {activeSlot >= 0 ? <span className="tag gold">槽位 {activeSlot + 1}</span> : null}
-              </div>
-              <div className="title-rule" />
-              <p className="card-desc">{def?.desc}</p>
-              <div className="wrap" style={{ marginTop: 'var(--s3)' }}>
-                {Array.from({ length: slots }, (_, i) => (
-                  <button
-                    key={i}
-                    className="btn btn-mini"
-                    style={{ width: 'auto' }}
-                    disabled={gs.ipChangedThisMonth && activeSlot !== i}
-                    onClick={() =>
-                      activeSlot === i
-                        ? g.act((st) => E.deactivateIp(st, i))
-                        : g.act((st) => E.activateIp(st, id, i))
-                    }
-                  >
-                    <span className="btn-main xs">
-                      {activeSlot === i ? `卸下槽 ${i + 1}` : `装入槽 ${i + 1}`}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      {gs.ipChangedThisMonth ? <div className="info">本月已完成一次更换，下月可再调整。</div> : null}
-    </Sheet>
   )
 }
 

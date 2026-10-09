@@ -262,9 +262,9 @@ export const STAFF: Record<Dept, StaffDef> = {
     base: ['每人 +5 研发进度/月，+5% 成功率（封顶 90%）'],
     unlocks: [
       { at: 2, text: '提案 1 档解锁' },
-      { at: 3, text: '可同时激活 2 个知识产权；提案 2 档解锁' },
+      { at: 3, text: '提案 2 档解锁' },
       { at: 4, text: '（无新增解锁）' },
-      { at: 5, text: '可同时激活 3 个知识产权；提案 3 档解锁', achievement: '专利壁垒' },
+      { at: 5, text: '提案 3 档解锁', achievement: '专利壁垒' },
     ],
   },
 }
@@ -1261,10 +1261,10 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'R10', name: '知识产权保护', kind: 'rnd', tier: 3, tag: 'staff', sub: 'amp',
-    text: '需研发 ≥ 5 人（3 档）。本月知识产权激活槽 +1。',
-    empowered: '需研发 ≥ 5 人（3 档）。本月知识产权激活槽 +2。',
-    base: () => ({ ipSlotsPlus: 1 }),
-    strong: () => ({ ipSlotsPlus: 2 }),
+    text: '本月全部在研项目成功率 +25%（受成功率封顶限制）。',
+    empowered: '本月全部在研项目成功率 +40%（受成功率封顶限制）。',
+    base: () => ({ rndRate: 25 }),
+    strong: () => ({ rndRate: 40 }),
   },
   // ── 研发·员工联动（增效 / 改良 / 替换） ─────────────────
   {
