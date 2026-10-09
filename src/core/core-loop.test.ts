@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as E from './engine'
 import { Rng } from './rng'
-import { EVENT_BY_ID } from '../data/game'
+import { EVENT_BY_ID, OPENING_BASIC } from '../data/game'
 
 function preparedCoreState() {
   const s = E.newGame(20260923, 'core')
@@ -738,6 +738,7 @@ describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
       const r2 = (n: number) => Math.round(n * 100) / 100
       for (let m = 1; m <= 12; m++) {
         if (s.result !== 'playing') break
+        if (s.phase === 'board') E.beginMonthEvent(s) // 季度首月：董事会后抽事件
         if (s.phase === 'event' && !s.eventResolved) {
           const ev = s.currentEvent
           if (ev) {
@@ -772,23 +773,28 @@ describe('事件阶段（核心模式：全类型 × 落地原则）', () => {
         if (s.result !== 'playing') break
         E.nextMonth(s)
       }
-      return ids
+      return { ids, months: s.month, result: s.result }
     }
-    const seq = run(777)
-    expect(seq.length).toBeGreaterThanOrEqual(8)
-    expect(run(777)).toEqual(seq) // 同 seed 事件序列可复现
+    const r = run(777)
+    expect(r.ids.length).toBe(r.months) // 每月恰好 1 张事件
+    expect(r.ids.length).toBeGreaterThanOrEqual(6) // 董事会目标层后可能提前出局（连续 2 季未达基本目标）
+    expect(run(777)).toEqual(r) // 同 seed 事件序列可复现
   })
 
-  it('场景基线：applyCoreScenario 保留所抽事件（即时修正重并），预设订单不被事件确认时重复生成', () => {
+  it('场景基线：董事会先行（事件在确认后抽取、seed 固定可复现），预设订单不被事件确认时重复生成', () => {
     const s = E.newGame(3303, 'core')
     E.startGame(s)
     E.applyCoreScenario(s, 'order_heavy')
-    expect(s.phase).toBe('event')
-    expect(s.currentEvent?.id).toBe('R1') // 保留本月事件（seed 固定，即场景的一部分）
-    expect(s.monthMods.demand?.low).toBe(1) // 即时事件修正在基线重置后重新并入
-    expect(s.monthMods.demand?.mid).toBe(1)
+    expect(s.phase).toBe('board') // Q1 首月董事会：目标已下达、事件未抽
+    expect(s.currentEvent).toBeNull()
     const preset = s.orders.length
     expect(preset).toBeGreaterThan(0)
+    E.chooseChallenge(s, 0)
+    E.beginMonthEvent(s)
+    expect(s.phase).toBe('event')
+    expect(s.currentEvent?.id).toBe('R1') // seed 固定，事件即场景的一部分
+    expect(s.monthMods.demand?.low).toBe(1) // 即时事件修正在抽取时并入
+    expect(s.monthMods.demand?.mid).toBe(1)
     s.eventResolved = true
     E.enterDraw(s)
     expect(s.orders.length).toBe(preset) // 订单已预设，不重复生成
@@ -800,6 +806,7 @@ describe('核心模式立项（抽卡）阶段', () => {
   it('事件 → 立项（抽 N 选 M）→ 经营：每月固定流转，手牌可打出', () => {
     const s = E.newGame(777, 'core')
     E.startGame(s)
+    E.beginMonthEvent(s) // 第 1 月季度首月：董事会先行，确认后抽事件
     expect(s.phase).toBe('event')
     s.eventResolved = true
     E.enterDraw(s)
@@ -1230,5 +1237,85 @@ describe('部门资源：采购资源（供给加点 / 议价）与销售提价'
     s.salesAlloc.low = 12 // 余 8，可开
     E.setSellPriceAlloc(s, 'low', 1)
     expect(s.sellPriceAlloc.low).toBe(1)
+  })
+})
+
+describe('董事会目标层（核心模式：board 阶段恢复）', () => {
+  const noOps = (s: E.GameState) => {
+    s.eventResolved = true
+    E.enterDraw(s)
+    E.enterOperate(s)
+  }
+
+  it('开局：第 1 月季度首月董事会先行——基本目标 + 2 个挑战候选，确认后抽事件', () => {
+    const s = E.newGame(1, 'core')
+    E.startGame(s)
+    expect(s.phase).toBe('board')
+    expect(s.basicGoal).not.toBeNull()
+    expect(s.challengeOffered.length).toBe(2)
+    const c0 = s.challengeOffered[0].def.id
+    E.chooseChallenge(s, 0)
+    expect(s.challengeGoal?.def.id).toBe(c0)
+    expect(s.challengeOffered.length).toBe(0)
+    E.beginMonthEvent(s)
+    expect(s.phase).toBe('event')
+    expect(s.currentEvent).not.toBeNull()
+  })
+
+  it('季度切换：4/7/10 月再进董事会，目标重抽并跟随当季气候池', () => {
+    const s = E.newGame(7, 'core')
+    E.startGame(s)
+    const seq: number[] = []
+    for (let m = 1; m <= 12; m++) {
+      if (s.result !== 'playing') break
+      if (s.phase === 'board') {
+        seq.push(s.month)
+        if (s.month === 1) expect(s.basicGoal?.def.climate).toBe('opening')
+        else expect(s.basicGoal?.def.climate, `m${s.month} 目标随气候池`).toBe(s.climate)
+        E.chooseChallenge(s, 0)
+        E.beginMonthEvent(s)
+      }
+      noOps(s)
+      if (m % 3 === 0) s.basicGoal = { def: OPENING_BASIC[0], target: 0 } // 强制达成（无经营净盈利 0），避免出局干扰流程
+      E.settleMonth(s)
+      if (s.result !== 'playing') break
+      E.nextMonth(s)
+    }
+    expect(seq).toEqual([1, 4, 7, 10])
+  })
+
+  it('连续两个季度未达基本目标 → 出局（与完整模式同规则）', () => {
+    const s = E.newGame(11, 'core')
+    E.startGame(s)
+    for (let m = 1; m <= 12; m++) {
+      if (s.result !== 'playing') break
+      if (s.phase === 'board') E.beginMonthEvent(s)
+      noOps(s)
+      if (m % 3 === 0) s.basicGoal = { def: OPENING_BASIC[0], target: 100000 } // 强制未达成（gte）
+      E.settleMonth(s)
+      if (s.result !== 'playing') {
+        expect(m).toBe(6) // Q1、Q2 连续未达 → 第 6 月末出局
+        expect(s.lossReason).toBe('连续两个季度未达成董事会基本目标')
+        break
+      }
+      expect(s.misses).toBe(m >= 3 ? 1 : 0)
+      E.nextMonth(s)
+    }
+    expect(s.result).toBe('lost')
+    expect(s.misses).toBe(2)
+  })
+
+  it('季度末目标计分：goalPoints 累计并进总分（computeScore.goal）', () => {
+    const s = E.newGame(11, 'core')
+    E.startGame(s)
+    for (let m = 1; m <= 6; m++) {
+      if (s.phase === 'board') E.beginMonthEvent(s) // 不取挑战（challengeGoal 恒 null）
+      noOps(s)
+      if (m % 3 === 0) s.basicGoal = { def: OPENING_BASIC[0], target: 0 } // 强制达成
+      E.settleMonth(s)
+      if (m < 6) E.nextMonth(s)
+    }
+    expect(s.goalPoints).toBe(20) // Q1 +10、Q2 +10
+    expect(E.computeScore(s).goal).toBe(s.goalPoints)
   })
 })

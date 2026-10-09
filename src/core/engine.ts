@@ -132,14 +132,8 @@ export function buildEventPool(state: GameState, _rng: Rng): GameEventDef[] {
   return weights.flatMap(({ ev, w }) => Array<GameEventDef>(w).fill(ev))
 }
 
-/** 开局：完整模式第 1 月即季度首月，董事会先行（选定挑战后由 UI 抽事件）；核心模式直接进入事件阶段。 */
+/** 开局：两模式同流程——第 1 月即季度首月，董事会先行（选定挑战后由 UI 抽事件）。 */
 export function startGame(state: GameState) {
-  if (state.mode === 'core') {
-    state.boardPrompted = false
-    // 全类型事件（池已按模式过滤）：确认后 enterDraw 进入立项（抽卡）阶段，再进经营
-    beginMonthEvent(state)
-    return
-  }
   state.boardPrompted = false
   maybeDrawBoardGoals(state, new Rng(state.seed * 31 + 7))
   // 季度首月：董事会优先，事件未抽（phase='board'），由董事会确认后抽；
@@ -335,12 +329,6 @@ export function nextMonth(state: GameState) {
   const rng = Rng.fromState(state.rngState)
   advanceMonthCore(state, rng)
   state.rngState = rng.state
-  if (state.mode === 'core') {
-    state.boardPrompted = false
-    // 核心模式：事件阶段全类型（池已过滤），确认后 enterDraw 进入立项（抽卡）阶段，再进经营
-    beginMonthEvent(state)
-    return
-  }
   state.boardPrompted = false
   maybeDrawBoardGoals(state, new Rng(state.rngState + state.month * 7919))
   syncManagementCards(state)
