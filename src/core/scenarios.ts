@@ -38,7 +38,8 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.monthMods = setup.mods ?? {}
   state.cardMods = {}
   /**
-   * 事件：保留 startGame 抽出的事件（seed 固定，即场景的一部分，事件屏正常流转）。
+   * 事件：此刻（董事会未处理）事件尚未抽，董事会确认后 beginMonthEvent 抽取（seed 固定、即场景的一部分）。
+   * 下方分支为防御：若 applyCoreScenario 在事件已抽取后调用（phase='event'），
    * 即时事件修正在抽取时已并入 monthMods，上方基线重置会丢掉它，需重新并入，
    * 否则该事件本月不生效（经营阶段的 derive 读不到其修正）。
    */
