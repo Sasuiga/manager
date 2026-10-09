@@ -8,11 +8,11 @@ import {
   LOAN_TERM_MONTHS,
   IP_SETS,
   MATERIALS,
-  MGMT_CARD_UNLOCK,
   MOMENTUM_ODDS,
   NEW_MATERIALS,
   RND_PROJECTS,
   TAX_RATE,
+  TIER_COST,
   TIERS,
   overtimeGainOf,
 } from '../data/game'
@@ -167,6 +167,33 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
       }
     }
     rndResults.push({ projectId: def.id, name: def.name, progress: slot.progress, need: def.need, rate: rolledRate, success })
+  }
+  // 突破模式（R14）：进度满额的在研项目中，按进度比例取前 N 名额外掷 1 次成功率（取高）
+  const rerollN = state.monthFlags.includes('rndReroll2') ? 2 : state.monthFlags.includes('rndReroll1') ? 1 : 0
+  if (rerollN > 0) {
+    const cand = RND_PROJECTS.filter((def2) => {
+      const s2 = state.rnd[def2.id]
+      return s2?.projectId && !s2.done && s2.progress >= def2.need
+    }).sort((a, b) => state.rnd[b.id].progress / b.need - state.rnd[a.id].progress / a.need)
+    for (const def2 of cand.slice(0, rerollN)) {
+      const s2 = state.rnd[def2.id]
+      const { rate } = rndProjectOutcome(d, def2, s2.assigned)
+      if (rng.next() < rate) {
+        s2.done = true
+        s2.projectId = null
+        s2.progress = 0
+        s2.assigned = 0
+        state.flags['rndSuccessQ'] = (state.flags['rndSuccessQ'] ?? 0) + 1
+        state.flags['rndSuccessTotal'] = (state.flags['rndSuccessTotal'] ?? 0) + 1
+        applyResearchSuccess(state, def2.id)
+        const rec = rndResults.find((r) => r.projectId === def2.id)
+        if (rec) {
+          rec.success = true
+          rec.rate = rate
+        }
+        pushLog(state, 'settle', `突破模式：【${def2.name}】补掷成功，项目完成`)
+      }
+    }
   }
   state.rngState = rng.state
 
@@ -439,7 +466,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   const paidCardBy = (kind: Dept) =>
     state.playedThisMonth
       .filter((c) => CARD_BY_ID[c.defId]?.kind === kind)
-      .reduce((a, c) => a + (CARD_BY_ID[c.defId]?.cost ?? 0), 0)
+      .reduce((a, c) => a + Math.max(0, TIER_COST[CARD_BY_ID[c.defId].tier].cash + (state.monthMods.notes?.includes('打牌费用 +1w/张') ? 10 : 0)), 0)
   const cardFees = paidCardBy('make') + paidCardBy('sell') + paidCardBy('buy') + paidCardBy('ops') + paidCardBy('rnd')
 
   /**
@@ -1000,8 +1027,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
     if (Object.keys(adj).length > 0) state.monthMods = mergeMods(state.monthMods, { materials: adj })
   }
 
-  // 管理卡随人数解锁补入牌库
-  syncManagementCards(state)
+  // 管理卡已并入提案档位阶梯（随牌库入池、抽牌时按档位过滤），不再单独注入
 
   state.phase = 'event'
 }
@@ -1022,14 +1048,9 @@ function forecastOdds(idx: number): Record<string, number> {
   return out
 }
 
-/** 把新解锁的管理卡补入牌库（已拥有则跳过）。 */
-export function syncManagementCards(state: GameState) {
-  const ownedIds = new Set([...state.deck, ...state.hand, ...state.discard, ...state.playedThisMonth].map((c) => c.defId))
-  for (const [id, need] of Object.entries(MGMT_CARD_UNLOCK)) {
-    if (state.depts.ops.staff >= need && !ownedIds.has(id)) {
-      state.deck.push({ uid: `${id}#mg${state.month}-${state.deck.length}`, defId: id, empowered: false })
-    }
-  }
+/** 管理卡注入已随提案档位制移除（保留导出兼容旧引用）。 */
+export function syncManagementCards(_state: GameState): void {
+  // no-op：M1~M4 作为普通提案卡入池，由抽牌档位过滤控制出现
 }
 
 export { CLIMATE_NAMES, MATERIALS, TIER_LABEL }

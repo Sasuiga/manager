@@ -34,6 +34,7 @@ describe('行动层：AP 统一（打牌并入 AP 预算）', () => {
 
   it('卡牌现金成本：C3 压价需 2w（现金不足不可打）', () => {
     const s = inOperate(12)
+    s.depts.buy.staff = 3 // C3 为 2 档提案：采购 ≥ 3 人解锁
     s.hand.push({ uid: 'c3#1', defId: 'C3', empowered: false })
     s.cash = 19
     expect(E.canPlay(s, s.hand[0]).ok).toBe(false)

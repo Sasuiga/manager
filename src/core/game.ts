@@ -9,7 +9,6 @@ import {
   CLIMATE_ORDER,
   IP_BY_ID,
   MATERIALS,
-  MGMT_CARD_UNLOCK,
   NEW_MATERIALS,
   RND_PROJECTS,
   START_CASH,
@@ -22,7 +21,6 @@ import type {
   BalanceSheet,
   CardInstance,
   Climate,
-  Dept,
   GameState,
   GameMode,
   Momentum,
@@ -98,6 +96,7 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
     buyPriceAlloc: {},
     sellPriceAlloc: { low: 0, mid: 0, high: 0, special: 0 },
     c3PenaltyMat: null,
+    focusMat: null,
     orders: [],
     declinedOrders: [],
     acceptedOrders: [],
@@ -165,7 +164,6 @@ export function newGame(seed: number, mode: GameMode = 'full'): GameState {
   void rng
   return state
 }
-
 function climateShift(climate: Climate, matId: string): number {
   return CLIMATE_MATERIAL[climate].tierShift[matId] ?? 0
 }
@@ -174,27 +172,19 @@ function blankOdds(): Record<Climate, number> {
   return { recovery: 0, boom: 0, overheat: 0, stagflation: 0, recession: 0, depression: 0 }
 }
 
-/** 按部门人数加权构建本局牌库（§5.3）。 */
+/**
+ * 构建本局牌库（提案档位制）：
+ * 所有提案卡 1 副入池；0 档卡额外 1 副，保证开局（各部门 0~1 人、仅 0 档可用）有足够选择。
+ * 档位解锁随部门人数动态生效（抽牌时过滤），管理卡不再单独注入。
+ */
 export function buildDeck(state: GameState, rng: Rng) {
   const deck: CardInstance[] = []
   let seq = 0
   const push = (defId: string) => deck.push({ uid: `${defId}#${seq++}`, defId, empowered: false })
 
-  for (const kind of ['buy', 'make', 'sell', 'rnd'] as Dept[]) {
-    const pool = CARDS.filter((c) => c.kind === kind)
-    const core = pool.filter((c) => c.core)
-    const normal = pool.filter((c) => !c.core)
-    for (const c of core) {
-      push(c.id)
-      push(c.id)
-    }
-    for (const c of rng.sample(normal, 6)) push(c.id)
-  }
-
-  // 管理卡按管理人数解锁
-  const ops = state.depts.ops.staff
-  for (const [id, need] of Object.entries(MGMT_CARD_UNLOCK)) {
-    if (ops >= need) push(id)
+  for (const c of CARDS) {
+    push(c.id)
+    if (c.tier === 0) push(c.id)
   }
 
   // 洗牌

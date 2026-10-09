@@ -1,7 +1,6 @@
 import {
   BOMS,
   BUY_PRICE_NEGOTIATE_CAP,
-  BUY_PRICE_NEGOTIATE_COST,
   BUY_PRICE_NEGOTIATE_STAFF,
   CARD_BY_ID,
   MATERIAL_BY_ID,
@@ -17,11 +16,13 @@ import {
   overtimeGainOf,
   RND_PROJECTS,
   SALES_ORDER_COUNT,
-  SELL_PRICE_RAISE_COST,
   SELL_PRICE_RAISE_STAFF,
   STAFF,
   supplyPushCapOf,
   supplyPushCostOf,
+  TIER_COST,
+  TIER_STAFF,
+  tierUnlockedOf,
   TIERS,
 } from '../data/game'
 import { cardEffectToMods, derive, makerPerStaff, mergeMods, unitCost } from './derive'
@@ -63,13 +64,15 @@ export function hireCost(state: GameState, dept: Dept): Money {
   if (state.monthMods.notes?.includes('招聘费 +1w')) fee += 10
   if (state.monthMods.notes?.includes('招聘费 -1w')) fee = Math.max(0, fee - 10)
   if (state.monthMods.notes?.includes('招聘费 -50%')) fee = Math.round(fee / 2)
+  fee = Math.round(fee * (derive(state).hireFeeFactor ?? 1)) // M5 高效招聘 / M7 降本模式：招聘费 ×系数
   return fee
 }
 
 export function canHire(state: GameState, dept: Dept): ActionResult {
   if (state.depts[dept].staff >= 5) return fail('已达上限（5 人）')
   const freeHire = state.monthFlags.includes('extraHire') // P10 猎头：本月可额外招聘 1 人（不耗 AP）
-  if (!freeHire && state.ap < 1) return fail('AP 不足')
+  const opsFree = dept === 'ops' && state.monthFlags.includes('hireApFree') // M6 强化：本月管理招聘 1 次不耗 AP
+  if (!freeHire && !opsFree && state.ap < 1) return fail('AP 不足')
   const fee = hireCost(state, dept)
   if (state.cash < fee) return fail('现金不足')
   return OK
@@ -85,11 +88,18 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   if (state.monthFlags.includes('extraHire')) {
     // 消耗 P10 猎头的「额外 +1 不耗 AP」名额（一次）
     state.monthFlags = state.monthFlags.filter((f) => f !== 'extraHire')
+  } else if (dept === 'ops' && state.monthFlags.includes('hireApFree')) {
+    // M6 强化：消耗「管理招聘 1 次不耗 AP」名额（一次）
+    state.monthFlags = state.monthFlags.filter((f) => f !== 'hireApFree')
   } else {
     state.ap -= 1
   }
   state.depts[dept].staff += 1
   state.depts[dept].hired += 1
+  if (dept === 'ops' && state.monthFlags.includes('opsApImmediate')) {
+    // M6 即时授权：新招管理人员的 AP 上限 +1 本月即时生效（正常下月生效）
+    state.ap += 1
+  }
   state.flags[`hireMonth:${dept}:${state.month}`] = (state.flags[`hireMonth:${dept}:${state.month}`] ?? 0) + 1
   pushLog(state, 'action', `招聘 ${DEPT_NAMES[dept]}工作人员（第 ${state.depts[dept].staff} 名）`, [
     `招聘费 ${(fee / 10).toFixed(2)}w`,
@@ -173,30 +183,24 @@ export function drawCards(state: GameState) {
   const n = Math.min(d.drawN, pool.length)
   const picked: CardInstance[] = []
   for (let i = 0; i < n; i++) {
-    // 部门加权：四个业务部门按 (人数 + 1) 加权；管理卡不参与加权
-    const weights = pool.map((c) => weightOf(state, c.defId))
-    const idx = rng.weighted(weights)
-    picked.push(pool.splice(idx, 1)[0])
+    // 提案出现与部门人数分布无关（纯随机）；但档位受对应部门人数解锁：
+    // 先等概率选一档（已解锁档），再在该档牌内等概率随机（档内均匀）。
+    const eligible = pool.filter((c) => {
+      const def = CARD_BY_ID[c.defId]
+      if (!def) return false
+      return tierUnlockedOf(state.depts[def.kind].staff) >= def.tier
+    })
+    const src = eligible.length > 0 ? eligible : pool
+    const tiers = [...new Set(src.map((c) => CARD_BY_ID[c.defId].tier))]
+    const t = tiers[rng.int(tiers.length)]
+    const group = src.filter((c) => CARD_BY_ID[c.defId].tier === t)
+    const inst = group[rng.int(group.length)]
+    picked.push(pool.splice(pool.indexOf(inst), 1)[0])
   }
   state.rngState = rng.state
   state.drawn = picked
   state.deck = pool
   state.drawnSelected = []
-}
-
-function weightOf(state: GameState, defId: string): number {
-  const def = CARD_BY_ID[defId]
-  if (!def) return 1
-  if (def.kind === 'ops') return 1
-  const staff: Record<Dept, number> = {
-    ops: state.depts.ops.staff,
-    buy: state.depts.buy.staff,
-    make: state.depts.make.staff,
-    sell: state.depts.sell.staff,
-    rnd: state.depts.rnd.staff,
-  }
-  const total = staff.buy + staff.make + staff.sell + staff.rnd + 4
-  return (staff[def.kind] + 1) / total
 }
 
 export function toggleDrawn(state: GameState, uid: string) {
@@ -248,19 +252,22 @@ export function cardCtx(state: GameState, empowered: boolean, mats?: string[]): 
 }
 
 export function cardPlayCost(state: GameState, def: CardDef): Money {
-  let cost = def.cost ?? 0
+  let cost = TIER_COST[def.tier].cash
   if (state.monthMods.notes?.includes('打牌费用 +1w/张')) cost += 10
+  if (state.monthFlags.includes('cardFeeDown')) cost = Math.max(0, cost - 10) // M7 降本模式：提案费 −1w/张
   return cost
 }
 
 export function canPlay(state: GameState, card: CardInstance): ActionResult {
   const def = CARD_BY_ID[card.defId]
   if (!def) return fail('未知卡牌')
-  if (state.ap < 1) return fail('AP 不足（打牌需 1 AP）')
+  const tc = TIER_COST[def.tier]
+  if (state.ap < tc.ap) return fail(`AP 不足（本牌需 ${tc.ap} AP）`)
   if (cardPlayCost(state, def) > state.cash) return fail('现金不足')
-  if (def.minStaff) {
-    for (const [dept, min] of Object.entries(def.minStaff) as [Dept, number][]) {
-      if (state.depts[dept].staff < min) return fail(`需${DEPT_NAMES[dept]} ≥ ${min} 人`)
+  if (def.tier > 0) {
+    const need = TIER_STAFF[def.tier as 1 | 2 | 3]
+    if (state.depts[def.kind].staff < need) {
+      return fail(`需${DEPT_NAMES[def.kind]} ≥ ${need} 人（提案 ${def.tier} 档）`)
     }
   }
   return OK
@@ -278,7 +285,7 @@ export function playCard(state: GameState, uid: string, opts?: { materialId?: st
   const cost = cardPlayCost(state, def)
   state.cash -= cost
   state.miscExpense += cost
-  state.ap -= 1
+  state.ap -= TIER_COST[def.tier].ap
 
   const ctx = cardCtx(state, card.empowered)
   const effect = card.empowered && def.strong ? def.strong(ctx) : def.base(ctx)
@@ -410,16 +417,6 @@ function applyCardSpecial(state: GameState, defId: string, flags: string[], opts
         state.products[t].built = true
         revealMaterials(state, t)
         pushLog(state, 'action', `逆向工程：解锁${BOMS[t].name}配方`)
-      }
-      break
-    }
-    case 'R10': {
-      if (flags.includes('ipSlotPlus') && !flags.includes('ipProtected')) {
-        state.ipActive.push(null)
-        pushLog(state, 'action', '知识产权激活槽 +1')
-      } else if (!flags.includes('ipProtected')) {
-        // 仅强化版或研发满员时获得额外槽
-        if (flags.includes('ipSlotPlus')) state.ipActive.push(null)
       }
       break
     }
@@ -1068,6 +1065,7 @@ export function agreementSlots(state: GameState): number {
   if (state.depts.buy.staff >= 5) base = 2
   base += d.flags.includes('agreementDouble') ? 2 : 0
   if (state.ipOwned.includes('J2')) base += 1
+  base += d.agreeSlotsPlus ?? 0 // C14 供应合约 / 员工联动：协议槽 +N
   return base
 }
 
@@ -1468,7 +1466,8 @@ export function allocUsed(state: GameState): number {
 export function setBuySupplyAlloc(state: GameState, matId: string, units: number): void {
   const d = derive(state)
   const cost = supplyPushCostOf(matId)
-  const cap = supplyPushCapOf(matId)
+  let cap = supplyPushCapOf(matId)
+  if (d.supplyPushHalf) cap = Math.floor(cap / 2) // 锁价谈判（C15）：供给加点上限减半
   if (cap <= 0) {
     state.buySupplyAlloc[matId] = 0
     return
@@ -1476,14 +1475,14 @@ export function setBuySupplyAlloc(state: GameState, matId: string, units: number
   let usedOthers = 0
   for (const m of MATERIALS) {
     if (m.id === matId) continue
-    usedOthers += d.buySupplyPush[m.id] * supplyPushCostOf(m.id) + d.buyPricePush[m.id] * BUY_PRICE_NEGOTIATE_COST
+    usedOthers += d.buySupplyPush[m.id] * supplyPushCostOf(m.id) + d.buyPricePush[m.id] * d.buyNegotiateCost
   }
   const remaining = Math.max(0, d.buyResource - usedOthers)
   const maxUnits = Math.min(cap, Math.floor(remaining / cost))
   state.buySupplyAlloc[matId] = Math.max(0, Math.min(maxUnits, units))
 }
 
-/** 设置某原料本月议价档数（0 清除；需采购 ≥4；4 点/档，每料上限 2 档）。 */
+/** 设置某原料本月议价档数（0 清除；需采购 ≥4；点数/档受卡牌修正，每料上限 2 档）。 */
 export function setBuyPriceAlloc(state: GameState, matId: string, tiers: number): void {
   const d = derive(state)
   if (state.depts.buy.staff < BUY_PRICE_NEGOTIATE_STAFF) {
@@ -1493,31 +1492,36 @@ export function setBuyPriceAlloc(state: GameState, matId: string, tiers: number)
   let usedOthers = 0
   for (const m of MATERIALS) {
     if (m.id === matId) continue
-    usedOthers += d.buySupplyPush[m.id] * supplyPushCostOf(m.id) + d.buyPricePush[m.id] * BUY_PRICE_NEGOTIATE_COST
+    usedOthers += d.buySupplyPush[m.id] * supplyPushCostOf(m.id) + d.buyPricePush[m.id] * d.buyNegotiateCost
   }
-  const current = d.buyPricePush[matId] * BUY_PRICE_NEGOTIATE_COST
+  const current = d.buyPricePush[matId] * d.buyNegotiateCost
   const remaining = Math.max(0, d.buyResource - usedOthers - current)
-  const maxTiers = Math.min(BUY_PRICE_NEGOTIATE_CAP, Math.floor(remaining / BUY_PRICE_NEGOTIATE_COST))
+  const maxTiers = Math.min(BUY_PRICE_NEGOTIATE_CAP, Math.floor(remaining / d.buyNegotiateCost))
   state.buyPriceAlloc[matId] = Math.max(0, Math.min(maxTiers, tiers))
 }
 
-/** 设置某层本月提价档数（0/1；需销售 ≥4；消耗 8 销售资源，与需求加点共用池；仅现货、该层需求 −1）。 */
-export function setSellPriceAlloc(state: GameState, tier: Tier, on: 0 | 1): void {
+/** 设置某层本月提价档数（0~上限；需销售 ≥4；消耗销售资源，与需求加点共用池；仅现货、该层需求 −1；S12/S15 可降点数/升上限）。 */
+export function setSellPriceAlloc(state: GameState, tier: Tier, on: number): void {
   const d = derive(state)
   if (state.depts.sell.staff < SELL_PRICE_RAISE_STAFF) {
     if (state.sellPriceAlloc[tier]) state.sellPriceAlloc[tier] = 0
     return
   }
   let priceUsed = 0
-  for (const t of TIERS) if (t !== tier) priceUsed += (state.sellPriceAlloc[t] ?? 0) * SELL_PRICE_RAISE_COST
-  const current = (state.sellPriceAlloc[tier] ?? 0) * SELL_PRICE_RAISE_COST
-  const remaining = Math.max(0, d.salesResource - allocUsed(state) - priceUsed - current)
-  state.sellPriceAlloc[tier] = on === 1 && remaining >= SELL_PRICE_RAISE_COST ? 1 : 0
+  for (const t of TIERS) if (t !== tier) priceUsed += (state.sellPriceAlloc[t] ?? 0) * d.sellRaiseCost
+  const remaining = Math.max(0, d.salesResource - allocUsed(state) - priceUsed)
+  const maxAfford = Math.floor(remaining / d.sellRaiseCost)
+  state.sellPriceAlloc[tier] = Math.max(0, Math.min(on, d.sellRaiseCap, maxAfford))
 }
 
 /** C3 压价代价：选定本月供给 −2 的原料（null = 尚未选定，不扣）。 */
 export function setC3PenaltyMat(state: GameState, matId: string | null): void {
   state.c3PenaltyMat = matId
+}
+
+/** C13 材料聚焦：选定本月聚焦原料（供给 +6/+10、价格 −1/−2 档；null = 尚未选定，不生效）。 */
+export function setFocusMat(state: GameState, matId: string | null): void {
+  state.focusMat = matId
 }
 
 /** 当前可用于履约的产品量：核心模式包含本月排产，完整模式沿用已入库成品。 */
@@ -1729,7 +1733,7 @@ export function ipSlots(state: GameState): number {
   let n = 1
   if (s >= 3) n = 2
   if (s >= 5) n = 3
-  if (state.monthFlags.includes('ipSlotPlus')) n += 1
+  n += derive(state).ipSlotsPlus ?? 0 // R10 知识产权保护 / 员工联动：激活槽 +N
   return n
 }
 

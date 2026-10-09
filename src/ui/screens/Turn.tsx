@@ -1,8 +1,8 @@
 import { useState, Fragment } from 'react'
 import * as E from '../../core/engine'
-import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, EQUIP_CAP_PER_WORKER, IP_BY_ID, DEPT_SHORT, DEPT_NAMES, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIALS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS, LOAN_TERM_MONTHS, BUY_PRICE_NEGOTIATE_CAP, BUY_PRICE_NEGOTIATE_COST, BUY_PRICE_NEGOTIATE_STAFF, SELL_PRICE_RAISE_COST, SELL_PRICE_RAISE_STAFF, supplyPushCostOf, supplyPushCapOf, overtimeCostOf, overtimeGainOf } from '../../data/game'
+import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, EQUIP_CAP_PER_WORKER, IP_BY_ID, DEPT_SHORT, DEPT_NAMES, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIALS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS, LOAN_TERM_MONTHS, BUY_PRICE_NEGOTIATE_CAP, BUY_PRICE_NEGOTIATE_STAFF, SELL_PRICE_RAISE_STAFF, supplyPushCostOf, supplyPushCapOf, overtimeCostOf, overtimeGainOf, TIER_COST, TIER_STAFF, tierUnlockedOf } from '../../data/game'
 import type { CardCtx } from '../../data/game'
-import type { CardInstance, Dept } from '../../core/types'
+import type { CardInstance } from '../../core/types'
 import type { Tier } from '../../core/types'
 import { Icon, type IconName } from '../icons'
 import { Medallion } from '../ornaments'
@@ -264,12 +264,17 @@ function OpsPage({ g }: { g: Game }) {
                     <span className="hstack-between">
                       <span className="card-name">
                         【{DEPT_SHORT[def.kind]}】{def.name}
+                        <span className="tag" style={{ marginLeft: 6, opacity: 0.75 }}>{def.tier} 档</span>
+                        {def.tag === 'staff' ? (
+                          <span className="tag" style={{ marginLeft: 4, opacity: 0.6 }}>{def.sub === 'amp' ? '增效' : def.sub === 'mod' ? '改良' : '替换'}</span>
+                        ) : null}
                         {c.empowered ? <span className="tag gold" style={{ marginLeft: 6 }}>强化</span> : null}
                       </span>
                     </span>
                     <span className="card-desc">{descOf(c)}</span>
                     <span className="card-cost">
-                      {`1 AP`}{cost > 0 ? ` · 费用 ${wan(cost)}` : ''}{def.minStaff ? ` · 需${Object.entries(def.minStaff).map(([d2, n]) => `${DEPT_NAMES[d2 as Dept] ?? d2} ≥ ${n} 人`).join('、')}` : ''}
+                      {`${TIER_COST[def.tier].ap} AP`}{cost > 0 ? ` · 费用 ${wan(cost)}` : ''}
+                      {def.tier > 0 && tierUnlockedOf(s.depts[def.kind].staff) < def.tier ? ` · 需${DEPT_NAMES[def.kind]} ≥ ${TIER_STAFF[def.tier as 1 | 2 | 3]} 人（${def.tier} 档未解锁）` : ''}
                     </span>
                   </span>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)', justifyContent: 'center' }}>
@@ -665,9 +670,10 @@ function BuyPage({ g }: { g: Game }) {
             const units = gs.buySupplyAlloc[mdef.id] ?? 0
             const tiers = gs.buyPriceAlloc[mdef.id] ?? 0
             const sCost = supplyPushCostOf(mdef.id)
-            const sCap = supplyPushCapOf(mdef.id)
+            const sCap = d.supplyPushHalf ? Math.floor(supplyPushCapOf(mdef.id) / 2) : supplyPushCapOf(mdef.id)
             const canPrice = gs.depts.buy.staff >= BUY_PRICE_NEGOTIATE_STAFF
             const free = Math.max(0, d.buyResource - d.buyResourceUsed)
+            const pushDisabled = d.matFocusActive || sCap <= 0 // 材料聚焦（C13）：点数不再用于供给加点
             return (
               <div
                 key={mdef.id}
@@ -678,7 +684,7 @@ function BuyPage({ g }: { g: Game }) {
                   <span className="faint xs"> · {sCost} 点/件</span>
                 </span>
                 <span className="hstack" style={{ gap: 'var(--s2)', justifyContent: 'flex-end' }}>
-                  <span className="xs faint">供给</span>
+                  <span className="xs faint">供给{d.matFocusActive ? '（聚焦停用）' : ''}</span>
                   <button
                     className="btn btn-nav"
                     style={{ width: 'auto', padding: '2px var(--s3)', opacity: units <= 0 ? 0.4 : 1 }}
@@ -692,8 +698,8 @@ function BuyPage({ g }: { g: Game }) {
                   </span>
                   <button
                     className="btn btn-nav"
-                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: free < sCost || units >= sCap ? 0.4 : 1 }}
-                    disabled={free < sCost || units >= sCap}
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: pushDisabled || free < sCost || units >= sCap ? 0.4 : 1 }}
+                    disabled={pushDisabled || free < sCost || units >= sCap}
                     onClick={() => g.mutate((st) => E.setBuySupplyAlloc(st, mdef.id, (st.buySupplyAlloc[mdef.id] ?? 0) + 1))}
                   >
                     <span>+</span>
@@ -717,9 +723,9 @@ function BuyPage({ g }: { g: Game }) {
                     style={{
                       width: 'auto',
                       padding: '2px var(--s3)',
-                      opacity: !canPrice || free < BUY_PRICE_NEGOTIATE_COST || tiers >= BUY_PRICE_NEGOTIATE_CAP ? 0.4 : 1,
+                      opacity: !canPrice || free < d.buyNegotiateCost || tiers >= BUY_PRICE_NEGOTIATE_CAP ? 0.4 : 1,
                     }}
-                    disabled={!canPrice || free < BUY_PRICE_NEGOTIATE_COST || tiers >= BUY_PRICE_NEGOTIATE_CAP}
+                    disabled={!canPrice || free < d.buyNegotiateCost || tiers >= BUY_PRICE_NEGOTIATE_CAP}
                     onClick={() => g.mutate((st) => E.setBuyPriceAlloc(st, mdef.id, (st.buyPriceAlloc[mdef.id] ?? 0) + 1))}
                   >
                     <span>+</span>
@@ -730,13 +736,38 @@ function BuyPage({ g }: { g: Game }) {
           })}
         </div>
         <div className="hint">
-          本月采购资源 {d.buyResource} 点 · 已用 {d.buyResourceUsed} 点（每名采购人员 2 点；供给成本 = 件数 × 档位成本，上限 3× 基础供给
+          本月采购资源 {d.buyResource} 点 · 已用 {d.buyResourceUsed} 点（供给成本 = 件数 × 档位成本{d.supplyPushHalf ? '，上限减半（锁价谈判）' : ''}，上限 3× 基础供给
           {gs.depts.buy.staff < BUY_PRICE_NEGOTIATE_STAFF
-            ? `；议价需采购 ${BUY_PRICE_NEGOTIATE_STAFF} 人解锁（${BUY_PRICE_NEGOTIATE_COST} 点/档，每料最多 ${BUY_PRICE_NEGOTIATE_CAP} 档）`
-            : `；议价 ${BUY_PRICE_NEGOTIATE_COST} 点/档，每料最多 ${BUY_PRICE_NEGOTIATE_CAP} 档`}
+            ? `；议价需采购 ${BUY_PRICE_NEGOTIATE_STAFF} 人解锁（${d.buyNegotiateCost} 点/档，每料最多 ${BUY_PRICE_NEGOTIATE_CAP} 档）`
+            : `；议价 ${d.buyNegotiateCost} 点/档（基础 4，卡牌可降），每料最多 ${BUY_PRICE_NEGOTIATE_CAP} 档`}
           ）
         </div>
       </div>
+
+      {/* C13 材料聚焦：指定 1 种原料（供给 +6/+10、价格 −1/−2 档），本月点数不再用于供给加点 */}
+      {d.matFocusActive ? (
+        <div className="card">
+          <h3>材料聚焦（C13）</h3>
+          <div className="title-rule" />
+          <p className="hint sm">
+            指定 1 种原料：供给 {d.matFocusPlus ? '+10' : '+6'}、价格 {d.matFocusPlus ? '−2' : '−1'} 档；本月点数不再用于供给加点。
+            {gs.focusMat ? `当前选定：${mats.find((x) => x.id === gs.focusMat)?.name ?? gs.focusMat}` : '尚未选定（未选定则不生效）'}
+          </p>
+          <div className="stack-sm">
+            {mats.map((m) => (
+              <button
+                key={m.id}
+                className={`btn btn-mini ${gs.focusMat === m.id ? '' : 'btn-nav'}`}
+                style={{ width: '100%' }}
+                onClick={() => g.mutate((st) => E.setFocusMat(st, st.focusMat === m.id ? null : m.id))}
+              >
+                <span className="btn-main">{m.name}</span>
+                <span className="btn-sub">{d.matFocusPlus ? '供给 +10 · 价 −2 档' : '供给 +6 · 价 −1 档'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* C3 压价代价：选定 1 种原料，其本月供给 −2 */}
       {d.flags.includes('c3Penalty') ? (
@@ -1210,7 +1241,8 @@ function AgreementSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const gs = g.s
   const mats = E.materialViews(gs).filter((m) => m.supply > 0)
   const slots = E.agreementSlots(gs)
-  const months = gs.depts.buy.staff >= 5 ? 6 : 3
+  /** 锁定期：采购 5 人 或 供应合约（C14）本月可选 6 个月，否则 3 个月 */
+  const months = gs.depts.buy.staff >= 5 || E.derive(gs).flags.includes('agreeLock6') ? 6 : 3
 
   return (
     <Sheet
@@ -1404,7 +1436,7 @@ function MakePage({ g }: { g: Game }) {
             <span className="btn-sub">
               {gs.depts.make.staff < 3 ? '需生产 3 人解锁' : gs.plan.overtime
                 ? `已付 ${wan(gs.overtimePaid)}（${makeD.overtimeHalf ? '加班补贴减半后' : '2× 生产工资'}，选定后不可取消、费用不退）· 本月产能 +${otGain}${makeD.overtimeGainPlus ? '（加班补贴强化）' : ''}`
-                : `发生支付 ${wan(otCost)}（${makeD.overtimeHalf ? '加班补贴（K8/D7）减半后' : '2× 生产工资'}）· 本月产能 +${otGain}${makeD.overtimeHalf ? '（K8 加班补贴）' : ''}`}
+                : `发生支付 ${wan(otCost)}（${makeD.overtimeHalf ? '加班补贴（P12/D7）减半后' : '2× 生产工资'}）· 本月产能 +${otGain}${makeD.overtimeHalf ? '（加班补贴）' : ''}`}
             </span>
           </button>
           <button className="btn btn-mini" onClick={() => setEquip(true)}>
@@ -1705,8 +1737,8 @@ function SellPage({ g }: { g: Game }) {
   /** 预估单件毛利（统一口径）= 单价 − 生产单位成本（计划后库存材料成本 + 固定成本分摊）；与预算页同口径、同数值（不取整），市价与订单价按单件同口径对比。 */
   const estimatedGrossProfit = (tier: Tier, price: number) => price - unitCosts.tiers[tier].total
   const used = E.allocUsed(gs)
-  /** 提价加点消耗的销售资源点（8 点/档，销售 ≥4 人解锁） */
-  const priceRaiseUsed = TIER_ORDER.reduce((a, t) => a + (gs.sellPriceAlloc[t] ?? 0) * SELL_PRICE_RAISE_COST, 0)
+  /** 提价加点消耗的销售资源点（点数/档受卡牌修正，销售 ≥4 人解锁） */
+  const priceRaiseUsed = TIER_ORDER.reduce((a, t) => a + (gs.sellPriceAlloc[t] ?? 0) * d.sellRaiseCost, 0)
   /** 各层强制订单量（事件/卡牌产生，必交）。 */
   const forcedQtyBy: Record<string, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const o of gs.orders) {
@@ -1871,21 +1903,23 @@ function SellPage({ g }: { g: Game }) {
         </div>
         {gs.depts.sell.staff >= SELL_PRICE_RAISE_STAFF ? (
           <div style={{ marginTop: 'var(--s2)' }}>
-            <div className="section-label">提价（{SELL_PRICE_RAISE_COST} 点/档 · 仅现货 · 该层需求 −1）</div>
+            <div className="section-label">提价（{d.sellRaiseCost} 点/档 · 每层最多 {d.sellRaiseCap} 档 · 仅现货 · 该层需求 −1）</div>
             <div className="stack-sm" style={{ marginTop: 'var(--s1)' }}>
               {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
-                const on = (gs.sellPriceAlloc[t] ?? 0) > 0
+                const n = gs.sellPriceAlloc[t] ?? 0
+                const cap = d.sellRaiseCap
+                const next = n >= cap ? 0 : n + 1
                 const free = Math.max(0, d.salesResource - used - priceRaiseUsed)
                 return (
                   <div key={`raise-${t}`} className="hstack-between">
                     <span className="sm">{TIER_LABEL[t]}</span>
                     <button
-                      className={`btn btn-mini ${on ? '' : 'btn-nav'}`}
-                      style={{ width: 'auto', padding: '2px var(--s2)', opacity: !on && free < SELL_PRICE_RAISE_COST ? 0.4 : 1 }}
-                      disabled={!on && free < SELL_PRICE_RAISE_COST}
-                      onClick={() => g.mutate((st) => E.setSellPriceAlloc(st, t, on ? 0 : 1))}
+                      className={`btn btn-mini ${n > 0 ? '' : 'btn-nav'}`}
+                      style={{ width: 'auto', padding: '2px var(--s2)', opacity: n === 0 && free < d.sellRaiseCost ? 0.4 : 1 }}
+                      disabled={n === 0 && free < d.sellRaiseCost}
+                      onClick={() => g.mutate((st) => E.setSellPriceAlloc(st, t, next))}
                     >
-                      {on ? '提价 +1 档生效中（点取消）' : '提价 +1 档（现货）'}
+                      {n > 0 ? `提价 +${n} 档生效中（点取消）` : `提价 +1 档（现货${cap > 1 ? `，最多 ${cap} 档` : ''}）`}
                     </button>
                   </div>
                 )

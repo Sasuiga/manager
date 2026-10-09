@@ -70,7 +70,7 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
     for (const card of [...s.hand]) {
       if (guard++ > 8) break
       if (card.defId === 'C5') continue
-      const cost = E.CARD_BY_ID[card.defId]?.cost ?? 0
+      const cost = E.TIER_COST[E.CARD_BY_ID[card.defId].tier].cash
       if (cost > 0) continue
       if (!E.canPlay(s, card).ok) continue
       E.playCard(s, card.uid)

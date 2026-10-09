@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import * as E from '../../core/engine'
-import { CARD_BY_ID, CLIMATE_HINTS, DEPT_SHORT } from '../../data/game'
+import { CARD_BY_ID, CLIMATE_HINTS, DEPT_NAMES, DEPT_SHORT, TIER_COST, TIER_STAFF, tierUnlockedOf } from '../../data/game'
 import { Icon } from '../icons'
 import { Corners } from '../ornaments'
 import { Sheet } from '../Sheet'
@@ -140,6 +140,7 @@ export function DrawScreen({ g }: { g: Game }) {
                 const def = CARD_BY_ID[c.defId]
                 const on = s.drawnSelected.includes(c.uid)
                 const dim = full && !on
+                const locked = def.tier > 0 && tierUnlockedOf(s.depts[def.kind].staff) < def.tier
                 return (
                   <button
                     key={c.uid}
@@ -151,11 +152,20 @@ export function DrawScreen({ g }: { g: Game }) {
                       <span className="hstack-between">
                         <span className="card-name">
                           【{DEPT_SHORT[def.kind]}】{def.name}
+                          <span className="tag" style={{ marginLeft: 6, opacity: 0.75 }}>{def.tier} 档</span>
+                          {def.tag === 'staff' ? (
+                            <span className="tag" style={{ marginLeft: 4, opacity: 0.6 }}>{def.sub === 'amp' ? '增效' : def.sub === 'mod' ? '改良' : '替换'}</span>
+                          ) : null}
                           {c.empowered ? <span className="tag gold" style={{ marginLeft: 6 }}>强化</span> : null}
                         </span>
                         <span className={`tag${on ? ' gold' : ''}`}>{on ? '已选' : '选择'}</span>
                       </span>
                       <span className="card-desc">{c.empowered && def.empowered ? def.empowered : def.text}</span>
+                      <span className="card-cost">
+                        {`${TIER_COST[def.tier].ap} AP`}
+                        {def.tier > 0 && TIER_COST[def.tier].cash > 0 ? ` · ${wan(TIER_COST[def.tier].cash)}` : ''}
+                        {locked ? ` · ${DEPT_NAMES[def.kind]} ≥ ${TIER_STAFF[def.tier as 1 | 2 | 3]} 人时可用` : ''}
+                      </span>
                     </span>
                   </button>
                 )
@@ -226,6 +236,10 @@ export function DrawScreen({ g }: { g: Game }) {
                       <span className="hstack-between">
                         <span className="card-name">
                           【{DEPT_SHORT[def.kind]}】{def.name}
+                          <span className="tag" style={{ marginLeft: 6, opacity: 0.75 }}>{def.tier} 档</span>
+                          {def.tag === 'staff' ? (
+                            <span className="tag" style={{ marginLeft: 4, opacity: 0.6 }}>{def.sub === 'amp' ? '增效' : def.sub === 'mod' ? '改良' : '替换'}</span>
+                          ) : null}
                           {c.empowered ? <span className="tag gold" style={{ marginLeft: 6 }}>强化</span> : null}
                         </span>
                         {view === 'hand' && discardMode ? (
@@ -235,7 +249,9 @@ export function DrawScreen({ g }: { g: Game }) {
                       <span className="card-desc">{c.empowered && def.empowered ? def.empowered : def.text}</span>
                       {view === 'hand' && !discardMode ? (
                         <span className="card-cost">
-{E.cardPlayCost(s, def) > 0 ? `实施费用 ${wan(E.cardPlayCost(s, def))}` : '实施费用：无'}
+                          {`${TIER_COST[def.tier].ap} AP`}
+                          {def.tier > 0 && TIER_COST[def.tier].cash > 0 ? ` · ${wan(TIER_COST[def.tier].cash)}` : ''}
+                          {E.cardPlayCost(s, def) > TIER_COST[def.tier].cash ? `（本月实施费用 ${wan(E.cardPlayCost(s, def))}）` : ''}
                         </span>
                       ) : null}
                     </span>

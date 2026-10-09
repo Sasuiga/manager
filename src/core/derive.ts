@@ -30,7 +30,9 @@ import {
   SALES_PUSH_COST,
   SALES_RESOURCE_STEPS,
   SELL_PRICE_RAISE_CAP,
+  SELL_PRICE_RAISE_COST,
   SELL_PRICE_RAISE_STAFF,
+  TIER_COST,
   STAFF,
   TIERS,
   priceOf,
@@ -91,8 +93,16 @@ export interface DerivedTotals {
   salesResource: number
   /** 品牌加成（销售 5 人 +3 / J3）：计入销售资源池。 */
   brandBonus: number
-  /** 采购资源池（点，每名采购人员每月产出） */
+  /** 采购资源池（点，每名采购人员每月产出，含员工联动增效） */
   buyResource: number
+  /** 本月议价实际点数/档（基础 4，卡牌可降） */
+  buyNegotiateCost: number
+  /** 本月供给加点上限是否减半（锁价谈判 C15） */
+  supplyPushHalf: boolean
+  /** 材料聚焦生效中（C13：点数不做供给加点，指定原料供给/价格修正） */
+  matFocusActive: boolean
+  /** 材料聚焦强化版（C13 强化：供给/降档幅度更大） */
+  matFocusPlus: boolean
   /** 本月已用采购资源（点）：供给加点（件数×档位成本）+ 议价（档数×4） */
   buyResourceUsed: number
   /** 各原料生效的供给加点件数（已按 3× 基础上限截断） */
@@ -101,6 +111,32 @@ export interface DerivedTotals {
   buyPricePush: Record<string, number>
   /** 各层生效的销售提价档数（已按 1 档上限与 4 人门槛截断；仅现货，该层需求 −1） */
   sellPriceRaise: Record<Tier, number>
+  /** 本月提价实际点数/档（基础 8，卡牌可降） */
+  sellRaiseCost: number
+  /** 本月提价上限档数（基础 1，卡牌可升） */
+  sellRaiseCap: number
+  /** 员工联动（增效/替换）：本月每名工人产能修正（含负值，UI 展示用） */
+  capPerStaff: number
+  /** 员工联动（增效）：本月每人销售资源修正（UI 展示用） */
+  sellResPerStaff: number
+  /** 员工联动（增效）：本月每人采购资源修正（UI 展示用） */
+  buyResPerStaff: number
+  /** 员工联动（改良）：本月招聘费系数（1 = 不变） */
+  hireFeeFactor: number
+  /** 员工联动（增效）：本月 IP 激活槽 +N */
+  ipSlotsPlus: number
+  /** 员工联动（增效）：本月长期协议槽 +N */
+  agreeSlotsPlus: number
+  /** 销售推需求效果是否减半（S15 提价月） */
+  sellPushHalf: boolean
+  /** 员工联动（增效/替换）：本月每人研发进度修正（可为负，rndProjectOutcome 用） */
+  rndProgPerStaff: number
+  /** 员工联动（替换·突破模式）：本月研发进度总倍率 */
+  rndProgFactor: number
+  /** 员工联动（替换·求稳模式）：本月每人研发成功率加成（百分点） */
+  rndRatePerStaff: number
+  /** 员工联动（改良）：本月研发成功率封顶 +N 百分点 */
+  rndRateCapPlus: number
   /** 本月将到账的确定性订单数 */
   orderCount: number
   orderQty: number
@@ -181,6 +217,23 @@ export function mergeMods(...list: (MonthMods | undefined)[]): MonthMods {
     out.orders = (out.orders ?? 0) + (m.orders ?? 0)
     out.drawBonus = (out.drawBonus ?? 0) + (m.drawBonus ?? 0)
     out.handBonus = (out.handBonus ?? 0) + (m.handBonus ?? 0)
+    // 员工联动（加法型）
+    out.capPerStaff = (out.capPerStaff ?? 0) + (m.capPerStaff ?? 0)
+    out.sellResPerStaff = (out.sellResPerStaff ?? 0) + (m.sellResPerStaff ?? 0)
+    out.buyResPerStaff = (out.buyResPerStaff ?? 0) + (m.buyResPerStaff ?? 0)
+    out.rndProgPerStaff = (out.rndProgPerStaff ?? 0) + (m.rndProgPerStaff ?? 0)
+    out.rndRatePerStaff = (out.rndRatePerStaff ?? 0) + (m.rndRatePerStaff ?? 0)
+    out.rndRateCapPlus = (out.rndRateCapPlus ?? 0) + (m.rndRateCapPlus ?? 0)
+    out.ipSlotsPlus = (out.ipSlotsPlus ?? 0) + (m.ipSlotsPlus ?? 0)
+    out.agreeSlotsPlus = (out.agreeSlotsPlus ?? 0) + (m.agreeSlotsPlus ?? 0)
+    out.orderQtyPlus = (out.orderQtyPlus ?? 0) + (m.orderQtyPlus ?? 0)
+    // 员工联动（覆盖型：成本取最小 / 上限取最大 / 倍率取最大）
+    if (m.hireFeeFactor != null) out.hireFeeFactor = Math.min(out.hireFeeFactor ?? 1, m.hireFeeFactor)
+    if (m.negotiateCost != null) out.negotiateCost = Math.min(out.negotiateCost ?? Infinity, m.negotiateCost)
+    if (m.priceRaiseCost != null) out.priceRaiseCost = Math.min(out.priceRaiseCost ?? Infinity, m.priceRaiseCost)
+    if (m.priceRaiseCap != null) out.priceRaiseCap = Math.max(out.priceRaiseCap ?? 0, m.priceRaiseCap)
+    if (m.rndProgFactor != null) out.rndProgFactor = Math.max(out.rndProgFactor ?? 1, m.rndProgFactor)
+    if (m.equipCapFactor != null) out.equipCapFactor = Math.max(out.equipCapFactor ?? 1, m.equipCapFactor)
     /**
      * orderQty 是「覆盖」语义而非累加：只有真正声明过数量的事件/卡牌才该改变它。
      * 若写成 Math.max(out.orderQty ?? 0, m.orderQty ?? 0)，
@@ -226,7 +279,23 @@ export function cardEffectToMods(e: CardPlayEffect): { mods: MonthMods; flags: s
   if (e.salesResource) mods.salesResource = (mods.salesResource ?? 0) + e.salesResource
   if (e.orders) mods.orders = (mods.orders ?? 0) + e.orders
   if (e.orderQty) mods.orderQty = Math.max(mods.orderQty ?? 0, e.orderQty)
+  if (e.orderQtyPlus) mods.orderQtyPlus = (mods.orderQtyPlus ?? 0) + e.orderQtyPlus
+  if (e.orderPriceShift) mods.orderPriceShift = (mods.orderPriceShift ?? 0) + e.orderPriceShift
   if (e.ap) mods.ap = (mods.ap ?? 0) + e.ap
+  if (e.capPerStaff) mods.capPerStaff = (mods.capPerStaff ?? 0) + e.capPerStaff
+  if (e.sellResPerStaff) mods.sellResPerStaff = (mods.sellResPerStaff ?? 0) + e.sellResPerStaff
+  if (e.buyResPerStaff) mods.buyResPerStaff = (mods.buyResPerStaff ?? 0) + e.buyResPerStaff
+  if (e.rndProgPerStaff) mods.rndProgPerStaff = (mods.rndProgPerStaff ?? 0) + e.rndProgPerStaff
+  if (e.rndRatePerStaff) mods.rndRatePerStaff = (mods.rndRatePerStaff ?? 0) + e.rndRatePerStaff
+  if (e.rndRateCapPlus) mods.rndRateCapPlus = (mods.rndRateCapPlus ?? 0) + e.rndRateCapPlus
+  if (e.ipSlotsPlus) mods.ipSlotsPlus = (mods.ipSlotsPlus ?? 0) + e.ipSlotsPlus
+  if (e.agreeSlotsPlus) mods.agreeSlotsPlus = (mods.agreeSlotsPlus ?? 0) + e.agreeSlotsPlus
+  if (e.hireFeeFactor != null) mods.hireFeeFactor = Math.min(mods.hireFeeFactor ?? 1, e.hireFeeFactor)
+  if (e.negotiateCost != null) mods.negotiateCost = Math.min(mods.negotiateCost ?? Infinity, e.negotiateCost)
+  if (e.priceRaiseCost != null) mods.priceRaiseCost = Math.min(mods.priceRaiseCost ?? Infinity, e.priceRaiseCost)
+  if (e.priceRaiseCap != null) mods.priceRaiseCap = Math.max(mods.priceRaiseCap ?? 0, e.priceRaiseCap)
+  if (e.rndProgFactor != null) mods.rndProgFactor = Math.max(mods.rndProgFactor ?? 1, e.rndProgFactor)
+  if (e.equipCapFactor != null) mods.equipCapFactor = Math.max(mods.equipCapFactor ?? 1, e.equipCapFactor)
   if (e.priceShift) mods.price = { ...(mods.price ?? {}), ...mergeTier(e.priceShift) }
   if (e.demand) mods.demand = { ...(mods.demand ?? {}), ...mergeTier(e.demand) }
   return { mods, flags: (e.flags ?? []).filter(Boolean) }
@@ -351,18 +420,27 @@ export function derive(state: GameState): DerivedTotals {
   const spotShiftOf = (baseShift: number): number =>
     baseShift + (spotUnlimited && !spotUnlimitedPlus ? -1 : 0) + spotChoice
 
-  // ── 采购资源（点，每名采购人员每月产出；供给加点与议价共用池）──
-  const buyResource = BUY_RESOURCE_PER_STAFF * staffCount.buy
+  // ── 采购资源（点，每名采购人员每月产出；供给加点与议价共用池；员工联动增效 +N/人）──
+  const buyResource = Math.max(0, BUY_RESOURCE_PER_STAFF + (mods.buyResPerStaff ?? 0)) * staffCount.buy
+  /** 议价实际点数/档（基础 4；C12 谈判专家 / C15 锁价谈判 可降） */
+  const buyNegotiateCost = mods.negotiateCost ?? BUY_PRICE_NEGOTIATE_COST
+  /** 锁价谈判（C15）：供给加点上限减半 */
+  const supplyPushHalf = mf.includes('supplyPushHalf')
+  /** 材料聚焦（C13）：点数不再用于供给加点，指定原料供给/价格修正 */
+  const matFocusActive = mf.includes('matFocus') || mf.includes('matFocusPlus')
+  const matFocusPlus = mf.includes('matFocusPlus')
   const buySupplyPush: Record<string, number> = {}
   const buyPricePush: Record<string, number> = {}
   let buyResourceUsed = 0
   for (const m of MATERIALS) {
-    const units = Math.min(state.buySupplyAlloc[m.id] ?? 0, supplyPushCapOf(m.id))
+    let units = Math.min(state.buySupplyAlloc[m.id] ?? 0, supplyPushCapOf(m.id))
+    if (supplyPushHalf) units = Math.min(units, Math.floor(supplyPushCapOf(m.id) / 2))
+    if (matFocusActive) units = 0 // 材料聚焦：点数改投指定原料
     const tiers =
       staffCount.buy >= BUY_PRICE_NEGOTIATE_STAFF ? Math.min(state.buyPriceAlloc[m.id] ?? 0, BUY_PRICE_NEGOTIATE_CAP) : 0
     buySupplyPush[m.id] = units
     buyPricePush[m.id] = tiers
-    buyResourceUsed += units * supplyPushCostOf(m.id) + tiers * BUY_PRICE_NEGOTIATE_COST
+    buyResourceUsed += units * supplyPushCostOf(m.id) + tiers * buyNegotiateCost
   }
 
   // ── 原料（采购人员不再提供供应加成：增量供给走供应商开发/气候/事件/采购资源加点）──
@@ -373,10 +451,12 @@ export function derive(state: GameState): DerivedTotals {
     let supplyAdj = mm.supply + (mods.allSupply ?? 0)
     supplyAdj += buySupplyPush[m.id] ?? 0 // 采购资源·供给加点（玩家分配，3× 基础上限，成本按档位）
     if (state.c3PenaltyMat === m.id) supplyAdj -= 2 // C3 压价代价：选定原料供给 −2
+    if (state.focusMat === m.id && matFocusActive) supplyAdj += matFocusPlus ? 10 : 6 // C13 材料聚焦：指定原料供给 +6/+10
     const supply = Math.max(0, m.baseSupply + developed + supplyAdj + ip.matSupply)
     let shift = mm.tierShift + (mods.allTierShift ?? 0)
     // 议价（采购 ≥4 人）：4 点/档，每料上限 2 档（替代旧 4 人全局降 1 档）
     if (staffCount.buy >= BUY_PRICE_NEGOTIATE_STAFF) shift -= buyPricePush[m.id] ?? 0
+    if (state.focusMat === m.id && matFocusActive) shift -= matFocusPlus ? 2 : 1 // C13 材料聚焦：指定原料价格 −1/−2 档
     shift += ip.buyTierShift // 大宗集采（J9）：所有原料价格降 1 档（质量认证 I8 只作用于产品售价，不作用于原料）
     shift = Math.max(-3, Math.min(3, shift))
     const cap = m.baseCapacity + ip.capacityBonus
@@ -396,14 +476,22 @@ export function derive(state: GameState): DerivedTotals {
     special: Math.max(0, BASE_DEMAND.special + (mods.demand?.special ?? 0)),
   }
   const salesPush: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  /** 提价月（S15）：推需求效果减半 */
+  const sellPushHalf = mf.includes('sellPushHalf')
   for (const t of TIERS) {
     // 每层 1 点需求需 SALES_PUSH_COST[t] 个资源，不足整档的零头不计入（可投低端吸收）
-    salesPush[t] = Math.min(Math.floor(state.salesAlloc[t] / SALES_PUSH_COST[t]), SALES_PUSH_CAP[t])
+    let push = Math.min(Math.floor(state.salesAlloc[t] / SALES_PUSH_COST[t]), SALES_PUSH_CAP[t])
+    if (sellPushHalf) push = Math.floor(push / 2)
+    salesPush[t] = push
   }
   // ── 销售提价（销售 ≥4 人）：8 点销售资源/档，每层上限 1 档；仅现货（订单不受影响），该层需求 −1 ──
   const sellPriceRaise: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
+  /** 提价实际点数/档（基础 8；S12 高端定价 / S15 提价月 可降） */
+  const sellRaiseCost = mods.priceRaiseCost ?? SELL_PRICE_RAISE_COST
+  /** 提价每月上限档数（基础 1；S15 强化 2 档） */
+  const sellRaiseCap = mods.priceRaiseCap ?? SELL_PRICE_RAISE_CAP
   if (staffCount.sell >= SELL_PRICE_RAISE_STAFF) {
-    for (const t of TIERS) sellPriceRaise[t] = Math.min(state.sellPriceAlloc[t] ?? 0, SELL_PRICE_RAISE_CAP)
+    for (const t of TIERS) sellPriceRaise[t] = Math.min(state.sellPriceAlloc[t] ?? 0, sellRaiseCap)
   }
   const demand: Record<Tier, number> = { low: 0, mid: 0, high: 0, special: 0 }
   for (const t of TIERS) {
@@ -432,8 +520,8 @@ export function derive(state: GameState): DerivedTotals {
   for (const t of TIERS) spotShift[t] = spotShiftOf(priceShift[t]) + sellPriceRaise[t]
 
   // ── 产能：老板自产 + 工人数 × 每人产能（基础 3，2 人/4 人解锁各 +1，设备产线合计 cap + IP 设备产能） ──
-  const equipmentCapBonus = equipmentCapTotal(state.equipment) + state.equipment.length * ip.equipCapacity
-  const capacity = Math.max(0, OWNER_CAPACITY + staffCount.make * makerPerStaff(staffCount.make, equipmentCapBonus) + (mods.capacity ?? 0))
+  const equipmentCapBonus = equipmentCapTotal(state.equipment) * (mods.equipCapFactor ?? 1) + state.equipment.length * ip.equipCapacity
+  const capacity = Math.max(0, OWNER_CAPACITY + staffCount.make * (makerPerStaff(staffCount.make, equipmentCapBonus) + (mods.capPerStaff ?? 0)) + (mods.capacity ?? 0))
 
   // ── 薪酬 ──
   const salaryPer: Record<Dept, number> = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
@@ -454,9 +542,15 @@ export function derive(state: GameState): DerivedTotals {
   // ── 销售 ──
   // 品牌加成计入资源池（新模型下品牌 = 更多推力）
   const brandBonus = (staffCount.sell >= 5 ? 3 : 0) + ip.brandBonus
-  const salesResource = BASE_SALES_RESOURCE + salesResourceFromStaff(Math.min(5, staffCount.sell)) + ip.salesResource + brandBonus + (mods.salesResource ?? 0)
+  const salesResource =
+    BASE_SALES_RESOURCE +
+    salesResourceFromStaff(Math.min(5, staffCount.sell)) +
+    Math.min(5, staffCount.sell) * (mods.sellResPerStaff ?? 0) +
+    ip.salesResource +
+    brandBonus +
+    (mods.salesResource ?? 0)
   const orderCount = SALES_ORDER_COUNT[Math.min(5, staffCount.sell)] + ip.orderBonus + (mods.orders ?? 0)
-  const orderQty = mods.orderQty ?? 10
+  const orderQty = (mods.orderQty ?? 10) + (mods.orderQtyPlus ?? 0)
   const orderPriceShift = 1 + ip.orderPriceShift + (mods.orderPriceShift ?? 0)
 
   // ── 采购 ──
@@ -476,7 +570,7 @@ export function derive(state: GameState): DerivedTotals {
   const rndCostTotal = rndCost * rndActiveCount
 
   // ── 运营 ──
-  const apMax = BASE_AP + Math.max(0, staffCount.ops - 1) + (mods.ap ?? 0) + (state.monthFlags.includes('m2solo') ? 1 : 0)
+  const apMax = (mf.includes('opsApOff') ? BASE_AP : BASE_AP + Math.max(0, staffCount.ops - 1)) + (mods.ap ?? 0) + (state.monthFlags.includes('m2solo') ? 1 : 0)
   let handMax = BASE_HAND
   if (staffCount.ops >= 3) handMax += 1
   if (staffCount.ops >= 5) handMax += 1
@@ -504,11 +598,13 @@ export function derive(state: GameState): DerivedTotals {
     sell: state.flags[`hireMonth:sell:${state.month}`] ?? 0,
     rnd: state.flags[`hireMonth:rnd:${state.month}`] ?? 0,
   }
-  /** 本月提案实施费用，按部门分组 */
+  /** 本月提案实施费用，按部门分组（档位对价 + 事件/卡牌修正，与实付一致） */
   const proposalCostBy: Record<Dept, number> = { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 }
+  const cardFeeAdj =
+    (state.monthMods.notes?.includes('打牌费用 +1w/张') ? 10 : 0) - (state.monthFlags.includes('cardFeeDown') ? 10 : 0)
   for (const c of state.playedThisMonth) {
     const def = CARD_BY_ID[c.defId]
-    if (def?.kind) proposalCostBy[def.kind] += def.cost ?? 0
+    if (def?.kind) proposalCostBy[def.kind] += Math.max(0, TIER_COST[def.tier].cash + cardFeeAdj)
   }
   const deptLedger: Record<Dept, { item: string; debit: string; debitAmt: number; credit: string; creditAmt: number; detail?: string[] }[]> = {
     ops: [], buy: [], make: [], sell: [], rnd: [],
@@ -619,10 +715,16 @@ export function derive(state: GameState): DerivedTotals {
     salesResource,
     brandBonus,
     buyResource,
+    buyNegotiateCost,
+    supplyPushHalf,
+    matFocusActive,
+    matFocusPlus,
     buyResourceUsed,
     buySupplyPush,
     buyPricePush,
     sellPriceRaise,
+    sellRaiseCost,
+    sellRaiseCap,
     orderCount: Math.max(0, orderCount),
     orderQty,
     orderPriceShift,
@@ -630,6 +732,17 @@ export function derive(state: GameState): DerivedTotals {
     buyTierShift: mods.allTierShift ?? 0,
     rndProgress,
     rndRate,
+    rndProgPerStaff: mods.rndProgPerStaff ?? 0,
+    rndProgFactor: mods.rndProgFactor ?? 1,
+    rndRatePerStaff: mods.rndRatePerStaff ?? 0,
+    rndRateCapPlus: mods.rndRateCapPlus ?? 0,
+    capPerStaff: mods.capPerStaff ?? 0,
+    sellResPerStaff: mods.sellResPerStaff ?? 0,
+    buyResPerStaff: mods.buyResPerStaff ?? 0,
+    hireFeeFactor: mods.hireFeeFactor ?? 1,
+    ipSlotsPlus: mods.ipSlotsPlus ?? 0,
+    agreeSlotsPlus: mods.agreeSlotsPlus ?? 0,
+    sellPushHalf,
     rndActiveCount,
     rndCost,
     rndCostTotal,
@@ -736,8 +849,12 @@ export function rndProjectOutcome(
   def: ResearchProjectDef,
   assigned: number,
 ): { gain: number; rate: number } {
-  const gain = assigned * RND_PROGRESS_PER_WORKER + (d.rndProgress ?? 0)
-  const cap = def.rateCap ?? RND_RATE_CAP / 100
-  const rate = Math.max(0.05, Math.min(cap, def.rate + (assigned * RND_RATE_PER_WORKER + (d.rndRate ?? 0)) / 100))
+  const gain =
+    (assigned * RND_PROGRESS_PER_WORKER + assigned * (d.rndProgPerStaff ?? 0) + (d.rndProgress ?? 0)) * (d.rndProgFactor ?? 1)
+  const cap = Math.min(1, (def.rateCap ?? RND_RATE_CAP / 100) + (d.rndRateCapPlus ?? 0) / 100)
+  const rate = Math.max(
+    0.05,
+    Math.min(cap, def.rate + (assigned * RND_RATE_PER_WORKER + assigned * (d.rndRatePerStaff ?? 0) + (d.rndRate ?? 0)) / 100),
+  )
   return { gain, rate }
 }

@@ -87,7 +87,7 @@ describe('规则卡（K 系列：改本月规则、制造取舍）', () => {
     expect(s.cash - cash).toBe(50) // 基础招聘费（首档 5w）× 100%
   })
 
-  it('K8 加班补贴：加班费减半', () => {
+  it('加班补贴（P12，原 K8）：加班费减半', () => {
     const s = core(15)
     s.depts.make.staff = 3
     const d0 = E.derive(s)
@@ -104,10 +104,11 @@ describe('规则卡（K 系列：改本月规则、制造取舍）', () => {
     expect(E.derive(s).climateOddsVisible).toBe(true)
   })
 
-  it('牌库含规则卡（40 张业务牌，非核心池随机入池）', () => {
+  it('牌库含规则卡（全提案卡 1 副入池 + 0 档卡 2 副）', () => {
     const s = newGame(20, 'core')
     E.buildDeck(s, new Rng(20))
-    expect(s.deck.length).toBe(40)
+    // 73 张提案卡各 1 副；0 档卡 12 张各再 1 副 → 85
+    expect(s.deck.length).toBe(85)
     for (const id of ['K1', 'K5']) expect(CARD_BY_ID[id]).toBeTruthy()
   })
 

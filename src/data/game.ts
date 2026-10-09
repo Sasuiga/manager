@@ -209,10 +209,10 @@ export const STAFF: Record<Dept, StaffDef> = {
     salary: 10,
     base: ['AP 上限 +1（下月生效）'],
     unlocks: [
-      { at: 2, text: '抽卡可选上限 3 → 4' },
-      { at: 3, text: '手牌上限 5 → 6' },
-      { at: 4, text: '每月可打牌数 2 → 3，并强化卡牌效果' },
-      { at: 5, text: '抽卡可选上限 4 → 5，手牌上限 6 → 7', achievement: '金牌高管' },
+      { at: 2, text: '提案 1 档解锁；抽卡可选上限 3 → 4' },
+      { at: 3, text: '手牌上限 5 → 6；提案 2 档解锁' },
+      { at: 4, text: '（无新增解锁；提案 3 档需 5 人）' },
+      { at: 5, text: '提案 3 档解锁；抽卡可选上限 4 → 5，手牌上限 6 → 7', achievement: '金牌高管' },
     ],
   },
   buy: {
@@ -222,10 +222,10 @@ export const STAFF: Record<Dept, StaffDef> = {
     salary: 10,
     base: ['每月采购资源 +2（供给加点 / 议价共用点数）'],
     unlocks: [
-      { at: 2, text: '贸易商每月随机供应品种 +1' },
-      { at: 3, text: '解锁长期供货协议' },
-      { at: 4, text: '解锁议价：4 点 = 1 种原料价格降 1 档（每料最多 2 档），并强化卡牌效果' },
-      { at: 5, text: '可同时签 2 份长期协议，且锁定期可选 6 个月', achievement: '供应链联盟' },
+      { at: 2, text: '贸易商每月随机供应品种 +1；提案 1 档解锁' },
+      { at: 3, text: '解锁长期供货协议；提案 2 档解锁' },
+      { at: 4, text: '解锁议价：4 点 = 1 种原料价格降 1 档（每料最多 2 档）' },
+      { at: 5, text: '可同时签 2 份长期协议，且锁定期可选 6 个月；提案 3 档解锁', achievement: '供应链联盟' },
     ],
   },
   make: {
@@ -235,10 +235,10 @@ export const STAFF: Record<Dept, StaffDef> = {
     salary: 8,
     base: ['每人产能 +3'],
     unlocks: [
-      { at: 2, text: '每名工人产能 +1' },
-      { at: 3, text: '解锁加班：付 2× 生产工资，当月产能 +1× 员工产能' },
-      { at: 4, text: '每名工人产能 +1，并强化卡牌效果' },
-      { at: 5, text: '每生产 5 件额外入库 1 件', achievement: '流水线' },
+      { at: 2, text: '每名工人产能 +1；提案 1 档解锁' },
+      { at: 3, text: '解锁加班：付 2× 生产工资，当月产能 +1× 员工产能；提案 2 档解锁' },
+      { at: 4, text: '每名工人产能 +1' },
+      { at: 5, text: '每生产 5 件额外入库 1 件；提案 3 档解锁', achievement: '流水线' },
     ],
   },
   sell: {
@@ -248,10 +248,10 @@ export const STAFF: Record<Dept, StaffDef> = {
     salary: 15,
     base: ['每人销售资源 +4'],
     unlocks: [
-      { at: 2, text: '每月获得 1 个确定性订单' },
-      { at: 3, text: '每人销售资源 +4 → +6' },
+      { at: 2, text: '每月获得 1 个确定性订单；提案 1 档解锁' },
+      { at: 3, text: '每人销售资源 +4 → +6；提案 2 档解锁' },
       { at: 4, text: '每月获得 2 个确定性订单；解锁提价：8 点销售资源 = 某层价格升 1 档（仅现货、该层需求 −1）' },
-      { at: 5, text: '每人 +6 → +8，并实现成本转移', achievement: '品牌' },
+      { at: 5, text: '每人 +6 → +8，并实现成本转移；提案 3 档解锁', achievement: '品牌' },
     ],
   },
   rnd: {
@@ -261,10 +261,10 @@ export const STAFF: Record<Dept, StaffDef> = {
     salary: 20,
     base: ['每人 +5 研发进度/月，+5% 成功率（封顶 90%）'],
     unlocks: [
-      { at: 2, text: '（无新增解锁）' },
-      { at: 3, text: '可同时激活 2 个知识产权' },
+      { at: 2, text: '提案 1 档解锁' },
+      { at: 3, text: '可同时激活 2 个知识产权；提案 2 档解锁' },
       { at: 4, text: '（无新增解锁）' },
-      { at: 5, text: '可同时激活 3 个知识产权', achievement: '专利壁垒' },
+      { at: 5, text: '可同时激活 3 个知识产权；提案 3 档解锁', achievement: '专利壁垒' },
     ],
   },
 }
@@ -815,20 +815,41 @@ export interface CardDef {
   core?: boolean
   /** 规则卡：改本月规则/制造取舍（K 系列） */
   rule?: boolean
+  /**
+   * 强度档位 0~3：档位越高效果越强，对价（AP + 现金）越高。
+   * 档位解锁与对应部门人数挂钩：2 人 → 1 档，3 人 → 2 档，5 人 → 3 档（0~1 人仅 0 档）。
+   */
+  tier: 0 | 1 | 2 | 3
+  /** 员工联动卡标记（效果作用于员工机制） */
+  tag?: 'staff'
+  /** 员工联动子类：amp = 增效（基础效果 +N）/ mod = 改良（改参数）/ swap = 替换（换形态） */
+  sub?: 'amp' | 'mod' | 'swap'
   /** 卡片效果正文 */
   text: string
   /** 门槛条件文字 */
   cond?: string
-  /** 打出费用（角） */
-  cost?: Money
-  /** 打出所需的最低部门人员数（key 为部门，value 为人数） */
-  minStaff?: Partial<Record<Dept, number>>
   /** 强化后的效果说明 */
   empowered?: string
   /** 基础效果 */
   base: (ctx: CardCtx) => CardPlayEffect
   /** 强化效果（若不填则沿用 base） */
   strong?: (ctx: CardCtx) => CardPlayEffect
+}
+
+/** 提案档位解锁人数（对应部门）：1 档需 2 人，2 档需 3 人，3 档需 5 人；0 档恒可用。 */
+export const TIER_STAFF: Record<1 | 2 | 3, number> = { 1: 2, 2: 3, 3: 5 }
+
+/** 提案档位对价：档位越高，AP + 现金对价越高。 */
+export const TIER_COST: Record<0 | 1 | 2 | 3, { ap: number; cash: Money }> = {
+  0: { ap: 1, cash: 0 },
+  1: { ap: 1, cash: 10 },
+  2: { ap: 2, cash: 20 },
+  3: { ap: 2, cash: 40 },
+}
+
+/** 部门人数 → 已解锁提案档位。 */
+export function tierUnlockedOf(staff: number): 0 | 1 | 2 | 3 {
+  return staff >= TIER_STAFF[3] ? 3 : staff >= TIER_STAFF[2] ? 2 : staff >= TIER_STAFF[1] ? 1 : 0
 }
 
 /** 打出卡牌时可读取的上下文：部门人数、库存与卡牌状态，用于处理「若 X ≥ N 人/库存 ≥ N」的门槛。 */
@@ -845,120 +866,159 @@ const S = (ctx: CardCtx, d: Dept) => ctx.staff[d]
 export const CARDS: CardDef[] = [
   // ── 采购 ──────────────────────────────────────────────
   {
-    id: 'C1', name: '批量采购', kind: 'buy', core: true,
+    id: 'C1', name: '批量采购', kind: 'buy', core: true, tier: 1,
     text: '本月采购价格降 1 档；自第 2 个已选采购档起再降 1 档。',
     empowered: '本月采购价格降 2 档；自第 2 个已选采购档起再降 1 档。',
     base: () => ({ buyTierShift: -1, flags: ['buyTierExtra'] }),
     strong: () => ({ buyTierShift: -2, flags: ['buyTierExtra'] }),
   },
   {
-    id: 'C2', name: '囤货', kind: 'buy', cost: 20,
-    text: '支付 2w，本月每类原料供给 +4，且本月采购不占仓容上限。',
-    empowered: '支付 2w，本月每类原料供给 +8，且本月采购不占仓容上限。',
+    id: 'C2', name: '囤货', kind: 'buy', tier: 2,
+    text: '本月每类原料供给 +4，且本月采购不占仓容上限。',
+    empowered: '本月每类原料供给 +8，且本月采购不占仓容上限。',
     base: (c) => ({ buySupply: c.empowered ? 8 : 4, flags: ['noCap'] }),
   },
   {
-    id: 'C3', name: '压价', kind: 'buy', cost: 20,
-    text: '支付 2w，本月采购价格降 2 档；选定 1 种原料，其本月供给 −2（采购页选惩罚对象）。',
+    id: 'C3', name: '压价', kind: 'buy', tier: 2,
+    text: '本月采购价格降 2 档；选定 1 种原料，其本月供给 −2（采购页选惩罚对象）。',
     cond: '选定 1 种惩罚原料（供给 −2）',
-    empowered: '支付 2w，本月采购价格降 3 档，且无供给惩罚。',
+    empowered: '本月采购价格降 3 档，且无供给惩罚。',
     base: () => ({ buyTierShift: -2, flags: ['c3Penalty'] }),
     strong: () => ({ buyTierShift: -3 }),
   },
   {
-    id: 'C4', name: '贸易商', kind: 'buy',
+    id: 'C4', name: '贸易商', kind: 'buy', tier: 0,
     text: '本月获得 1 次额外贸易商购买机会（小批、价格 +1 档，不占档数）。',
     empowered: '本月获得 2 次额外贸易商购买机会（小批、价格 +1 档，不占档数）。',
     base: () => ({ flags: ['trader'] }),
   },
   {
-    id: 'C5', name: '长期协议', kind: 'buy', core: true, cost: 20, minStaff: { buy: 3 },
-    text: '需采购 ≥ 3 人。支付 2w，立即签订一份包材 3 个月长期协议（每月中批供应，不占部门协议名额）。若采购 ≥ 4 人，锁定期改为 6 个月。',
+    id: 'C5', name: '长期协议', kind: 'buy', core: true, tier: 2,
+    text: '需采购 ≥ 3 人。立即签订一份包材 3 个月长期协议（每月中批供应，不占部门协议名额）。若采购 ≥ 4 人，锁定期改为 6 个月。',
     cond: '采购 ≥ 4 人：锁定期 6 个月',
-    empowered: '需采购 ≥ 3 人。支付 2w，立即签订两份包材长期协议，各锁定 6 个月，均不占部门协议名额。',
+    empowered: '需采购 ≥ 3 人。立即签订两份包材长期协议，各锁定 6 个月，均不占部门协议名额。',
     base: (c) => ({ flags: [S(c, 'buy') >= 4 ? 'agreement2x6' : 'agreement2x3'] }),
     strong: () => ({ flags: ['agreement2x6', 'agreementDouble'] }),
   },
   {
-    id: 'C6', name: '紧急采购', kind: 'buy',
+    id: 'C6', name: '紧急采购', kind: 'buy', tier: 0,
     text: '本月每类原料 1 次紧急采购机会：小批、价格 +2 档，不占档数（采购页使用）。',
     empowered: '本月每类原料 1 次紧急采购机会：中批、价格 +1 档，不占档数（采购页使用）。',
     base: (c) => ({ flags: [c.empowered ? 'urgentMid' : 'urgent'] }),
   },
   {
-    id: 'C7', name: '原料替换', kind: 'buy',
+    id: 'C7', name: '原料替换', kind: 'buy', tier: 0,
     text: '按账面单价出售 5 单位任一原料，按当前价格购入 5 单位另一种原料，不占档数（采购页使用）。',
     empowered: '按账面单价出售 5 单位任一原料，按当前价格购入 7 单位另一种原料，不占档数（采购页使用）。',
     base: (c) => ({ flags: [c.empowered ? 'swapPlus' : 'swap'] }),
   },
   {
-    id: 'C8', name: '供应商关系', kind: 'buy', cost: 20,
-    text: '支付 2w，本月采购价格降 1 档；若上月也打出过此牌，降 2 档。',
-    empowered: '支付 2w，本月采购价格降 2 档；若上月也打出过此牌，降 3 档。',
+    id: 'C8', name: '供应商关系', kind: 'buy', tier: 1,
+    text: '本月采购价格降 1 档；若上月也打出过此牌，降 2 档。',
+    empowered: '本月采购价格降 2 档；若上月也打出过此牌，降 3 档。',
     base: (c) => ({ buyTierShift: c.empowered ? -2 : -1, flags: ['supplierRelation'] }),
   },
   {
-    id: 'C9', name: '期货', kind: 'buy', cost: 30,
-    text: '支付 3w，锁定下月档位最高原料的价格（该原料下月档位上涨时，仍按本月锁定档位采购）。',
-    empowered: '支付 3w，锁定下月全部原料价格（档位上涨时按本月锁定档位采购）。',
+    id: 'C9', name: '期货', kind: 'buy', tier: 2,
+    text: '锁定下月档位最高原料的价格（该原料下月档位上涨时，仍按本月锁定档位采购）。',
+    empowered: '锁定下月全部原料价格（档位上涨时按本月锁定档位采购）。',
     base: (c) => ({ flags: [c.empowered ? 'futuresAll' : 'futures'] }),
   },
   {
-    id: 'C10', name: '清仓', kind: 'buy', cost: 20, minStaff: { buy: 2 },
+    id: 'C10', name: '清仓', kind: 'buy', tier: 1,
     text: '需采购 ≥ 2 人。本月每类原料 1 次清仓采购机会：小批、价格 -2 档，不占档数（采购页使用）。',
     empowered: '需采购 ≥ 2 人。本月每类原料 1 次清仓采购机会：中批、价格 -2 档，不占档数（采购页使用）。',
     base: (c) => ({ flags: [c.empowered ? 'clearanceMid' : 'clearance'] }),
   },
+  // ── 采购·员工联动（增效 / 改良 / 替换） ─────────────────
+  {
+    id: 'C11', name: '采购培训', kind: 'buy', tier: 1, tag: 'staff', sub: 'amp',
+    text: '本月每名采购人员资源 +1（供给加点 / 议价点数）。',
+    empowered: '本月每名采购人员资源 +2。',
+    base: () => ({ buyResPerStaff: 1 }),
+    strong: () => ({ buyResPerStaff: 2 }),
+  },
+  {
+    id: 'C12', name: '谈判专家', kind: 'buy', tier: 2, tag: 'staff', sub: 'mod',
+    text: '本月议价 4 点/档 → 3 点/档（需议价已解锁，即采购 ≥ 4 人）。',
+    cond: '需议价已解锁',
+    empowered: '本月议价 4 点/档 → 2 点/档。',
+    base: () => ({ negotiateCost: 3 }),
+    strong: () => ({ negotiateCost: 2 }),
+  },
+  {
+    id: 'C13', name: '材料聚焦', kind: 'buy', tier: 2, tag: 'staff', sub: 'swap',
+    text: '本月采购资源点数不再用于供给加点，改为指定 1 种原料（采购页选择）：该原料供给 +6、价格 −1 档。',
+    cond: '需采购页选定聚焦原料',
+    empowered: '该原料供给 +10、价格 −2 档。',
+    base: () => ({ flags: ['matFocus'] }),
+    strong: () => ({ flags: ['matFocusPlus'] }),
+  },
+  {
+    id: 'C14', name: '供应合约', kind: 'buy', tier: 3, tag: 'staff', sub: 'amp',
+    text: '本月长期协议槽 +1，且锁定期可选 6 个月（需采购 3 人解锁协议）。',
+    empowered: '本月长期协议槽 +2，且锁定期可选 6 个月。',
+    base: () => ({ agreeSlotsPlus: 1, flags: ['agreeLock6'] }),
+    strong: () => ({ agreeSlotsPlus: 2, flags: ['agreeLock6'] }),
+  },
+  {
+    id: 'C15', name: '锁价谈判', kind: 'buy', tier: 3, tag: 'staff', sub: 'swap',
+    text: '本月资源点数全部计入议价：议价 4 点/档 → 2 点/档，且供给加点上限减半（需议价已解锁）。',
+    cond: '需议价已解锁',
+    empowered: '议价 4 点/档 → 1 点/档，供给加点上限不变。',
+    base: () => ({ negotiateCost: 2, flags: ['supplyPushHalf'] }),
+    strong: () => ({ negotiateCost: 1 }),
+  },
 
   // ── 生产 ──────────────────────────────────────────────
   {
-    id: 'P1', name: '满负荷', kind: 'make', core: true,
+    id: 'P1', name: '满负荷', kind: 'make', core: true, tier: 0,
     text: '本月产能 +3。',
     empowered: '本月产能 +6。',
     base: () => ({ capacity: 3 }),
     strong: () => ({ capacity: 6 }),
   },
   {
-    id: 'P2', name: '质量管控', kind: 'make', core: true,
+    id: 'P2', name: '质量管控', kind: 'make', core: true, tier: 0,
     text: '本月产能 +2。',
     empowered: '本月产能 +4，且本月生产成本 -10%。',
     base: (c) => ({ capacity: c.empowered ? 4 : 2, costFactor: c.empowered ? 0.9 : 1 }),
   },
   {
-    id: 'P3', name: '加班', kind: 'make', cost: 20,
-    text: '支付 2w，本月产能 +4，每名员工薪酬 +0.5w（全部门）。',
-    empowered: '支付 2w，本月产能 +7，每名员工薪酬 +1w（全部门）。',
+    id: 'P3', name: '加班', kind: 'make', tier: 1,
+    text: '本月产能 +4，每名员工薪酬 +0.5w（全部门）。',
+    empowered: '本月产能 +7，每名员工薪酬 +1w（全部门）。',
     base: (c) => ({ capacity: c.empowered ? 7 : 4, salary: c.empowered ? 10 : 5 }),
   },
   {
-    id: 'P4', name: '设备维护', kind: 'make',
+    id: 'P4', name: '设备维护', kind: 'make', tier: 0,
     text: '本月产能 +2。',
     empowered: '本月产能 +4。',
     base: (c) => ({ capacity: c.empowered ? 4 : 2 }),
   },
   {
-    id: 'P5', name: '工人培训', kind: 'make', cost: 20, minStaff: { make: 3 },
-    text: '需生产 ≥ 3 人。支付 2w，本月每名工人产能 +1。若生产 ≥ 4 人，改为 +2。',
+    id: 'P5', name: '工人培训', kind: 'make', tier: 2,
+    text: '需生产 ≥ 3 人。本月每名工人产能 +1。若生产 ≥ 4 人，改为 +2。',
     cond: '生产 ≥ 4 人：每人 +2',
     empowered: '需生产 ≥ 3 人。支付 2w，本月每名工人产能 +2。若生产 ≥ 4 人，改为 +3。',
     base: (c) => ({ capacity: (S(c, 'make') >= 4 ? 2 : 1) * Math.max(1, S(c, 'make')) }),
     strong: (c) => ({ capacity: (S(c, 'make') >= 4 ? 3 : 2) * Math.max(1, S(c, 'make')) }),
   },
   {
-    id: 'P6', name: '批量生产', kind: 'make',
+    id: 'P6', name: '批量生产', kind: 'make', tier: 1,
     text: '本月产能 +2。若生产 ≥ 5 人，+4。',
     cond: '生产 ≥ 5 人：+4',
     empowered: '本月产能 +4。若生产 ≥ 5 人，+6。',
     base: (c) => ({ capacity: S(c, 'make') >= 5 ? (c.empowered ? 6 : 4) : c.empowered ? 4 : 2 }),
   },
   {
-    id: 'P7', name: '精益生产', kind: 'make', cost: 20,
+    id: 'P7', name: '精益生产', kind: 'make', tier: 2,
     text: '支付 2w，本月产能 +2，且生产成本 -10%。',
     empowered: '支付 2w，本月产能 +3，且生产成本 -20%。',
     base: (c) => ({ capacity: c.empowered ? 3 : 2, costFactor: c.empowered ? 0.8 : 0.9 }),
   },
   {
-    id: 'P8', name: '轮班制', kind: 'make',
+    id: 'P8', name: '轮班制', kind: 'make', tier: 1,
     text: '本月产能 +2，每名员工薪酬 +0.5w（全部门）。若生产 ≥ 3 人，无薪酬惩罚。',
     cond: '生产 ≥ 3 人：无惩罚',
     empowered: '本月产能 +4，无薪酬惩罚。',
@@ -966,22 +1026,60 @@ export const CARDS: CardDef[] = [
     strong: () => ({ capacity: 4 }),
   },
   {
-    id: 'P9', name: '自动化', kind: 'make',
+    id: 'P9', name: '自动化', kind: 'make', tier: 1,
     text: '本月产能 +2。若研发 ≥ 3 人，改为 +4。',
     cond: '研发 ≥ 3 人：+4',
     empowered: '本月产能 +4。若研发 ≥ 3 人，改为 +6。',
     base: (c) => ({ capacity: S(c, 'rnd') >= 3 ? (c.empowered ? 6 : 4) : c.empowered ? 4 : 2 }),
   },
   {
-    id: 'P10', name: '库存清理', kind: 'make', cost: 20,
+    id: 'P10', name: '库存清理', kind: 'make', tier: 2,
     text: '支付 2w，月末结算时将成品库存最多的产品按账面单价出售 5 件（不计损益，只把存货换成现金）；总库存 ≥ 10 件时出售 10 件。',
     empowered: '支付 2w，月末结算时按账面单价出售 10 件；总库存 ≥ 15 件时出售 15 件。',
     base: (c) => ({ flags: [c.empowered ? 'clearStock15' : 'clearStock'] }),
   },
+  // ── 生产·员工联动（增效 / 改良 / 替换） ─────────────────
+  {
+    id: 'P11', name: '产能提升', kind: 'make', tier: 1, tag: 'staff', sub: 'amp',
+    text: '本月每名工人产能 +1。',
+    empowered: '本月每名工人产能 +2。',
+    base: () => ({ capPerStaff: 1 }),
+    strong: () => ({ capPerStaff: 2 }),
+  },
+  {
+    id: 'P12', name: '加班补贴', kind: 'make', tier: 2, tag: 'staff', sub: 'mod',
+    text: '本月加班费减半（2× 生产工资 → 1×，需加班已解锁，即生产 ≥ 3 人）。',
+    cond: '需加班已解锁',
+    empowered: '本月加班费减半，且加班产能 +1× 员工产能。',
+    base: () => ({ flags: ['overtimeHalf'] }),
+    strong: () => ({ flags: ['overtimeHalfPlus'] }),
+  },
+  {
+    id: 'P13', name: '质效模式', kind: 'make', tier: 2, tag: 'staff', sub: 'swap',
+    text: '本月每名工人产能 −1，但生产成本 −20%（以产出换效率）。',
+    empowered: '本月每名工人产能 −1，但生产成本 −30%。',
+    base: () => ({ capPerStaff: -1, costFactor: 0.8 }),
+    strong: () => ({ capPerStaff: -1, costFactor: 0.7 }),
+  },
+  {
+    id: 'P14', name: '全员维护', kind: 'make', tier: 3, tag: 'staff', sub: 'amp',
+    text: '本月每名工人产能 +2，且加班费减半（需加班已解锁）。',
+    empowered: '本月每名工人产能 +3，加班费减半且加班产能 +1× 员工产能。',
+    base: () => ({ capPerStaff: 2, flags: ['overtimeHalf'] }),
+    strong: () => ({ capPerStaff: 3, flags: ['overtimeHalfPlus'] }),
+  },
+  {
+    id: 'P15', name: '设备模式', kind: 'make', tier: 3, tag: 'staff', sub: 'swap',
+    text: '本月设备产能加成 ×2（每台设备由 +4/人 → +8/人），每名工人基础产能 −1（无设备时净亏，慎用）。',
+    cond: '持有设备时效果显著',
+    empowered: '本月设备产能加成 ×2，每名工人基础产能不减，且加班费减半。',
+    base: () => ({ equipCapFactor: 2, capPerStaff: -1 }),
+    strong: () => ({ equipCapFactor: 2, flags: ['overtimeHalf'] }),
+  },
 
   // ── 销售 ──────────────────────────────────────────────
   {
-    id: 'S1', name: '促销活动', kind: 'sell', core: true,
+    id: 'S1', name: '促销活动', kind: 'sell', core: true, tier: 0,
     text: '本月低端需求 +2。若销售 ≥ 3 人，额外 +1。',
     cond: '销售 ≥ 3 人：额外 +1',
     empowered: '本月低端需求 +4。若销售 ≥ 3 人，额外 +2。',
@@ -989,34 +1087,34 @@ export const CARDS: CardDef[] = [
     strong: (c) => ({ demand: T(4 + (S(c, 'sell') >= 3 ? 2 : 0), 0, 0, 0) }),
   },
   {
-    id: 'S2', name: '渠道拓展', kind: 'sell',
+    id: 'S2', name: '渠道拓展', kind: 'sell', tier: 1,
     text: '本月销售资源 +5（可推低端需求 +5 / 中端 +2 / 高端 +1）。若销售 ≥ 2 人，额外 +3。',
     cond: '销售 ≥ 2 人：额外 +3',
     empowered: '本月销售资源 +8（可推低端需求 +8 / 中端 +4 / 高端 +2）。若销售 ≥ 2 人，额外 +5。',
     base: (c) => ({ salesResource: (c.empowered ? 8 : 5) + (S(c, 'sell') >= 2 ? (c.empowered ? 5 : 3) : 0) }),
   },
   {
-    id: 'S3', name: '大订单', kind: 'sell', core: true, cost: 20, minStaff: { sell: 2 },
-    text: '需销售 ≥ 2 人。支付 2w，获得 1 个确定性订单（10 件，订单价高于市价 1 档，月末结算交付）。若销售 ≥ 4 人，数量 15 件。',
+    id: 'S3', name: '大订单', kind: 'sell', core: true, tier: 1,
+    text: '需销售 ≥ 2 人。获得 1 个确定性订单（10 件，订单价高于市价 1 档，月末结算交付）。若销售 ≥ 4 人，数量 15 件。',
     cond: '销售 ≥ 4 人：数量 15',
     empowered: '需销售 ≥ 2 人。支付 2w，获得 2 个确定性订单，各 15 件（订单价高于市价 1 档）。',
     base: (c) => ({ orders: c.empowered ? 2 : 1, orderQty: S(c, 'sell') >= 4 || c.empowered ? 15 : 10, flags: [c.empowered ? 's3x2' : ''] }),
   },
   {
-    id: 'S4', name: '提价', kind: 'sell', cost: 20,
-    text: '支付 2w，本月产品售价升 1 档，低端与中端需求 -1（高端 / 特殊无需求惩罚）。',
-    empowered: '支付 2w，本月产品售价升 2 档，低端与中端需求 -1（高端 / 特殊无需求惩罚）。',
+    id: 'S4', name: '提价', kind: 'sell', tier: 1,
+    text: '本月产品售价升 1 档，低端与中端需求 -1（高端 / 特殊无需求惩罚）。',
+    empowered: '本月产品售价升 2 档，低端与中端需求 -1（高端 / 特殊无需求惩罚）。',
     base: (c) => ({ price: c.empowered ? T(2, 2, 2, 2) : T(1, 1, 1, 1), demand: T(-1, -1, 0, 0) }),
   },
   {
-    id: 'S5', name: '品牌建设', kind: 'sell',
+    id: 'S5', name: '品牌建设', kind: 'sell', tier: 1,
     text: '本月高端需求 +1。若研发 ≥ 3 人，额外 +1。',
     cond: '研发 ≥ 3 人：额外 +1',
     empowered: '本月高端需求 +2，特殊需求 +1。若研发 ≥ 3 人，高端额外 +1。',
     base: (c) => ({ demand: T(0, 0, (c.empowered ? 2 : 1) + (S(c, 'rnd') >= 3 ? 1 : 0), c.empowered ? 1 : 0) }),
   },
   {
-    id: 'S6', name: '销售激励', kind: 'sell',
+    id: 'S6', name: '销售激励', kind: 'sell', tier: 1,
     text: '本月销售资源 +3（可推低端需求 +3 / 中端 +1），每名员工薪酬 +0.5w（全部门）。若销售 ≥ 3 人，无薪酬惩罚。',
     cond: '销售 ≥ 3 人：无惩罚',
     empowered: '本月销售资源 +6（可推低端需求 +6 / 中端 +3），无薪酬惩罚。',
@@ -1024,7 +1122,7 @@ export const CARDS: CardDef[] = [
     strong: () => ({ salesResource: 6 }),
   },
   {
-    id: 'S7', name: '市场调研', kind: 'sell',
+    id: 'S7', name: '市场调研', kind: 'sell', tier: 0,
     text: '本月低端需求 +1，中端需求 +1。若销售 ≥ 2 人，额外 +1。',
     cond: '销售 ≥ 2 人：额外 +1',
     empowered: '本月低端 +2、中端 +2。若销售 ≥ 2 人，各额外 +1。',
@@ -1035,182 +1133,265 @@ export const CARDS: CardDef[] = [
     },
   },
   {
-    id: 'S8', name: '客户关系', kind: 'sell', cost: 30, minStaff: { sell: 2 },
-    text: '需销售 ≥ 2 人。支付 3w，本月获得 1 个额外确定性订单（10 件，订单价高于市价 1 档）。若本月已有订单，再 +1 个。',
+    id: 'S8', name: '客户关系', kind: 'sell', tier: 2,
+    text: '需销售 ≥ 2 人。本月获得 1 个额外确定性订单（10 件，订单价高于市价 1 档）。若本月已有订单，再 +1 个。',
     cond: '已有订单：额外 +1',
-    empowered: '需销售 ≥ 2 人。支付 3w，本月获得 2 个额外确定性订单（各 10 件，订单价高于市价 1 档）。若本月已有订单，再 +1 个。',
+    empowered: '需销售 ≥ 2 人。本月获得 2 个额外确定性订单（各 10 件，订单价高于市价 1 档）。若本月已有订单，再 +1 个。',
     base: (c) => ({ orders: c.empowered ? 2 : 1, flags: ['customerRelation', c.empowered ? 's8x2' : ''] }),
   },
   {
-    id: 'S9', name: '清仓甩卖', kind: 'sell', cost: 20,
-    text: '支付 2w，本月售价降 1 档，需求 +2。若库存 ≥ 15，需求改为 +3。',
+    id: 'S9', name: '清仓甩卖', kind: 'sell', tier: 1,
+    text: '本月售价降 1 档，需求 +2。若库存 ≥ 15，需求改为 +3。',
     cond: '库存 ≥ 15：需求 +3',
-    empowered: '支付 2w，本月售价降 1 档，需求 +3。若库存 ≥ 15，需求改为 +5。',
+    empowered: '本月售价降 1 档，需求 +3。若库存 ≥ 15，需求改为 +5。',
     base: (c) => {
       const extra = c.prodStock >= 15 ? (c.empowered ? 5 : 3) : c.empowered ? 3 : 2
       return { price: T(-1, -1, -1, -1), demand: T(extra, extra, extra, extra) }
     },
   },
   {
-    id: 'S10', name: '高端市场', kind: 'sell', cost: 30, minStaff: { sell: 4 },
-    text: '需销售 ≥ 4 人。支付 3w，本月高端产品售价升 2 档。',
-    empowered: '需销售 ≥ 4 人。支付 3w，本月高端、特殊产品售价升 2 档。',
-    base: (c) => ({ priceShift: T(0, 0, S(c, 'sell') >= 4 ? 2 : 1, 0) }),
+    id: 'S10', name: '高端市场', kind: 'sell', tier: 2,
+    text: '需销售 ≥ 3 人（2 档）。本月高端产品售价升 2 档。',
+    empowered: '需销售 ≥ 3 人（2 档）。本月高端、特殊产品售价升 2 档。',
+    base: () => ({ priceShift: T(0, 0, 2, 0) }),
     strong: () => ({ priceShift: T(0, 0, 2, 2) }),
+  },
+
+  // ── 销售·员工联动（增效 / 改良 / 替换） ─────────────────
+  {
+    id: 'S11', name: '销售培训', kind: 'sell', tier: 1, tag: 'staff', sub: 'amp',
+    text: '本月每人销售资源 +2。',
+    empowered: '本月每人销售资源 +3。',
+    base: () => ({ sellResPerStaff: 2 }),
+    strong: () => ({ sellResPerStaff: 3 }),
+  },
+  {
+    id: 'S12', name: '高端定价', kind: 'sell', tier: 2, tag: 'staff', sub: 'mod',
+    text: '本月提价 8 点/档 → 6 点/档（需提价已解锁，即销售 ≥ 4 人）。',
+    cond: '需提价已解锁',
+    empowered: '本月提价 8 点/档 → 4 点/档。',
+    base: () => ({ priceRaiseCost: 6 }),
+    strong: () => ({ priceRaiseCost: 4 }),
+  },
+  {
+    id: 'S13', name: '以量换价', kind: 'sell', tier: 2, tag: 'staff', sub: 'swap',
+    text: '本月全部确定性订单数量 +5 件，订单价 +1 档 → +0（平价成交，以量换价）。',
+    empowered: '本月全部确定性订单数量 +10 件，订单价格不变。',
+    base: () => ({ orderQtyPlus: 5, orderPriceShift: -1 }),
+    strong: () => ({ orderQtyPlus: 10 }),
+  },
+  {
+    id: 'S14', name: '品牌溢价', kind: 'sell', tier: 3, tag: 'staff', sub: 'amp',
+    text: '本月每人销售资源 +4，且确定性订单槽 +1（渠道每月多 1 单）。',
+    empowered: '本月每人销售资源 +4，确定性订单槽 +2。',
+    base: () => ({ sellResPerStaff: 4, orders: 1 }),
+    strong: () => ({ sellResPerStaff: 4, orders: 2 }),
+  },
+  {
+    id: 'S15', name: '提价月', kind: 'sell', tier: 3, tag: 'staff', sub: 'swap',
+    text: '本月销售资源推需求效果减半，但提价 8 点/档 → 4 点/档（以推力换定价权，需提价已解锁）。',
+    cond: '需提价已解锁',
+    empowered: '推需求减半，提价 4 点/档且本月可提 2 档。',
+    base: () => ({ priceRaiseCost: 4, flags: ['sellPushHalf'] }),
+    strong: () => ({ priceRaiseCost: 4, priceRaiseCap: 2, flags: ['sellPushHalf'] }),
   },
 
   // ── 研发 ──────────────────────────────────────────────
   {
-    id: 'R1', name: '加速研发', kind: 'rnd', core: true,
+    id: 'R1', name: '加速研发', kind: 'rnd', core: true, tier: 0,
     text: '本月研发进度 +4。若研发 ≥ 3 人，额外 +2。',
     cond: '研发 ≥ 3 人：额外 +2',
     empowered: '本月研发进度 +7。若研发 ≥ 3 人，额外 +3。',
     base: (c) => ({ rndProgress: (c.empowered ? 7 : 4) + (S(c, 'rnd') >= 3 ? (c.empowered ? 3 : 2) : 0) }),
   },
   {
-    id: 'R2', name: '降低成本', kind: 'rnd',
+    id: 'R2', name: '降低成本', kind: 'rnd', tier: 1,
     text: '本月每个在研项目的研发费用 -2w。若研发 ≥ 2 人，额外 -1w。',
     cond: '研发 ≥ 2 人：额外 -1w',
     empowered: '本月每个在研项目的研发费用 -4w。若研发 ≥ 2 人，额外 -2w。',
     base: (c) => ({ rndCost: -((c.empowered ? 40 : 20) + (S(c, 'rnd') >= 2 ? (c.empowered ? 20 : 10) : 0)) }),
   },
   {
-    id: 'R3', name: '技术合作', kind: 'rnd', core: true, cost: 20,
-    text: '支付 2w，本月研发成功率 +15%。若研发 ≥ 4 人，额外 +10%。',
+    id: 'R3', name: '技术合作', kind: 'rnd', core: true, tier: 1,
+    text: '本月研发成功率 +15%。若研发 ≥ 4 人，额外 +10%。',
     cond: '研发 ≥ 4 人：额外 +10%',
-    empowered: '支付 2w，本月研发成功率 +25%。若研发 ≥ 4 人，额外 +15%。',
+    empowered: '本月研发成功率 +25%。若研发 ≥ 4 人，额外 +15%。',
     base: (c) => ({ rndRate: (c.empowered ? 25 : 15) + (S(c, 'rnd') >= 4 ? (c.empowered ? 15 : 10) : 0) }),
   },
   {
-    id: 'R4', name: '专利申请', kind: 'rnd', cost: 30,
-    text: '支付 3w，获得 1 个随机普通知识产权（本月有效）。若研发 ≥ 5 人，改为永久。',
+    id: 'R4', name: '专利申请', kind: 'rnd', tier: 2,
+    text: '获得 1 个随机普通知识产权（本月有效）。若研发 ≥ 5 人，改为永久。',
     cond: '研发 ≥ 5 人：普通永久 / 强化本季',
-    empowered: '支付 3w，获得 1 个随机强力知识产权（本月有效）。若研发 ≥ 5 人，本季有效。',
+    empowered: '获得 1 个随机强力知识产权（本月有效）。若研发 ≥ 5 人，本季有效。',
     base: (c) => ({ flags: [c.empowered ? 'ipStrongTemp' : 'ipNormalTemp', S(c, 'rnd') >= 5 ? (c.empowered ? 'ipQuarter' : 'ipPerm') : ''] }),
   },
   {
-    id: 'R5', name: '研发人员', kind: 'rnd',
+    id: 'R5', name: '研发人员', kind: 'rnd', tier: 0,
     text: '本月研发进度 +3。若研发 ≥ 3 人，额外 +2。',
     cond: '研发 ≥ 3 人：额外 +2',
     empowered: '本月研发进度 +5。若研发 ≥ 3 人，额外 +4。',
     base: (c) => ({ rndProgress: (c.empowered ? 5 : 3) + (S(c, 'rnd') >= 3 ? (c.empowered ? 4 : 2) : 0) }),
   },
   {
-    id: 'R6', name: '逆向工程', kind: 'rnd', cost: 30, minStaff: { rnd: 3 },
-    text: '需研发 ≥ 3 人。支付 3w，立即解锁 1 个未解锁的产品配方（按中端 → 高端 → 特殊顺序，无需研发放置），并揭示新材料。',
-    empowered: '需研发 ≥ 3 人。支付 3w，立即解锁 2 个未解锁的产品配方，无需研发放置。',
+    id: 'R6', name: '逆向工程', kind: 'rnd', tier: 2,
+    text: '需研发 ≥ 3 人（2 档）。立即解锁 1 个未解锁的产品配方（按中端 → 高端 → 特殊顺序，无需研发放置），并揭示新材料。',
+    empowered: '需研发 ≥ 3 人（2 档）。立即解锁 2 个未解锁的产品配方，无需研发放置。',
     base: (c) => ({ flags: [c.empowered ? 'reverse2' : 'reverse'] }),
   },
   {
-    id: 'R7', name: '基础研究', kind: 'rnd',
+    id: 'R7', name: '基础研究', kind: 'rnd', tier: 0,
     text: '本月研发进度 +2。若研发 ≥ 3 人，额外 +2。',
     cond: '研发 ≥ 3 人：额外 +2',
     empowered: '本月研发进度 +4。若研发 ≥ 3 人，额外 +3。',
     base: (c) => ({ rndProgress: (c.empowered ? 4 : 2) + (S(c, 'rnd') >= 3 ? (c.empowered ? 3 : 2) : 0) }),
   },
   {
-    id: 'R8', name: '技术引进', kind: 'rnd', cost: 30,
-    text: '支付 3w，本月研发进度 +6。若研发 ≥ 3 人，改为 +10。',
+    id: 'R8', name: '技术引进', kind: 'rnd', tier: 2,
+    text: '本月研发进度 +6。若研发 ≥ 3 人，改为 +10。',
     cond: '研发 ≥ 3 人：+10',
-    empowered: '支付 3w，本月研发进度 +12。',
+    empowered: '本月研发进度 +12。',
     base: (c) => ({ rndProgress: S(c, 'rnd') >= 3 ? (c.empowered ? 12 : 10) : c.empowered ? 12 : 6 }),
   },
   {
-    id: 'R9', name: '实验设备', kind: 'rnd',
+    id: 'R9', name: '实验设备', kind: 'rnd', tier: 1,
     text: '本月研发成本 -1w，研发进度 +2。若研发 ≥ 4 人，成本改为 -2w。',
     cond: '研发 ≥ 4 人：成本 -2w',
     empowered: '本月研发成本 -2w，研发进度 +4。若研发 ≥ 4 人，成本 -4w。',
     base: (c) => ({ rndCost: -(c.empowered ? 20 : 10) - (S(c, 'rnd') >= 4 ? (c.empowered ? 20 : 10) : 0), rndProgress: c.empowered ? 4 : 2 }),
   },
   {
-    id: 'R10', name: '知识产权保护', kind: 'rnd', cost: 20,
-    text: '支付 2w，若研发 ≥ 5 人，本月知识产权激活槽 +1。',
-    cond: '研发 ≥ 5 人：额外激活槽',
-    empowered: '支付 2w，无需人数条件，本月知识产权激活槽 +1。',
-    base: (c) => ({ flags: [c.empowered || S(c, 'rnd') >= 5 ? 'ipSlotPlus' : 'ipProtected'] }),
+    id: 'R10', name: '知识产权保护', kind: 'rnd', tier: 3, tag: 'staff', sub: 'amp',
+    text: '需研发 ≥ 5 人（3 档）。本月知识产权激活槽 +1。',
+    empowered: '需研发 ≥ 5 人（3 档）。本月知识产权激活槽 +2。',
+    base: () => ({ ipSlotsPlus: 1 }),
+    strong: () => ({ ipSlotsPlus: 2 }),
+  },
+  // ── 研发·员工联动（增效 / 改良 / 替换） ─────────────────
+  {
+    id: 'R11', name: '聚焦攻关', kind: 'rnd', tier: 1, tag: 'staff', sub: 'amp',
+    text: '本月每人研发进度 +2。',
+    empowered: '本月每人研发进度 +3。',
+    base: () => ({ rndProgPerStaff: 2 }),
+    strong: () => ({ rndProgPerStaff: 3 }),
+  },
+  {
+    id: 'R12', name: '研发补贴', kind: 'rnd', tier: 2, tag: 'staff', sub: 'mod',
+    text: '本月每个在研项目研发费用 −1w，且成功率封顶 90% → 95%。',
+    empowered: '本月每个在研项目研发费用 −2w，成功率封顶 100%。',
+    base: () => ({ rndCost: -10, rndRateCapPlus: 5 }),
+    strong: () => ({ rndCost: -20, rndRateCapPlus: 10 }),
+  },
+  {
+    id: 'R13', name: '求稳模式', kind: 'rnd', tier: 2, tag: 'staff', sub: 'swap',
+    text: '本月每人研发进度 5 → 3，但每人成功率加成 5% → 10%（以速度换确定性）。',
+    empowered: '每人研发进度 5 → 3，每人成功率加成 5% → 15%。',
+    base: () => ({ rndProgPerStaff: -2, rndRatePerStaff: 5 }),
+    strong: () => ({ rndProgPerStaff: -2, rndRatePerStaff: 10 }),
+  },
+  {
+    id: 'R14', name: '突破模式', kind: 'rnd', tier: 3, tag: 'staff', sub: 'swap',
+    text: '本月研发进度 ×1.5，且月末进度满额的项目中进度最高者额外掷 1 次成功率（取高）。',
+    empowered: '本月研发进度 ×2，进度最高的 2 个项目各额外掷 1 次（取高）。',
+    base: () => ({ rndProgFactor: 1.5, flags: ['rndReroll1'] }),
+    strong: () => ({ rndProgFactor: 2, flags: ['rndReroll2'] }),
   },
 
   // ── 管理 ──────────────────────────────────────────────
   {
-    id: 'M1', name: '抽牌', kind: 'ops',
+    id: 'M1', name: '抽牌', kind: 'ops', tier: 1,
     text: '抽 1 张牌入手。',
     empowered: '抽 2 张牌入手。',
     base: (c) => ({ flags: [c.empowered ? 'm1b' : 'm1'] }),
   },
   {
-    id: 'M2', name: '+1 AP', kind: 'ops',
+    id: 'M2', name: '+1 AP', kind: 'ops', tier: 1, tag: 'staff', sub: 'amp',
     text: '本月 AP +1。若本月未打出其他牌，改为 +2。',
     empowered: '本月 AP +2。若本月未打出其他牌，改为 +3。',
     base: (c) => ({ ap: c.empowered ? 2 : 1, flags: ['m2'] }),
   },
   {
-    id: 'M3', name: '复制手牌', kind: 'ops', cost: 20,
-    text: '支付 2w，复制一张手牌，立即加入手牌（保留原牌的效果与强化状态）。',
-    empowered: '支付 2w，复制一张手牌，立即加入手牌（保留原牌的效果与强化状态），且本月 AP +1。',
+    id: 'M3', name: '复制手牌', kind: 'ops', tier: 2,
+    text: '复制一张手牌，立即加入手牌（保留原牌的效果与强化状态）。',
+    empowered: '复制一张手牌，立即加入手牌（保留原牌的效果与强化状态），且本月 AP +1。',
     base: (c) => ({ flags: [c.empowered ? 'm3b' : 'm3'], ap: c.empowered ? 1 : 0 }),
   },
   {
-    id: 'M4', name: '弃 2 换 1', kind: 'ops', cost: 30,
-    text: '支付 3w，弃 2 张手牌，获得 1 张随机强化卡。',
-    empowered: '支付 3w，弃 1 张手牌，获得 2 张随机强化卡。',
+    id: 'M4', name: '弃 2 换 1', kind: 'ops', tier: 3,
+    text: '弃 2 张手牌，获得 1 张随机强化卡。',
+    empowered: '弃 1 张手牌，获得 2 张随机强化卡。',
     base: (c) => ({ flags: [c.empowered ? 'm4b' : 'm4'] }),
+  },
+  // ── 管理·员工联动（改良 / 替换） ─────────────────────
+  {
+    id: 'M5', name: '高效招聘', kind: 'ops', tier: 2, tag: 'staff', sub: 'mod',
+    text: '本月招聘费 −50%。',
+    empowered: '本月招聘费 −75%。',
+    base: () => ({ hireFeeFactor: 0.5 }),
+    strong: () => ({ hireFeeFactor: 0.25 }),
+  },
+  {
+    id: 'M6', name: '即时授权', kind: 'ops', tier: 2, tag: 'staff', sub: 'swap',
+    text: '本月招聘管理人员时，其 AP 上限 +1 即时生效（正常下月生效，招聘本身仍耗 1 AP）。',
+    empowered: 'AP 即时生效，且本月管理招聘 1 次不耗 AP。',
+    base: () => ({ flags: ['opsApImmediate'] }),
+    strong: () => ({ flags: ['opsApImmediate', 'hireApFree'] }),
+  },
+  {
+    id: 'M7', name: '降本模式', kind: 'ops', tier: 3, tag: 'staff', sub: 'swap',
+    text: '本月管理 AP 上限 +1 失效（AP 上限回落基础 3），改为：提案费用 −1w/张、招聘费 −50%（以 AP 换成本）。',
+    empowered: '同基础版，但本月 AP 上限额外 +1（回落至基础 +1）。',
+    base: () => ({ flags: ['opsApOff', 'cardFeeDown'], hireFeeFactor: 0.5 }),
+    strong: () => ({ flags: ['opsApOff', 'cardFeeDown'], hireFeeFactor: 0.5, ap: 1 }),
   },
 
   // ── 规则卡（K 系列：改本月规则，制造取舍；1 AP + 现金） ──────────
   {
-    id: 'K1', name: '定价权', kind: 'sell', rule: true, cost: 20,
-    text: '支付 2w，本月现货售价档位由你选（基准 / 高 / 极高）；每高 1 档，各层需求 −1（订单不受影响）。',
-    empowered: '支付 2w，本月现货售价档位由你选（基准 / 高 / 极高 / 极高 +1）；需求惩罚减半（每高 1 档 −0，向下取整后生效）。',
+    id: 'K1', name: '定价权', kind: 'sell', rule: true, tier: 2, tag: 'staff', sub: 'swap',
+    text: '本月现货售价档位由你选（基准 / 高 / 极高）；每高 1 档，各层需求 −1（订单不受影响）。',
+    empowered: '本月现货售价档位由你选（基准 / 高 / 极高 / 极高 +1）；需求惩罚减半（每高 1 档 −0，向下取整后生效）。',
     base: () => ({ flags: ['spotPriceChoice'] }),
     strong: () => ({ flags: ['spotPriceChoice', 'spotPriceChoiceNoPenalty'] }),
   },
   {
-    id: 'K2', name: '灵活交付', kind: 'sell', rule: true, cost: 20,
-    text: '支付 2w，本月订单承诺量 +5（可接超出「库存 + 排产」的订单）；月末交付缺口按接单时订单单价 × 20% 付违约金。',
-    empowered: '支付 2w，本月订单承诺量 +10；缺口违约金降至 10%。',
+    id: 'K2', name: '灵活交付', kind: 'sell', rule: true, tier: 1,
+    text: '本月订单承诺量 +5（可接超出「库存 + 排产」的订单）；月末交付缺口按接单时订单单价 × 20% 付违约金。',
+    empowered: '本月订单承诺量 +10；缺口违约金降至 10%。',
     base: (c) => ({ flags: [c.empowered ? 'flex10' : 'flex5'] }),
     strong: (c) => ({ flags: [c.empowered ? 'flex10' : 'flex5'] }),
   },
   {
-    id: 'K3', name: '双档采购', kind: 'buy', rule: true, cost: 20,
-    text: '支付 2w，本月 1 种原料可选 2 档（已选档 + 小批，第 2 档价格 +1 档，不占档数）。',
+    id: 'K3', name: '双档采购', kind: 'buy', rule: true, tier: 1,
+    text: '本月 1 种原料可选 2 档（已选档 + 小批，第 2 档价格 +1 档，不占档数）。',
     empowered: '支付 2w，本月 1 种原料可选 2 档（已选档 + 中批，第 2 档价格 +1 档，不占档数）。',
     base: (c) => ({ flags: [c.empowered ? 'doubleLotMid' : 'doubleLot'] }),
     strong: (c) => ({ flags: [c.empowered ? 'doubleLotMid' : 'doubleLot'] }),
   },
   {
-    id: 'K4', name: '冲刺判定', kind: 'rnd', rule: true, cost: 30,
-    text: '支付 3w，本月研发成功判定掷 2 次取高。',
-    empowered: '支付 3w，本月研发成功判定掷 3 次取高。',
+    id: 'K4', name: '冲刺判定', kind: 'rnd', rule: true, tier: 2,
+    text: '本月研发成功判定掷 2 次取高。',
+    empowered: '本月研发成功判定掷 3 次取高。',
     base: (c) => ({ flags: [c.empowered ? 'rndTripleRoll' : 'rndDoubleRoll'] }),
     strong: (c) => ({ flags: [c.empowered ? 'rndTripleRoll' : 'rndDoubleRoll'] }),
   },
   {
-    id: 'K5', name: '快周转', kind: 'sell', rule: true, cost: 20,
-    text: '支付 2w，本月现货不受需求限制（全部库存可售），但售价 −1 档。',
-    empowered: '支付 2w，本月现货不受需求限制（全部库存可售），售价 −1 档，且订单交付 +2 件。',
+    id: 'K5', name: '快周转', kind: 'sell', rule: true, tier: 2,
+    text: '本月现货不受需求限制（全部库存可售），但售价 −1 档。',
+    empowered: '本月现货不受需求限制（全部库存可售），售价 −1 档，且订单交付 +2 件。',
     base: () => ({ flags: ['spotUnlimited'] }),
     strong: () => ({ flags: ['spotUnlimited', 'spotUnlimitedPlus'] }),
   },
   {
-    id: 'K6', name: '编制优化', kind: 'ops', rule: true,
+    id: 'K6', name: '编制优化', kind: 'ops', rule: true, tier: 1,
     text: '本月可裁 1 人（任意部门，不耗 AP），返还 100% 基础招聘费。',
     empowered: '本月可裁 2 人（任意部门，不耗 AP），返还 100% 基础招聘费。',
     base: (c) => ({ flags: c.empowered ? ['canFireCard', 'canFireCard'] : ['canFireCard'] }),
     strong: (c) => ({ flags: c.empowered ? ['canFireCard', 'canFireCard'] : ['canFireCard'] }),
   },
   {
-    id: 'K7', name: '强化市场情报', kind: 'ops', rule: true,
+    id: 'K7', name: '强化市场情报', kind: 'ops', rule: true, tier: 0,
     text: '预算页展示下季度气候转移概率表（动能 × 步长真实分布），并高概率提示 1 个风险气候。',
     base: () => ({ flags: ['climateOddsPlus'] }),
     strong: () => ({ flags: ['climateOddsPlus'] }),
-  },
-  {
-    id: 'K8', name: '加班补贴', kind: 'make', rule: true, cost: 20,
-    text: '支付 2w，本月加班费减半（2× 生产工资 → 1×）。',
-    empowered: '支付 2w，本月加班费减半，且加班产能 +1× 员工产能。',
-    base: (c) => ({ flags: [c.empowered ? 'overtimeHalfPlus' : 'overtimeHalf'] }),
-    strong: (c) => ({ flags: [c.empowered ? 'overtimeHalfPlus' : 'overtimeHalf'] }),
   },
 
 ]

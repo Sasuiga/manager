@@ -88,6 +88,7 @@ export {
   setBuyPriceAlloc,
   setSellPriceAlloc,
   setC3PenaltyMat,
+  setFocusMat,
   committableProductQty,
   availableForOrder,
   canAcceptOrder,
@@ -274,6 +275,7 @@ export function enterDraw(state: GameState) {
   state.buyPriceAlloc = {}
   state.sellPriceAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   state.c3PenaltyMat = null
+  state.focusMat = null
   state.declinedOrders = []
   state.acceptedOrders = []
   // 本月订单（渠道带来）：场景预设的订单（applyCoreScenario）不重复生成
@@ -449,7 +451,7 @@ export function cumulative(ledgers: Ledger[]) {
   )
 }
 
-export { STAFF, RND_PROJECTS, CARD_BY_ID, EQUIPMENT_SHOP, IP_BY_ID } from '../data/game'
+export { STAFF, RND_PROJECTS, CARD_BY_ID, EQUIPMENT_SHOP, IP_BY_ID, TIER_COST, TIER_STAFF, tierUnlockedOf } from '../data/game'
 export { MILESTONES, MILESTONE_BY_ID, MILESTONE_SHAPES } from '../data/game'
 export { IP_SETS } from '../data/game'
 export { allMilestoneProgress, milestoneProgress } from './milestones'

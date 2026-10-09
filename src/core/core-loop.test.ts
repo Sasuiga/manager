@@ -825,6 +825,7 @@ describe('核心模式立项（抽卡）阶段', () => {
     s.eventResolved = true
     E.enterDraw(s)
     E.enterOperate(s)
+    s.depts.buy.staff = 2 // C1 为 1 档提案：采购 ≥ 2 人解锁
     const c1 = { uid: 'C1#test', defId: 'C1', empowered: false }
     s.hand.push(c1)
     const tierBefore = E.derive(s).materials.pkg.tierShift
@@ -893,6 +894,7 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
 
   it('C9 期货：基础版锁当前档位最高的 1 种原料；下月气候档位高于锁定时按锁定档位采购', () => {
     const s = operateState()
+    s.depts.buy.staff = 3 // C9 为 2 档提案：采购 ≥ 3 人解锁
     s.hand.push({ uid: 'c9#t', defId: 'C9', empowered: false })
     s.cash = 300
     expect(E.playCard(s, 'c9#t').ok).toBe(true) // 实施费用 2w
@@ -907,6 +909,7 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
 
   it('C8 供应商关系：上月打出过，本月额外 -1 档', () => {
     const s = operateState()
+    s.depts.buy.staff = 2 // C8 为 1 档提案：采购 ≥ 2 人解锁
     s.hand.push({ uid: 'c8#t', defId: 'C8', empowered: false })
     s.cash = 200
     expect(E.playCard(s, 'c8#t').ok).toBe(true)
@@ -924,6 +927,7 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
 
   it('C1 批量采购：第 2 档起额外 -1 档（buyTierExtra 生效）', () => {
     const s = operateState()
+    s.depts.buy.staff = 2 // C1 为 1 档提案：采购 ≥ 2 人解锁
     s.hand.push({ uid: 'c1#t', defId: 'C1', empowered: false })
     expect(E.playCard(s, 'c1#t').ok).toBe(true)
     expect(E.buyCardShift(s)).toBe(-1) // 第 1 档：仅基础 -1
@@ -933,6 +937,7 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
 
   it('M2 加 AP 当月生效（唯一打出的牌 +2）', () => {
     const s = operateState()
+    s.depts.ops.staff = 2 // M2 为 1 档提案：管理 ≥ 2 人解锁
     s.hand.push({ uid: 'm2#t', defId: 'M2', empowered: false })
     const apBefore = s.ap
     expect(E.playCard(s, 'm2#t').ok).toBe(true)
@@ -942,6 +947,7 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
 
   it('M3 复制手牌：复制目标入 hand，保留原牌强化状态', () => {
     const s = operateState()
+    s.depts.ops.staff = 3 // M3 为 2 档提案：管理 ≥ 3 人解锁
     s.hand.push({ uid: 'm3#t', defId: 'M3', empowered: false })
     s.hand.push({ uid: 'p1#t', defId: 'P1', empowered: true })
     const r = E.playCard(s, 'm3#t', { targetUid: 'p1#t' })
@@ -953,6 +959,7 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
 
   it('P10 库存清理：结算时按账面价出售最多库存的产品（不计损益）', () => {
     const s = operateState()
+    s.depts.make.staff = 3 // P10 为 2 档提案：生产 ≥ 3 人解锁
     s.hand.push({ uid: 'p10#t', defId: 'P10', empowered: false })
     s.products.low.qty = 12
     s.products.low.value = 120 // 账面 10/件
@@ -998,8 +1005,9 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
   })
 
   it('R4 专利申请：基础/强化低配本月临时知产，强化 + 研发 ≥5 人本季知产（季度切换失效）', () => {
-    // 基础版（研发 0 人）：本月有效（tempIps，月初清零）
+    // 基础版（研发 3 人，2 档门槛）：本月有效（tempIps，月初清零）
     const s = operateState(42)
+    s.depts.rnd.staff = 3
     s.hand.push({ uid: 'r4#t', defId: 'R4', empowered: false })
     expect(E.playCard(s, 'r4#t').ok).toBe(true)
     expect(s.monthMods.tempIps).toHaveLength(1)
@@ -1117,6 +1125,7 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
     s.ipOwned.push('J5')
     expect(E.derive(s).ipCardCopy).toBe(true)
     s.hand.push({ uid: 'j5#m2', defId: 'M2', empowered: false })
+    s.depts.ops.staff = 2 // M2 为 1 档提案：管理 ≥ 2 人解锁
     expect(E.playCard(s, 'j5#m2').ok).toBe(true)
     expect(s.playedThisQuarter).toContain('M2:0')
     const ap = s.ap

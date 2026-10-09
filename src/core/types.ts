@@ -306,6 +306,38 @@ export interface CardPlayEffect {
   interest?: Money
   /** 特殊标记，见 actions.ts 的 applyCardSpecial */
   flags?: string[]
+  /** 员工联动（增效/替换）：本月每名工人产能 +N（可为负） */
+  capPerStaff?: number
+  /** 员工联动（增效）：本月每人销售资源 +N */
+  sellResPerStaff?: number
+  /** 员工联动（增效）：本月每人采购资源 +N */
+  buyResPerStaff?: number
+  /** 员工联动（增效/替换）：本月每人研发进度 +N（可为负） */
+  rndProgPerStaff?: number
+  /** 员工联动（替换）：本月每人研发成功率加成 +N 百分点 */
+  rndRatePerStaff?: number
+  /** 员工联动（替换·突破模式）：本月研发进度总倍率（覆盖，取最大） */
+  rndProgFactor?: number
+  /** 员工联动（改良）：本月研发成功率封顶 +N 百分点（如 90→95） */
+  rndRateCapPlus?: number
+  /** 员工联动（增效）：本月 IP 激活槽 +N */
+  ipSlotsPlus?: number
+  /** 员工联动（增效）：本月长期协议槽 +N */
+  agreeSlotsPlus?: number
+  /** 员工联动（改良）：本月招聘费系数（覆盖，取最小；0.5 = −50%） */
+  hireFeeFactor?: number
+  /** 员工联动（替换）：本月全部确定性订单数量 +N */
+  orderQtyPlus?: number
+  /** 员工联动（替换）：确定性订单价格档位修正（加性） */
+  orderPriceShift?: number
+  /** 员工联动（改良/替换）：议价点数/档（覆盖，取最小） */
+  negotiateCost?: number
+  /** 员工联动（改良/替换）：销售提价点数/档（覆盖，取最小） */
+  priceRaiseCost?: number
+  /** 员工联动（替换）：销售提价每月上限档数（覆盖，取最大） */
+  priceRaiseCap?: number
+  /** 员工联动（替换·设备模式）：设备产能加成倍率（覆盖，取最大） */
+  equipCapFactor?: number
 }
 
 /**
@@ -408,6 +440,36 @@ export interface MonthMods {
   /** 抽卡张数 / 手牌上限修正 */
   drawBonus?: number
   handBonus?: number
+  /** 员工联动：本月每名工人产能 +N（可为负） */
+  capPerStaff?: number
+  /** 员工联动：本月每人销售资源 +N */
+  sellResPerStaff?: number
+  /** 员工联动：本月每人采购资源 +N */
+  buyResPerStaff?: number
+  /** 员工联动：本月每人研发进度 +N（可为负） */
+  rndProgPerStaff?: number
+  /** 员工联动：本月每人研发成功率加成 +N 百分点 */
+  rndRatePerStaff?: number
+  /** 员工联动：本月研发进度总倍率（覆盖，取最大） */
+  rndProgFactor?: number
+  /** 员工联动：本月研发成功率封顶 +N 百分点 */
+  rndRateCapPlus?: number
+  /** 员工联动：本月 IP 激活槽 +N */
+  ipSlotsPlus?: number
+  /** 员工联动：本月长期协议槽 +N */
+  agreeSlotsPlus?: number
+  /** 员工联动：本月招聘费系数（覆盖，取最小） */
+  hireFeeFactor?: number
+  /** 员工联动：本月全部确定性订单数量 +N */
+  orderQtyPlus?: number
+  /** 员工联动：议价点数/档（覆盖，取最小） */
+  negotiateCost?: number
+  /** 员工联动：销售提价点数/档（覆盖，取最小） */
+  priceRaiseCost?: number
+  /** 员工联动：销售提价每月上限档数（覆盖，取最大） */
+  priceRaiseCap?: number
+  /** 员工联动：设备产能加成倍率（覆盖，取最大） */
+  equipCapFactor?: number
   /** 本月运营提示文本（同时承担部分即时结算语义） */
   notes?: string[]
 }
@@ -627,6 +689,8 @@ export interface GameState {
   sellPriceAlloc: Record<Tier, number>
   /** C3 压价代价：本月供给 −2 的原料（采购页选择；null = 尚未选定，不扣） */
   c3PenaltyMat: string | null
+  /** C13 材料聚焦：本月指定原料（采购页选择；null = 尚未选定，不生效；需 matFocus 旗标） */
+  focusMat: string | null
   orders: Order[]
   /** 本月已放弃的自然订单 id 列表（当月失效，下月重置）。 */
   declinedOrders: string[]
