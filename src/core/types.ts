@@ -703,8 +703,8 @@ export interface GameState {
   extraBuys: { kind: string; materialId: string; qty: number; price: Money; used: boolean }[]
   /** 本月已采购档数 */
   lotsUsed: number
-  /** 本月生产计划：各产品线共享同一产能池。equipment = 本月设备购置计划（核心模式；型号 id 列表，结算时统一付款入库，产能/折旧当月生效） */
-  plan: { quantities: Record<Tier, number>; overtime: boolean; equipment: string[] }
+  /** 本月计划（游戏内唯一的计划 = 采购 + 生产）：各产品线共享同一产能池。设备购置不再是计划——选定即实付现金、立即入库生效 */
+  plan: { quantities: Record<Tier, number>; overtime: boolean }
   /** 加班费（发生时直接支付：安排时扣现金、选定后不可取消、费用不退还（清生产计划不影响）、月初清零；口径 = 2× 本月生产工资计提额，非工资式下月实付） */
   overtimePaid: Money
   /**

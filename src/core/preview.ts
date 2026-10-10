@@ -1,6 +1,6 @@
 import { TIERS } from '../data/game'
 import { derive } from './derive'
-import { plannedPurchaseCost, plannedPurchaseLine, planEquipmentCost, productionUnitCosts } from './actions'
+import { plannedPurchaseCost, plannedPurchaseLine, productionUnitCosts } from './actions'
 import { wagePayableOf } from './game'
 import { materialPriceAt, settle, type SettleReport } from './settle'
 import type { GameState, Money, Tier } from './types'
@@ -33,7 +33,7 @@ export interface ProductPreview {
 /**
  * 本期现金计划分解（确定性，不含销售回款与所得税）：
  * 以当前现金（state.cash）为基期，按资金时间序列出各扣减项：
- *   已实收/实付（已计入 state.cash）：招聘费 / 杂项支出 / 设备购置 / 还款 / 采购与贸易商实付 / 加班（安排时即付）/ 借款（到账）；
+ *   已实收/实付（已计入 state.cash）：招聘费 / 杂项支出 / 设备购置（即时） / 还款 / 采购与贸易商实付 / 加班（安排时即付）/ 借款（到账）；
  *   结算时付（尚未发生，从 state.cash 中预留）：采购计划（核心）/ 协议 / 研发 / 利息 / 上月工资。
  * 得到「本期期末资金（回款前）」——本期闭环的现金位置（不含结算边界回款到账）。
  * 为负 = 计划超出资金能力。
@@ -64,8 +64,6 @@ export interface PreSettleCash {
   overtimePay: Money
   /** 采购计划（结算时付；完整模式即时采购路径已退场） */
   purchasePlan: Money
-  /** 设备购置计划（结算时付） */
-  equipmentPlan: Money
   /** 协议自动采购额（按结算执行同规则确定性模拟） */
   agreementSpend: Money
   /** 研发投入（结算实付） */
@@ -75,8 +73,8 @@ export interface PreSettleCash {
   /** 上月工资实付（当月计提、次月实付） */
   wagePaid: Money
   /**
-   * = state.cash − (purchasePlan + equipmentPlan + agreementSpend + rndInvest + interest + wagePaid)。
-   * 以当前现金为基期（与「期初 + 实收（含借款）− 实付（含加班）」勾稽等价，直接取真值更稳健）；
+   * = state.cash − (purchasePlan + agreementSpend + rndInvest + interest + wagePaid)。
+   * 以当前现金为基期（与「期初 + 实收（含借款）− 实付（含加班/设备）」勾稽等价，直接取真值更稳健）；
    * 为负 = 计划超出资金能力。
    */
   cashAfter: Money
@@ -100,10 +98,8 @@ export function preSettleCash(state: GameState): PreSettleCash {
   const paidPurchase = ledgerSpend(
     (row) => row.dept === 'buy' && (row.item.startsWith('采购') || row.item.startsWith('贸易商采购')),
   )
-  /** 采购计划：结算时尚未付款；即时采购路径已退场，普通采购恒走计划。 */
+  /** 采购计划：结算时尚未付款；即时采购路径已退场，普通采购恒走计划。设备购置已即时化（行动阶段实付，入 paidCapex），不再预留。 */
   const purchasePlan = plannedPurchaseCost(state)
-  /** 设备购置计划：结算时未付款（资本化）。 */
-  const equipmentPlan = planEquipmentCost(state)
   /** 加班费：安排时已发生支付（state.overtimePaid，已计入 state.cash），桥接按锁定额计入实付组。 */
   const overtimePay = state.overtimePaid
   const rndInvest = Math.max(0, d.rndCostTotal)
@@ -116,7 +112,7 @@ export function preSettleCash(state: GameState): PreSettleCash {
    * 仓容口径：结算时采购计划先入库、协议后执行，因此协议的可用仓容要按「计划后库存」计算；
    * 完整模式采购已在行动时入库，直接按当前库存计算。
    */
-  const cashBase = state.cash - purchasePlan - equipmentPlan
+  const cashBase = state.cash - purchasePlan
   let cash = cashBase
   let agreementSpend = 0
   for (const ag of state.agreements) {
@@ -138,7 +134,6 @@ export function preSettleCash(state: GameState): PreSettleCash {
   const cashAfter =
     state.cash -
     (purchasePlan +
-      equipmentPlan +
       agreementSpend +
       rndInvest +
       interest +
@@ -154,7 +149,6 @@ export function preSettleCash(state: GameState): PreSettleCash {
     paidRepay,
     paidPurchase,
     purchasePlan,
-    equipmentPlan,
     agreementSpend,
     overtimePay,
     rndInvest,

@@ -421,26 +421,26 @@ describe('核心模式采购计划', () => {
     expect(JSON.stringify(s)).toBe(before)
   })
 
-  it('现金口径：采购档与设备计划受「期末资金（回款前）」约束（含结算时付的上月工资等），而非仅当前现金', () => {
+  it('现金口径：采购档位受「期末资金（回款前）」约束；设备购置即时支付（当前现金口径，上月工资不占）', () => {
     const s = E.newGame(97)
     E.startGame(s)
     s.cash = 300
     s.wagePayableBy.make = 200 // 上月工资计提（结算时付）
-    expect(E.setPlanEquipment(s, 'eq-line', 2).ok).toBe(true) // 300 − 100 − 200 = 0，恰好不为负
+    expect(E.buyEquipment(s, 'eq-line', 2).ok).toBe(true) // 设备即付：300 ≥ 100（上月工资不占设备现金），付后 200
+    expect(s.cash).toBe(200)
     const pkgSmall = E.plannedLotQty(s, 'pkg', 'small') * E.lotPrice(s, 'pkg', 'small')
-    expect(pkgSmall + 100).toBeLessThanOrEqual(300) // 现金口径：当前现金足够（旧口径会放行）
-    expect(E.canSetPurchasePlan(s, 'pkg', 'small').ok).toBe(false) // 300 − pkgSmall − 100 − 200 < 0，期末资金将为负
-    s.cash = 300 + 200 // 补足工资占用后放行
+    expect(E.canSetPurchasePlan(s, 'pkg', 'small').ok).toBe(false) // 200 − pkgSmall − 200 < 0，期末资金将为负
+    s.cash = pkgSmall + 200 + 10 // 补足工资占用后放行
     expect(E.canSetPurchasePlan(s, 'pkg', 'small').ok).toBe(true)
 
-    // 设备计划同口径：切换后期末资金不得为负
+    // 设备购置即时口径：只要当前现金足够即可，结算时付的上月工资不构成约束
     const t = E.newGame(98)
     E.startGame(t)
     t.cash = 300
     t.wagePayableBy.make = 250
-    expect(E.canSetPlanEquipment(t, 'eq-line', 2).ok).toBe(false) // 300 − 100 − 250 < 0
-    t.cash = 400
-    expect(E.canSetPlanEquipment(t, 'eq-line', 2).ok).toBe(true) // 400 − 100 − 250 = 50
+    expect(E.canBuyEquipment(t, 'eq-line', 2).ok).toBe(true) // 300 ≥ 100 放行
+    t.cash = 90
+    expect(E.canBuyEquipment(t, 'eq-line', 2).ok).toBe(false) // 90 < 100 不足
   })
 })
 
@@ -1109,7 +1109,7 @@ describe('卡牌/事件与进销存新模型对齐（2026-09 卡片层优化）'
   })
 })
 
-describe('设备层（计划→预演→结算 + 型号差异化）', () => {
+describe('设备层（即时购置 + 型号差异化）', () => {
   function fresh(seed = 501) {
     const s = E.newGame(seed)
     E.startGame(s)
@@ -1118,49 +1118,52 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
     return s
   }
 
-  it('核心模式：设备购置计划预留现金、预测本月产能与折旧', () => {
+  it('设备购置：现金即付、立即入库，本月产能与折旧立即生效（每型号 1 AP）', () => {
     const s = fresh()
     const baseCap = E.planCapacity(s)
-    expect(E.setPlanEquipment(s, 'eq-line', 2).ok).toBe(true)
-    expect(s.plan.equipment).toEqual(['eq-line', 'eq-line'])
-    expect(E.planEquipmentCost(s)).toBe(100)
-    expect(E.plannedEquipmentCap(s)).toBe(8)
-    // 每人 +8（2 台 × 4）× 2 名生产人员
+    const cashBefore = s.cash
+    const apBefore = s.ap
+    expect(E.buyEquipment(s, 'eq-line', 2).ok).toBe(true)
+    expect(s.equipment).toHaveLength(2)
+    expect(s.cash).toBe(cashBefore - 100) // 选定即实付 2 × 5w
+    expect(s.ap).toBe(apBefore - 1) // 一次购置行动 1 AP
+    // 每人 +8（2 台 × 4）× 2 名生产人员，立即生效
     expect(E.planCapacity(s)).toBe(baseCap + 2 * 8)
-    // 现金预留：设备计划与采购计划共同占用（小包材小批成本 ~50，100+50>110 拒绝）
-    s.cash = 110
+    // 现金已付出：采购计划的「期末资金（回款前）」口径自然按付后现金判定
+    const pkgSmall = E.plannedLotQty(s, 'pkg', 'small') * E.lotPrice(s, 'pkg', 'small')
+    s.cash = pkgSmall - 10
     expect(E.canSetPurchasePlan(s, 'pkg', 'small').ok).toBe(false)
-    expect(E.setPlanEquipment(s, 'eq-line', 2).ok).toBe(true) // 原计划维持
-    s.cash = 300
+    s.cash = pkgSmall + 10
     expect(E.canSetPurchasePlan(s, 'pkg', 'small').ok).toBe(true)
-    // 统一后两条路径并存：计划路径（UI 主路径）与即时购置（测试/事件用）
+    // 门槛：AP 或现金不足则整次失败、不入台账
     const f = E.newGame(502)
     E.startGame(f)
-    expect(E.setPlanEquipment(f, 'eq-line', 1).ok).toBe(true)
-    expect(f.plan.equipment).toEqual(['eq-line'])
-    expect(E.buyEquipment(s, 'eq-line').ok).toBe(true)
-    expect(s.equipment).toHaveLength(1)
+    f.ap = 0
+    expect(E.buyEquipment(f, 'eq-line', 1).ok).toBe(false) // AP 不足
+    f.ap = 1
+    f.cash = 49
+    expect(E.buyEquipment(f, 'eq-line', 1).ok).toBe(false) // 现金不足
+    f.cash = 50
+    expect(E.buyEquipment(f, 'eq-line', 1).ok).toBe(true)
+    expect(f.equipment).toHaveLength(1)
+    expect(f.cash).toBe(0)
   })
 
-  it('结算：设备计划统一执行——扣现金、资本化、当月折旧与产能生效', () => {
+  it('结算：购置已在行动阶段付款入库，当月折旧进生产费用、产能含已购设备', () => {
     const s = fresh(503)
     s.materials.pkg.qty = 40
     s.materials.pkg.value = 400
     s.materials.resin.qty = 20
     s.materials.resin.value = 200
-    E.setPlanEquipment(s, 'eq-line', 2)
-    E.setPlan(s, 'low', 24)
-    const ps = E.preSettleCash(s)
-    expect(ps.equipmentPlan).toBe(100)
-    expect(ps.cashAfter).toBeLessThan(ps.cashOpen - 100 + 1)
-    const rep = E.settleMonth(s)
+    expect(E.buyEquipment(s, 'eq-line', 2).ok).toBe(true)
     expect(s.equipment).toHaveLength(2)
+    E.setPlan(s, 'low', 24)
+    const rep = E.settleMonth(s)
     expect(s.equipment[0].model).toBe('eq-line')
     expect(s.equipment[0].cap).toBe(4)
-    expect(s.plan.equipment).toEqual([])
     // 当月折旧进生产费用（2 台 × 2w）
     expect(rep.ledger.parts['设备折旧']).toBe(40)
-    // 结算产能含本月购入设备：5 + 2 ×（3 + 1 解锁 + 8 设备）= 29
+    // 结算产能含已购设备：5 + 2 ×（3 + 1 解锁 + 8 设备）= 29
     expect(rep.production.capacity).toBe(29)
     // 无设备时产能 13 为瓶颈（10→20 件受原料限制）；设备后原料成为瓶颈，产出 20
     expect(rep.production.produced).toBe(20)
@@ -1216,13 +1219,12 @@ describe('设备层（计划→预演→结算 + 型号差异化）', () => {
     expect(E.copyPlayedCard(s, 'M2:0').ok).toBe(false)
   })
 
-  it('预演一致性：计划设备的当月折旧进单位固定成本（与结算口径一致）', () => {
+  it('预演一致性：已购设备折旧进单位固定成本（与结算口径一致）', () => {
     const s = fresh(509)
     const before = E.productionUnitCosts(s).fixedParts.depreciation
     expect(before).toBe(0)
-    E.setPlanEquipment(s, 'eq-line', 2)
-    // 2 台标准设备 × 2w/月 = 4w，计划阶段即可见（结算时同额计提）
-    expect(E.plannedEquipmentDepreciation(s)).toBe(40)
+    expect(E.buyEquipment(s, 'eq-line', 2).ok).toBe(true)
+    // 2 台标准设备 × 2w/月 = 4w，购置即生效（结算时同额计提）
     expect(E.productionUnitCosts(s).fixedParts.depreciation).toBe(40)
   })
 

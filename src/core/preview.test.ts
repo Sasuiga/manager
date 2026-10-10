@@ -84,11 +84,12 @@ describe('结算前现金（preSettleCash）', () => {
   it('行动阶段实付/实收全分解，期初真值下桥接精确成立', () => {
     const s = E.newGame(7) as GameState
     E.startGame(s)
+    s.ap = 99 // 本测只关心现金分解，AP 不约束
     s.depts.buy.staff = 3
     s.depts.buy.hired = 3
     s.debt = 200
     E.hire(s, 'ops') // 招聘费 50（行动阶段实付）
-    E.buyEquipment(s, 'eq-line') // 设备 50（资本化，行动阶段实付）
+    E.buyEquipment(s, 'eq-line') // 设备 50（资本化，行动阶段实付，1 AP）
     s.ipOwned.push('J2') // 供应链联盟：协议槽 +1（长期协议为提案能力）
     E.signAgreement(s, 'pkg', 3) // 协议手续费 10（杂项，行动阶段实付）
     E.repay(s, 60) // 还款 60（资本性，行动阶段实付）
@@ -153,6 +154,6 @@ describe('结算前现金（preSettleCash）', () => {
         (p.paidHire + p.paidMisc + p.paidCapex + p.paidRepay + p.paidPurchase + p.overtimePay),
     ).toBe(s.cash)
     // 预算页桥接总额（含全部扣减项）也等于当前现金
-    expect(p.cashAfter + (p.purchasePlan + p.equipmentPlan + p.agreementSpend + p.rndInvest + p.interest + p.wagePaid)).toBe(s.cash)
+    expect(p.cashAfter + (p.purchasePlan + p.agreementSpend + p.rndInvest + p.interest + p.wagePaid)).toBe(s.cash)
   })
 })

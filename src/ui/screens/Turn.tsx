@@ -557,6 +557,9 @@ function BuyPage({ g }: { g: Game }) {
       <div className="card">
         <h3>原料采购</h3>
         <div className="title-rule" />
+        <p className="hint sm">
+          选档形成本月采购计划（结算时统一付款，不耗 AP）；「设备购置」为特殊行动，消耗 1 AP、现金即付，当月产能与折旧即生效。
+        </p>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85em' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--line)' }}>
@@ -1118,6 +1121,9 @@ function MakePage({ g }: { g: Game }) {
       <div className="card">
         <h3>产能分配</h3>
         <div className="title-rule" />
+        <p className="hint sm">
+          排产形成本月生产计划（结算时执行，不耗 AP）；需更多产能可用「特殊行动 · 安排加班」，消耗 1 AP（需生产 ≥ 3 人，另付 2× 生产工资）。
+        </p>
         <div className="grid-3" style={{ marginBottom: 'var(--s3)' }}>
           <div>
             <div className="stat-label">本月产能</div>
@@ -1208,7 +1214,7 @@ function MakePage({ g }: { g: Game }) {
         })}
       </div>
 
-      {/* 产能补充（加班 / 设备购置计划）已移入「特殊行动」面板 */}
+      {/* 产能补充（加班 / 设备购置）已移入「特殊行动」面板 */}
 
       {gs.equipment.length ? (
         <div className="card">
@@ -1228,8 +1234,7 @@ function MakePage({ g }: { g: Game }) {
         </div>
       ) : null}
 
-      {/* 生产设备购置：弹窗选型号与台数（同采购选档样式），形成购置计划、结算时统一付款 */}
-      {/* 加班安排 / 设备购置计划在「特殊行动」面板结算 */}
+      {/* 加班安排 / 设备购置（现金即付、当月生效）在「特殊行动」面板结算 */}
     </>
   )
 }

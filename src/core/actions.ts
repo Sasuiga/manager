@@ -7,7 +7,6 @@ import {
   CARDS,
   DEPT_NAMES,
   EQUIPMENT_MODELS,
-  EQUIP_CAP_PER_WORKER,
   IP_BY_ID,
   LOAN_TERM_MONTHS,
   MATERIALS,
@@ -705,7 +704,7 @@ export function plannedPurchaseCost(state: GameState): Money {
 }
 
 export function availableCashAfterPurchasePlan(state: GameState): Money {
-  return state.cash - plannedPurchaseCost(state) - planEquipmentCost(state)
+  return state.cash - plannedPurchaseCost(state)
 }
 
 /** 应用指定原料采购档位后的「期末资金（回款前）」：试应用新档位并重算（协议自动采购随仓容/现金联动）；为负 = 计划超出资金能力。 */
@@ -759,21 +758,15 @@ export interface ProductionUnitCosts {
   planned: number
 }
 
-/** 设备折旧预演：核心模式计划设备结算时入账，当月起计提全额月折旧。 */
-export function plannedEquipmentDepreciation(state: GameState): number {
-  return state.plan.equipment.reduce((sum, id) => sum + (EQUIPMENT_MODELS[id]?.depreciation ?? 0), 0)
-}
-
 /**
  * 生产单位成本（完全成本口径，供生产 / 销售 / 预算页共用）：
  * 材料成本按采购计划后的原料库存单价计 BOM 领料（采购计划在此影响库存成本）；
- * 固定成本（生产薪酬、本月折旧（含核心模式计划设备）、加班费）按排产量分摊到每件。
+ * 固定成本（生产薪酬、本月折旧（设备购置即时入账，折旧自购置当月起）、加班费）按排产量分摊到每件。
  */
 export function productionUnitCosts(state: GameState): ProductionUnitCosts {
   const d = derive(state)
   const labor = d.salaryPer.make * state.depts.make.staff
   const depreciation = state.equipment.reduce((sum, e) => sum + Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated)), 0)
-    + plannedEquipmentDepreciation(state)
   const overtime = state.overtimePaid
   const fixedTotal = labor + depreciation + overtime
   const planned = TIERS.reduce((sum, t) => sum + state.plan.quantities[t], 0)
@@ -1116,13 +1109,24 @@ export function developSupplier(state: GameState, materialId: string): ActionRes
 // 生产
 // ════════════════════════════════════════════════════════════
 
-export function buyEquipment(state: GameState, shopId: string): ActionResult {
+export function buyEquipment(state: GameState, shopId: string, count = 1): ActionResult {
+  const gate = canBuyEquipment(state, shopId, count)
+  if (!gate.ok) return gate
   const model = EQUIPMENT_MODELS[shopId]
-  if (!model) return fail('未知设备')
-  if (state.cash < model.price) return fail('现金不足')
-  state.cash -= model.price
-  pushEquipment(state, model.id, model.price, '商店购置')
-  return { ok: true, msg: `每名生产人员产能 +${model.cap}` }
+  state.ap -= 1
+  state.cash -= model.price * count
+  for (let i = 0; i < count; i++) pushEquipment(state, model.id, model.price, '商店购置')
+  return { ok: true, msg: `已购置 ${model.name} ×${count}：现金 ${((model.price * count) / 10).toFixed(2)}w 即付资本化，本月产能与折旧生效（−1 AP）` }
+}
+
+/** 购置可行性（UI 判断按钮可用）：型号有效、台数范围、AP、现金（即时支付口径）。 */
+export function canBuyEquipment(state: GameState, modelId: string, count: number): ActionResult {
+  const model = EQUIPMENT_MODELS[modelId]
+  if (!model) return fail('未知设备型号')
+  if (count < 1 || count > 5) return fail('单型号每次最多购置 5 台')
+  if (state.ap < 1) return fail('AP 不足（设备购置 1 AP/次）')
+  if (state.cash < model.price * count) return fail('现金不足')
+  return { ok: true }
 }
 
 /** 设备入账公共路径（商店 / 事件 / 设备计划）：资本化实付对价，型号决定产能/折旧/额度；事件白送设备传 withLedger=false（资产由营业外收入平衡）。 */
@@ -1168,57 +1172,6 @@ function equipmentModelOf(marker: string): string {
   return 'eq-line'
 }
 
-/** 结算时执行设备购置计划：付款资本化（当月产能与折旧生效），清空计划清单。 */
-export function executePlannedEquipment(state: GameState): void {
-  if (state.plan.equipment.length === 0) return
-  for (const modelId of state.plan.equipment) {
-    const model = EQUIPMENT_MODELS[modelId]
-    if (!model) continue
-    state.cash -= model.price
-    pushEquipment(state, modelId, model.price, '设备计划')
-  }
-  state.plan.equipment = []
-}
-
-/** 计划设备：各型号购置计划（核心模式）的现金预留与产能/折旧预期（含 IP 设备产能加成）。 */
-export function plannedEquipmentCap(state: GameState): number {
-  const d = derive(state)
-  return state.plan.equipment.reduce((sum, id) => sum + (EQUIPMENT_MODELS[id]?.cap ?? EQUIP_CAP_PER_WORKER), 0)
-    + state.plan.equipment.length * d.ipEquipCapacity
-}
-
-export function planEquipmentCost(state: GameState): Money {
-  return state.plan.equipment.reduce((sum, id) => sum + (EQUIPMENT_MODELS[id]?.price ?? 0), 0)
-}
-
-/** 核心模式设备购置计划：计划 count 台某型号（0 = 取消），预留现金、结算时统一付款入库。 */
-export function setPlanEquipment(state: GameState, modelId: string, count: number): ActionResult {
-  const model = EQUIPMENT_MODELS[modelId]
-  if (!model) return fail('未知设备型号')
-  if (count < 0 || count > 5) return fail('单型号每月最多计划 5 台')
-  const prev = state.plan.equipment.filter((id) => id !== modelId)
-  const next = [...prev, ...Array.from({ length: count }, () => modelId)]
-  // 现金口径（同采购计划）：切换后「期末资金（回款前）」不得为负
-  state.plan.equipment = next
-  if (preSettleCash(state).cashAfter < 0) {
-    state.plan.equipment = prev
-    return fail('可用现金不足（期末资金将为负）')
-  }
-  pushLog(
-    state, 'action',
-    `设备计划：${model.name} ×${count}`,
-    count
-      ? [`预留现金 ${((model.price * count) / 10).toFixed(2)}w，结算时付款入库，当月产能与折旧生效`]
-      : ['取消设备购置计划，预留现金释放'],
-  )
-  return { ok: true, msg: count ? `已计划购置 ${model.name} ${count} 台` : `${model.name} 计划已取消` }
-}
-
-export function canSetPlanEquipment(state: GameState, modelId: string, count: number): ActionResult {
-  const copy = JSON.parse(JSON.stringify(state)) as GameState
-  return setPlanEquipment(copy, modelId, count)
-}
-
 /** 设置单条产品线的排产量；所有产品线共享同一个产能池。 */
 export function setPlan(state: GameState, tier: Tier, qty: number) {
   if (!state.products[tier].built) return
@@ -1235,10 +1188,9 @@ export function plannedTotal(state: GameState): number {
 export function planCapacity(state: GameState): number {
   const d = derive(state)
   const staff = state.depts.make.staff
-  const planned = plannedEquipmentCap(state)
-  let cap = d.capacity + staff * planned
+  let cap = d.capacity
   if (state.plan.overtime) {
-    const gain = overtimeGainOf(staff, d.equipmentCapBonus + planned)
+    const gain = overtimeGainOf(staff, d.equipmentCapBonus)
     cap += gain + (d.overtimeGainPlus ? gain : 0) // 加班补贴强化（K8+/D7+）：产能增益翻倍
   }
   return cap
@@ -1380,8 +1332,8 @@ export function toggleOvertime(state: GameState): ActionResult {
   state.plan.overtime = true
   state.overtimePaid = cost
   state.cash -= cost
-  let gain = overtimeGainOf(staff, d.equipmentCapBonus + plannedEquipmentCap(state))
-  if (d.overtimeGainPlus) gain += overtimeGainOf(staff, d.equipmentCapBonus + plannedEquipmentCap(state)) // K8 强化 / D7 强化：加班产能 +1× 员工产能
+  let gain = overtimeGainOf(staff, d.equipmentCapBonus)
+  if (d.overtimeGainPlus) gain += overtimeGainOf(staff, d.equipmentCapBonus) // K8 强化 / D7 强化：加班产能 +1× 员工产能
   const baseCost = cost * (d.overtimeHalf ? 2 : 1)
   return {
     ok: true,

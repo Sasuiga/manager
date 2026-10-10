@@ -18,7 +18,7 @@ import {
 } from '../data/game'
 import { derive, mergeMods, rndProjectOutcome } from './derive'
 import { balanceSheet, equipmentNet, equityOf, inventoryValue, wagePayableOf } from './game'
-import { executePlannedPurchases, executePlannedEquipment, issueMaterials, postProductionInbound, pushLog } from './actions'
+import { executePlannedPurchases, issueMaterials, postProductionInbound, pushLog } from './actions'
 import { checkMilestones } from './milestones'
 import { Rng } from './rng'
 import type {
@@ -85,10 +85,9 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   const d = derive(state)
   const warnings: string[] = []
 
-  // 核心模式：普通采购在经营阶段只是计划，正式结算时先付款入库。
+  // 普通采购在经营阶段只是计划，正式结算时先付款入库。
+  // 设备购置已即时化（行动阶段选定即实付入库），不再随结算执行。
   executePlannedPurchases(state)
-  // 核心模式：设备购置计划随结算执行——当月产能与折旧生效，再进入生产段。
-  executePlannedEquipment(state)
 
   // ══════════ 0. 长期协议自动采购 ══════════
   const autoPurchase: SettleReport['autoPurchase'] = []
@@ -952,7 +951,7 @@ export function advanceMonth(state: GameState, rng: Rng) {
   state.playedThisMonth = []
   state.lotsUsed = 0
   state.extraBuys = []
-  state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false, equipment: [] }
+  state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false }
   state.overtimePaid = 0
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
   state.monthLedger = []

@@ -142,7 +142,8 @@ export function SpecialActions({ g, dept }: { g: Game; dept: E.Dept }) {
     const staff = s.depts.make.staff
     const otCostBase = overtimeCostOf(d.salaryPer.make, staff)
     const otCost = d.overtimeHalf ? Math.round(otCostBase / 2) : otCostBase
-    const otGain = overtimeGainOf(staff, d.equipmentCapBonus + E.plannedEquipmentCap(s)) * (d.overtimeGainPlus ? 2 : 1)
+    const otGain = overtimeGainOf(staff, d.equipmentCapBonus) * (d.overtimeGainPlus ? 2 : 1)
+    const minEquipPrice = Math.min(...EQUIPMENT_SHOP.map((e) => e.price))
     items = [
       {
         id: 'overtime',
@@ -161,8 +162,14 @@ export function SpecialActions({ g, dept }: { g: Game; dept: E.Dept }) {
       },
       {
         id: 'equip',
-        name: '生产设备购置计划',
-        sub: `免 AP · 预留现金，结算时统一购置（当月产能与折旧生效，每名生产人员产能 +${EQUIP_CAP_PER_WORKER}）`,
+        name: '生产设备购置',
+        disabled: s.ap < 1 || s.cash < minEquipPrice,
+        sub:
+          s.ap < 1
+            ? 'AP 不足（结算 1 AP）'
+            : s.cash < minEquipPrice
+              ? `现金不足（${wan(minEquipPrice)}/台）`
+              : `结算 1 AP · 现金即付当月生效（每名生产人员产能 +${EQUIP_CAP_PER_WORKER}）`,
       },
       hireItem,
     ]
@@ -884,7 +891,7 @@ function OvertimeSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const staff = gs.depts.make.staff
   const otCostBase = overtimeCostOf(d.salaryPer.make, staff)
   const otCost = d.overtimeHalf ? Math.round(otCostBase / 2) : otCostBase
-  const otGain = overtimeGainOf(staff, d.equipmentCapBonus + E.plannedEquipmentCap(gs)) * (d.overtimeGainPlus ? 2 : 1)
+  const otGain = overtimeGainOf(staff, d.equipmentCapBonus) * (d.overtimeGainPlus ? 2 : 1)
   const arranged = gs.plan.overtime
   const reason = arranged
     ? '本月已安排（不可取消）'
@@ -933,9 +940,10 @@ function OvertimeSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   )
 }
 
-/* ══════════════ 生产设备购置计划（免 AP，预留现金） ══════════════ */
+/* ══════════════ 生产设备购置（1 AP/型号 + 现金，选定即实付） ══════════════ */
 
-/** 生产设备购置弹窗：先展示当前持有设备，再给出购置计划选项（同「选择采购档位」选单样式），结算时统一付款。 */
+/** 生产设备购置弹窗：先展示当前持有设备，再给出购置选项（同「选择采购档位」选单样式）。
+ * 弹框内台数为草稿；底部「结算」按型号逐次实付现金、入账（每台 1 AP，单型号每次 ≤5 台），当月产能/折旧/额度即生效；「关闭」取消（草稿不生效、不扣 AP、不动现金）。 */
 function EquipmentPickSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const gs = g.s
   const d = E.derive(gs)
@@ -948,15 +956,41 @@ function EquipmentPickSheet({ g, onClose }: { g: Game; onClose: () => void }) {
     cur.cost += e.cost
     owned.set(e.name, cur)
   }
-  const applyStep = (modelId: string, count: number) => {
-    const r = g.act((st) => E.setPlanEquipment(st, modelId, count))
-    if (!r.ok) g.setToast(r.msg)
+  // 草稿态：型号 -> 台数（结算前不扣 AP、不动现金）
+  const [draft, setDraft] = useState<Record<string, number>>({})
+  const step = (modelId: string, delta: number) => {
+    setDraft((cur) => ({ ...cur, [modelId]: Math.max(0, Math.min(5, (cur[modelId] ?? 0) + delta)) }))
+  }
+  const draftPicks = EQUIPMENT_SHOP.filter((e) => (draft[e.id] ?? 0) > 0)
+  const draftUnits = draftPicks.reduce((a, e) => a + (draft[e.id] ?? 0), 0)
+  const draftCost = draftPicks.reduce((a, e) => a + (draft[e.id] ?? 0) * e.price, 0)
+  const apNeed = draftPicks.length // 每型号一次购置 1 AP
+  const reason =
+    draftUnits === 0
+      ? '请选择购置台数'
+      : gs.ap < apNeed
+        ? 'AP 不足'
+        : gs.cash < draftCost
+          ? '现金不足'
+          : null
+  const settle = () => {
+    const results = draftPicks.map((e) => g.act((st) => E.buyEquipment(st, e.id, draft[e.id]!)))
+    if (results.every((r) => r.ok)) {
+      g.setToast(`已结算购置：${draftPicks.map((e) => `${e.name} ×${draft[e.id]}`).join('、')}（现金即付，当月生效，−${apNeed} AP）`)
+      onClose()
+    }
   }
   return (
     <Sheet
       title="生产设备购置"
-      sub="免 AP · 计划预留现金，结算时统一购置：当月产能与折旧生效，借款额度自购置当月起算"
+      sub="每型号 1 AP · 现金即付、当月生效（产能与折旧，借款额度自购置当月起算）"
       onClose={onClose}
+      footer={
+        <button className="btn btn-primary" disabled={reason !== null} onClick={settle}>
+          <span className="btn-main">结算 · 确认购置</span>
+          <span className="btn-sub">{reason ?? `${apNeed} AP + ${wan(draftCost)} 现金即付（草稿 ${draftUnits} 台）`}</span>
+        </button>
+      }
     >
       <div className="card">
         <div className="section-label">当前设备</div>
@@ -979,11 +1013,10 @@ function EquipmentPickSheet({ g, onClose }: { g: Game; onClose: () => void }) {
       </div>
 
       <div className="card" style={{ marginTop: 'var(--s3)' }}>
-        <div className="section-label">本月购置计划</div>
+        <div className="section-label">购置（草稿，结算后生效）</div>
         <div className="stack">
           {EQUIPMENT_SHOP.map((e) => {
-            const planned = gs.plan.equipment.filter((id) => id === e.id).length
-            const stepOk = (n: number) => E.canSetPlanEquipment(gs, e.id, n).ok
+            const n = draft[e.id] ?? 0
             return (
               <div key={e.id} className="card-item">
                 <span className="spine" />
@@ -991,20 +1024,21 @@ function EquipmentPickSheet({ g, onClose }: { g: Game; onClose: () => void }) {
                   <span className="card-name">{e.name} · {wan(e.price)}/台</span>
                   <span className="card-desc">{e.desc}</span>
                   <span className="card-desc">
-                    计划 {planned} 台 × 生产 {gs.depts.make.staff} 人：本月产能 +{planned * e.cap * gs.depts.make.staff}
-                    {planned > 0 ? ` · 预留现金 ${wan(planned * e.price)}` : ''}
+                    {n > 0
+                      ? `草稿 ${n} 台 × 生产 ${gs.depts.make.staff} 人：本月产能 +${n * e.cap * gs.depts.make.staff} · 现金 ${wan(n * e.price)}`
+                      : '未选购置'}
                   </span>
                 </span>
                 <span style={{ display: 'flex', gap: 'var(--s1)', alignItems: 'center' }}>
-                  <button className="btn btn-mini" style={{ width: 'auto' }} disabled={planned <= 0 || !stepOk(planned - 1)} onClick={() => applyStep(e.id, planned - 1)}>−</button>
-                  <span className="mono xs" style={{ minWidth: 20, textAlign: 'center' }}>{planned}</span>
-                  <button className="btn btn-mini" style={{ width: 'auto' }} disabled={!stepOk(planned + 1)} onClick={() => applyStep(e.id, planned + 1)}>＋</button>
+                  <button className="btn btn-mini" style={{ width: 'auto' }} disabled={n <= 0} onClick={() => step(e.id, -1)}>−</button>
+                  <span className="mono xs" style={{ minWidth: 20, textAlign: 'center' }}>{n}</span>
+                  <button className="btn btn-mini" style={{ width: 'auto' }} disabled={!E.canBuyEquipment(gs, e.id, n + 1).ok} onClick={() => step(e.id, 1)}>＋</button>
                 </span>
               </div>
             )
           })}
           <p className="muted sm" style={{ margin: 0 }}>
-            计划设备在「结算」时统一付款入库（与采购计划同批执行），结算前可自由增减；预留现金在 HUD「期末资金」桥接中可见。关闭即取消（免 AP，计划保留在状态中）。
+            结算时现金即付（资本化为固定资产，不计入当期损益），设备立即入库：本月产能、折旧与借款额度当月起生效；每型号 1 AP（单型号每次最多 5 台），关闭即取消（不扣 AP、不动现金）。
           </p>
         </div>
       </div>

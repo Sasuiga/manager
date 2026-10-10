@@ -163,7 +163,6 @@ function FundsSheet({ g, onClose }: { g: Game; onClose: () => void }) {
         {ps.overtimePay > 0 ? <Row k="− 加班费（安排时已付）" v={wan(ps.overtimePay)} /> : null}
         <Row k="当前现金（实付/实收后）" v={wan(currentCash)} bold />
         {ps.purchasePlan > 0 ? <Row k="− 采购计划（结算时付）" v={wan(ps.purchasePlan)} /> : null}
-        {ps.equipmentPlan > 0 ? <Row k="− 设备购置计划（结算时付）" v={wan(ps.equipmentPlan)} /> : null}
         {ps.agreementSpend > 0 ? <Row k="− 协议自动采购" v={wan(ps.agreementSpend)} /> : null}
         {ps.rndInvest > 0 ? <Row k="− 研发投入" v={wan(ps.rndInvest)} /> : null}
         {ps.interest > 0 ? <Row k="− 借款利息" v={wan(ps.interest)} /> : null}

@@ -55,7 +55,7 @@ export function applyCoreScenario(state: GameState, id: CoreScenarioId) {
   state.acceptedOrders = []
   state.declinedOrders = []
   state.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
-  state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false, equipment: [] }
+  state.plan = { quantities: { low: 0, mid: 0, high: 0, special: 0 }, overtime: false }
   state.overtimePaid = 0
   state.monthLedger = []
   state.lotsUsed = 0
