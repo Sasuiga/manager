@@ -78,7 +78,8 @@ function play(seed: number, cfg = { make: 3, sell: 3, buy: 2, rnd: 1, ops: 1, mi
       const t = s.products.mid.built ? 'ip-supply-1' : 'bom-mid'
       E.setRndAssign(s, t, s.depts.rnd.staff)
     }
-    if (s.cash < 250) { if (s.debt > 0) E.repay(s, s.debt); const d2 = E.derive(s); const a = Math.min(d2.creditAvailable, 250); if (a >= 10) E.borrow(s, a - (a % 10)) }
+    if (s.cash < 250) { s.ap = Math.max(s.ap, 2) // 借/还款各 1 AP：策略借还时保证 AP 可用
+      if (s.debt > 0) E.repay(s, s.debt); const d2 = E.derive(s); const a = Math.min(d2.creditAvailable, 250); if (a >= 10) E.borrow(s, a - (a % 10)) }
     E.settleMonth(s)
     if (s.result !== 'playing') break
     E.nextMonth(s)

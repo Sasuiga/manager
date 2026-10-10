@@ -47,6 +47,7 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
 
     // ── 借款：现金 < 30w 时先还上一笔（未还清不能借新），再借到可用额度上限（基础额度 5w），再招聘/采购 ──
     if (s.cash < 300) {
+      s.ap = Math.max(s.ap, 2) // 借/还款各 1 AP：策略借还时保证 AP 可用
       if (s.debt > 0) E.repay(s, s.debt)
       const d0 = E.derive(s)
       const amt = Math.min(d0.creditAvailable, 300)
@@ -125,6 +126,7 @@ function playYear(seed: number, policy: 'conservative' | 'aggressive' = 'conserv
 
     // ── 借款：现金 < 30w 时先还上一笔（未还清不能借新），再借满可用额度（采购之后、结算前） ──
     if (s.cash < 300) {
+      s.ap = Math.max(s.ap, 2) // 借/还款各 1 AP：策略借还时保证 AP 可用
       if (s.debt > 0) E.repay(s, s.debt)
       const d2 = E.derive(s)
       const amt = Math.min(d2.creditAvailable, 300)
@@ -365,8 +367,8 @@ describe('引擎', () => {
       }
       E.enterDraw(s)
       E.enterOperate(s)
-      if (s.debt > 0) E.repay(s, s.debt)
-      if (E.derive(s).creditAvailable >= 100 && m >= 2) E.borrow(s, 100)
+      if (s.debt > 0) { s.ap = Math.max(s.ap, 2); E.repay(s, s.debt) }
+      if (E.derive(s).creditAvailable >= 100 && m >= 2) { s.ap = Math.max(s.ap, 1); E.borrow(s, 100) }
 
       const rep = E.settleMonth(s)
       check(`m${m} 结算后`)
@@ -818,6 +820,7 @@ describe('引擎', () => {
     expect(E.repay(s, 20).ok).toBe(true)
     expect(s.debt).toBe(0)
     expect(s.loanDueMonth).toBe(0)
+    s.ap = 1 // 借款 1 AP：上一笔借/还后 AP 已花完，补 1 AP 验证期限约束已解除
     expect(E.borrow(s, 20).ok).toBe(true)
     expect(s.loanDueMonth).toBe(3)
 
@@ -845,6 +848,24 @@ describe('引擎', () => {
     expect(due!.creditAmt).toBe(20)
     const b = E.balanceSheet(s)
     expect(b.totalAssets - b.debt - b.wagePayable - b.equity).toBe(0)
+  })
+
+  it('融资：借/还款各消耗 1 AP（AP 不足被拒）', () => {
+    const s = E.newGame(32)
+    E.startGame(s)
+    if (s.challengeOffered.length) E.chooseChallenge(s, 0)
+    E.beginMonthEvent(s)
+    E.enterDraw(s)
+    E.enterOperate(s)
+    s.ap = 1
+    expect(E.borrow(s, 50).ok).toBe(true)
+    expect(s.ap).toBe(0)
+    expect(E.repay(s, 50).ok).toBe(false) // AP 不足
+    expect(s.debt).toBe(50)
+    s.ap = 1
+    expect(E.repay(s, 50).ok).toBe(true)
+    expect(s.ap).toBe(0)
+    expect(s.debt).toBe(0)
   })
 
   it('借款当月不计息，次月起息；到期月本金与当月利息同批还掉', () => {

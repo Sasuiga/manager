@@ -916,7 +916,9 @@ export function traderQuota(state: GameState): number {
 export function buyFromTrader(state: GameState, materialId: string, qty: number, price: Money): ActionResult {
   const used = state.extraBuys.filter((e) => e.kind === 'trader' && e.materialId === materialId).length
   if (used >= traderQuota(state)) return fail('该品种本月已购买')
+  if (state.ap < 1) return fail('AP 不足（贸易商购买 1 AP/次）')
   if (state.cash < qty * price) return fail('现金不足')
+  state.ap -= 1
   state.extraBuys.push({ kind: 'trader', materialId, qty, price, used: true })
   const added = addMaterial(state, materialId, qty, price, false)
   if (added > 0) {
@@ -930,12 +932,12 @@ export function buyFromTrader(state: GameState, materialId: string, qty: number,
       creditAmt: added * price,
       detail: [
         `${added} 件 × ${(price / 10).toFixed(2)}w（贸易商小批，价格 +1 档）`,
-        '现金实付全额转入库存（移动加权平均计价），不占本月采购档数',
+        '现金实付全额转入库存（移动加权平均计价），不占本月采购档数；行动消耗 1 AP',
       ],
     })
   }
-  pushLog(state, 'action', `贸易商采购 ${nameOf(materialId)}`, [`${added} 单位 × ${(price / 10).toFixed(2)}w`])
-  return { ok: true, msg: `入库 ${added} 单位` }
+  pushLog(state, 'action', `贸易商采购 ${nameOf(materialId)}`, [`${added} 单位 × ${(price / 10).toFixed(2)}w · 消耗 1 AP`])
+  return { ok: true, msg: `入库 ${added} 单位（-1 AP）` }
 }
 
 /** 不占档数的额外采购机会（C6 紧急采购 / C10 清仓）共用执行：扣现金、入库、记账、记录次数。 */
@@ -1371,8 +1373,10 @@ export function toggleOvertime(state: GameState): ActionResult {
   const d = derive(state)
   let cost = overtimeCostOf(d.salaryPer.make, staff)
   if (d.overtimeHalf) cost = Math.round(cost / 2) // 加班补贴（K8 本月 / D7 长期）：减半
+  if (state.ap < 1) return fail('AP 不足（安排加班 1 AP）')
   if (state.cash < cost) return fail('现金不足')
-  // 发生时直接支付（非工资式计提下月实付）：安排即扣现金，选定后不可取消、费用不退（清生产计划不影响）
+  // 发生时直接支付（非工资式计提下月实付）：安排即扣现金，选定后不可取消、费用不退（清生产计划不影响）；行动消耗 1 AP
+  state.ap -= 1
   state.plan.overtime = true
   state.overtimePaid = cost
   state.cash -= cost
@@ -1381,7 +1385,7 @@ export function toggleOvertime(state: GameState): ActionResult {
   const baseCost = cost * (d.overtimeHalf ? 2 : 1)
   return {
     ok: true,
-    msg: `加班已安排（发生支付 2× 生产工资 ${(baseCost / 10).toFixed(2)}w${d.overtimeHalf ? `，加班补贴减半后实付 ${(cost / 10).toFixed(2)}w` : ''}，选定后不可取消、费用不退；本月产能 +${gain}）`,
+    msg: `加班已安排（-1 AP，发生支付 2× 生产工资 ${(baseCost / 10).toFixed(2)}w${d.overtimeHalf ? `，加班补贴减半后实付 ${(cost / 10).toFixed(2)}w` : ''}，选定后不可取消、费用不退；本月产能 +${gain}）`,
   }
 }
 
@@ -1440,6 +1444,48 @@ export function setBuyPriceAlloc(state: GameState, matId: string, tiers: number)
   const remaining = Math.max(0, d.buyResource - usedOthers - current)
   const maxTiers = Math.min(buyNegotiateCapOf(state.depts.buy.staff), Math.floor(remaining / d.buyNegotiateCost))
   state.buyPriceAlloc[matId] = Math.max(0, Math.min(maxTiers, tiers))
+}
+
+/**
+ * 确认本月采购资源分配（特殊行动，1 AP）：供给加点（件数）与议价（档数）草稿写回后生效。
+ * 结算前可再次确认（再调整需再 1 AP）；弹框内草稿取消/关闭则不生效。
+ */
+export function confirmBuyResourceAlloc(
+  state: GameState,
+  draft: { supply?: Record<string, number>; price?: Record<string, number> },
+): ActionResult {
+  if (state.ap < 1) return fail('AP 不足（确认分配 1 AP）')
+  for (const m of MATERIALS) setBuySupplyAlloc(state, m.id, draft.supply?.[m.id] ?? 0)
+  for (const m of MATERIALS) setBuyPriceAlloc(state, m.id, draft.price?.[m.id] ?? 0)
+  state.ap -= 1
+  const d = derive(state)
+  const supplyUnits = MATERIALS.reduce((a, m) => a + (d.buySupplyPush[m.id] ?? 0), 0)
+  const priceTiers = MATERIALS.reduce((a, m) => a + (d.buyPricePush[m.id] ?? 0), 0)
+  pushLog(state, 'action', '采购资源分配确认', [
+    `1 AP：供给加点 ${supplyUnits} 件 · 议价 ${priceTiers} 档（共用池 ${d.buyResource} 点，已用 ${d.buyResourceUsed} 点）`,
+  ])
+  return { ok: true, msg: `采购资源分配已确认（供给 +${supplyUnits} 件 / 议价 ${priceTiers} 档，-1 AP）` }
+}
+
+/**
+ * 确认本月销售资源分配（特殊行动，1 AP）：需求加点（点数）与提价（档数）草稿写回后生效。
+ * 结算前可再次确认（再调整需再 1 AP）；弹框内草稿取消/关闭则不生效。
+ */
+export function confirmSellResourceAlloc(
+  state: GameState,
+  draft: { demand?: Partial<Record<Tier, number>>; raise?: Partial<Record<Tier, number>> },
+): ActionResult {
+  if (state.ap < 1) return fail('AP 不足（确认分配 1 AP）')
+  for (const t of TIERS) setAlloc(state, t, draft.demand?.[t] ?? 0)
+  for (const t of TIERS) setSellPriceAlloc(state, t, draft.raise?.[t] ?? 0)
+  state.ap -= 1
+  const d = derive(state)
+  const demandPoints = allocUsed(state)
+  const raisePoints = TIERS.reduce((a, t) => a + (state.sellPriceAlloc[t] ?? 0) * d.sellRaiseCost, 0)
+  pushLog(state, 'action', '销售资源分配确认', [
+    `1 AP：需求加点 ${demandPoints} 点 · 提价 ${raisePoints} 点（共用池 ${d.salesResource} 点）`,
+  ])
+  return { ok: true, msg: `销售资源分配已确认（需求 ${demandPoints} 点 / 提价 ${raisePoints} 点，-1 AP）` }
 }
 
 /** 设置某层本月提价档数（0~上限；需销售 ≥2；消耗销售资源，与需求加点共用池；档上限随人数 2 人 1 档 / 4 人 2 档；仅现货、该层需求 −1；S12/S15 可降点数/升上限）。 */
@@ -1682,6 +1728,8 @@ export function borrow(state: GameState, amount: Money): ActionResult {
   if (amount <= 0) return fail('金额无效')
   if (amount > d.creditAvailable) return fail('超出可用额度')
   if (amount % 10 !== 0) return fail('借款以 1w 为单位')
+  if (state.ap < 1) return fail('AP 不足（借款 1 AP）')
+  state.ap -= 1
   state.cash += amount
   state.debt += amount
   const dueMonth = state.month + LOAN_TERM_MONTHS - 1
@@ -1711,6 +1759,8 @@ export function repay(state: GameState, amount: Money): ActionResult {
   if (amount <= 0) return fail('金额无效')
   if (amount > state.debt) return fail('超出借款总额')
   if (amount > state.cash) return fail('现金不足')
+  if (state.ap < 1) return fail('AP 不足（还款 1 AP）')
+  state.ap -= 1
   state.cash -= amount
   state.debt -= amount
   const cleared = state.debt === 0

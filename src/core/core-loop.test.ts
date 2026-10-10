@@ -277,10 +277,28 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(E.preSettleCash(s).overtimePay).toBe(48)
     expect(s.overtimePaid).toBe(48)
     expect(s.cash).toBe(cashBefore - 48)
-    // 再点：一经选定即锁定，不可取消、费用不退
+    // 再点：一经选定即锁定，不可取消、费用不退（再次点击不重扣 AP）
     expect(E.toggleOvertime(s).ok).toBe(true)
     expect(s.overtimePaid).toBe(48)
     expect(s.cash).toBe(cashBefore - 48)
+  })
+
+  it('安排加班消耗 1 AP（AP 不足被拒、不安排不扣费）', () => {
+    const s = fresh(902)
+    s.monthMods = {}
+    s.currentEvent = null
+    s.ap = 5
+    expect(E.hire(s, 'make').ok).toBe(true)
+    expect(E.hire(s, 'make').ok).toBe(true)
+    expect(E.hire(s, 'make').ok).toBe(true)
+    s.ap = 0
+    const cash0 = s.cash
+    expect(E.toggleOvertime(s).ok).toBe(false)
+    expect(s.plan.overtime).toBe(false)
+    expect(s.cash).toBe(cash0) // 被拒不扣现金
+    s.ap = 1
+    expect(E.toggleOvertime(s).ok).toBe(true)
+    expect(s.ap).toBe(0)
   })
 
   it('预演包含当月招聘的效果：招 2 名生产后产能上限提升', () => {
@@ -687,11 +705,23 @@ describe('贸易商', () => {
     expect(E.buyFromTrader(s, o.materialId, o.qty, o.price).ok).toBe(false)
   })
 
+  it('贸易商购买消耗 1 AP（AP 不足被拒、不入库）', () => {
+    const s = preparedCoreState()
+    const o = E.traderOffer(s)[0]
+    s.ap = 0
+    expect(E.buyFromTrader(s, o.materialId, o.qty, o.price).ok).toBe(false)
+    expect(s.extraBuys.filter((e) => e.kind === 'trader')).toHaveLength(0)
+    s.ap = 1
+    expect(E.buyFromTrader(s, o.materialId, o.qty, o.price).ok).toBe(true)
+    expect(s.ap).toBe(0)
+  })
+
   it('C4 贸易商牌提升配额，月初清零', () => {
     const s = preparedCoreState()
     s.playedThisMonth.push({ uid: 'c4#test', defId: 'C4', empowered: false })
     const o = E.traderOffer(s)[0]
     expect(E.traderQuota(s)).toBe(2)
+    s.ap = 3 // 贸易商购买 1 AP/次：保证配额内 2 次购买不因 AP 受限
     expect(E.buyFromTrader(s, o.materialId, o.qty, o.price).ok).toBe(true)
     expect(E.buyFromTrader(s, o.materialId, o.qty, o.price).ok).toBe(true)
     expect(E.buyFromTrader(s, o.materialId, o.qty, o.price).ok).toBe(false)
@@ -1384,5 +1414,49 @@ describe('董事会目标层（核心模式：board 阶段恢复）', () => {
     }
     expect(s.goalPoints).toBe(20) // Q1 +10、Q2 +10
     expect(E.computeScore(s).goal).toBe(s.goalPoints)
+  })
+})
+
+describe('特殊行动：资源分配确认（1 AP）', () => {
+  it('confirmBuyResourceAlloc：供给加点/议价草稿写回并扣 1 AP', () => {
+    const s = preparedCoreState()
+    s.depts.buy.staff = 3
+    s.depts.buy.hired = 3
+    s.ap = 3
+    const r = E.confirmBuyResourceAlloc(s, { supply: { pkg: 2 }, price: { pkg: 1 } })
+    expect(r.ok).toBe(true)
+    expect(s.ap).toBe(2)
+    expect(s.buySupplyAlloc.pkg).toBe(2)
+    expect(s.buyPriceAlloc.pkg).toBe(1)
+    const d = E.derive(s)
+    expect(d.buySupplyPush.pkg).toBe(2)
+    expect(d.buyPricePush.pkg).toBe(1)
+  })
+
+  it('confirmBuyResourceAlloc：AP 不足被拒，草稿不写回', () => {
+    const s = preparedCoreState()
+    s.depts.buy.staff = 3
+    s.depts.buy.hired = 3
+    s.ap = 0
+    const r = E.confirmBuyResourceAlloc(s, { supply: { pkg: 2 } })
+    expect(r.ok).toBe(false)
+    expect(s.buySupplyAlloc.pkg ?? 0).toBe(0)
+  })
+
+  it('confirmSellResourceAlloc：需求加点/提价草稿写回并扣 1 AP；AP 不足被拒', () => {
+    const s = preparedCoreState()
+    s.depts.sell.staff = 2
+    s.depts.sell.hired = 2
+    s.ap = 3
+    const lowCost = E.derive(s).salesPushCost.low
+    const r = E.confirmSellResourceAlloc(s, { demand: { low: lowCost * 2 } })
+    expect(r.ok).toBe(true)
+    expect(s.ap).toBe(2)
+    expect(s.salesAlloc.low).toBe(lowCost * 2)
+    s.ap = 0
+    const midCost = E.derive(s).salesPushCost.mid
+    const r2 = E.confirmSellResourceAlloc(s, { demand: { mid: midCost * 2 } })
+    expect(r2.ok).toBe(false)
+    expect(s.salesAlloc.mid ?? 0).toBe(0)
   })
 })

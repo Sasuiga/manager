@@ -99,6 +99,8 @@ export {
   activeResearch,
   setRndAssign,
   confirmRndAssignments,
+  confirmBuyResourceAlloc,
+  confirmSellResourceAlloc,
   rndAssignedTotal,
   rndActiveThisMonth,
   borrow,

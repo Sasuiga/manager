@@ -72,6 +72,7 @@ function play(seed: number) {
 
     // 周转紧张时借一点
     if (s.cash < 200) {
+      s.ap = Math.max(s.ap, 2) // 借/还款各 1 AP：策略借还时保证 AP 可用
       if (s.debt > 0) E.repay(s, s.debt)
       const d2 = E.derive(s)
       const amt = Math.min(d2.creditAvailable, 200)
