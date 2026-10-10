@@ -208,29 +208,41 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(s.ap).toBe(1)
   })
 
-  it('采购：招聘费阶梯扣现，资源 2→4→6→8，3 人解锁协议位，4 人解锁议价（免费全局降档取消）', () => {
+  it('采购：招聘费阶梯扣现，资源 2→6→8→20（5 人 4 点/人），协议名额不再随部门，4 人议价上限 1→2 档', () => {
     const s = fresh()
     const cash0 = s.cash
     expect(E.hire(s, 'buy').ok).toBe(true)
     expect(s.cash).toBe(cash0 - 50) // 5w 招聘费
     expect(E.derive(s).buyResource).toBe(2)
-    expect(E.agreementSlots(s)).toBe(0)
+    expect(E.agreementSlots(s)).toBe(0) // 长期协议为提案能力，部门基础名额已取消
     s.ap = 5
     expect(E.hire(s, 'buy').ok).toBe(true)
     expect(E.hire(s, 'buy').ok).toBe(true)
-    expect(E.derive(s).buyResource).toBe(6)
-    expect(E.agreementSlots(s)).toBe(1)
+    expect(E.derive(s).buyResource).toBe(6) // 3 人 × 2
+    expect(E.agreementSlots(s)).toBe(0)
     expect(E.hire(s, 'buy').ok).toBe(true)
-    expect(E.derive(s).buyResource).toBe(8)
-    expect(E.derive(s).materials.pkg.tierShift).toBe(E.derive(fresh()).materials.pkg.tierShift) // 4 人不再免费降档，议价需消耗采购资源
-    // 未分配采购资源时，供给不受人数影响（增量供给走采购资源加点/供应商开发等途径）
+    expect(E.derive(s).buyResource).toBe(8) // 4 人 × 2
+    // 未分配采购资源时，供给与档位不受人数影响（无免费全局降档）
     const d0 = E.derive(fresh())
     const d4 = E.derive(s)
     expect(d4.materials.chip.supply - d0.materials.chip.supply).toBe(0)
     expect(d4.materials.pkg.supply - d0.materials.pkg.supply).toBe(0)
+    expect(d4.materials.pkg.tierShift).toBe(d0.materials.pkg.tierShift)
+    expect(E.hire(s, 'buy').ok).toBe(true)
+    expect(E.derive(s).buyResource).toBe(20) // 5 人 × 4
+    // 议价档上限：4 人前每料 1 档，4 人后 2 档
+    s.buyPriceAlloc.chip = 2
+    expect(E.setBuyPriceAlloc(s, 'chip', 2)).toBeUndefined
+    expect(E.derive(s).buyPricePush.chip).toBe(2) // 5 人（≥4）上限 2 档
+    const s3 = fresh()
+    s3.ap = 5
+    expect(E.hire(s3, 'buy').ok).toBe(true)
+    expect(E.hire(s3, 'buy').ok).toBe(true)
+    s3.buyPriceAlloc.chip = 2
+    expect(E.derive(s3).buyPricePush.chip).toBe(1) // 3 人：上限 1 档
   })
 
-  it('销售 2 人解锁第 1 个订单槽、4 人解锁第 2 个：达标当月立即补发', () => {
+  it('销售 2 人解锁第 1 个订单槽 + 解锁提价、4 人解锁第 2 个、3 人每单 +1：达标当月立即补发', () => {
     const s = fresh()
     expect(E.hire(s, 'sell').ok).toBe(true)
     expect(s.orders.length).toBe(0) // 1 人未达订单阈值
@@ -238,8 +250,12 @@ describe('三線招聘（人员能力与解锁轨道）', () => {
     expect(s.orders.length).toBe(1) // 2 人解锁 1 单，当月立即补发
     expect(E.derive(s).orderCount).toBe(1)
     expect(E.derive(s).salesResource).toBe(8) // 基础 0 + 2 人 × 4
+    // 2 人解锁提价（每层上限 1 档）：池 8 点恰好 1 档
+    E.setSellPriceAlloc(s, 'low', 1)
+    expect(E.derive(s).sellPriceRaise.low).toBe(1)
     s.ap = 5
     expect(E.hire(s, 'sell').ok).toBe(true)
+    expect(E.derive(s).orderQty).toBe(11) // 3 人：每单数量 +1
     expect(E.hire(s, 'sell').ok).toBe(true)
     expect(E.derive(s).orderCount).toBe(2) // 4 人解锁第 2 个订单槽
     expect(s.orders.length).toBe(2) // 第 2 单当月立即补发
@@ -385,6 +401,28 @@ describe('核心模式采购计划', () => {
     const preview = E.previewOperations(s)
     expect(preview.purchaseSpend).toBe(E.plannedPurchaseCost(s))
     expect(JSON.stringify(s)).toBe(before)
+  })
+
+  it('现金口径：采购档与设备计划受「期末资金（回款前）」约束（含结算时付的上月工资等），而非仅当前现金', () => {
+    const s = E.newGame(97)
+    E.startGame(s)
+    s.cash = 300
+    s.wagePayableBy.make = 200 // 上月工资计提（结算时付）
+    expect(E.setPlanEquipment(s, 'eq-line', 2).ok).toBe(true) // 300 − 100 − 200 = 0，恰好不为负
+    const pkgSmall = E.plannedLotQty(s, 'pkg', 'small') * E.lotPrice(s, 'pkg', 'small')
+    expect(pkgSmall + 100).toBeLessThanOrEqual(300) // 现金口径：当前现金足够（旧口径会放行）
+    expect(E.canSetPurchasePlan(s, 'pkg', 'small').ok).toBe(false) // 300 − pkgSmall − 100 − 200 < 0，期末资金将为负
+    s.cash = 300 + 200 // 补足工资占用后放行
+    expect(E.canSetPurchasePlan(s, 'pkg', 'small').ok).toBe(true)
+
+    // 设备计划同口径：切换后期末资金不得为负
+    const t = E.newGame(98)
+    E.startGame(t)
+    t.cash = 300
+    t.wagePayableBy.make = 250
+    expect(E.canSetPlanEquipment(t, 'eq-line', 2).ok).toBe(false) // 300 − 100 − 250 < 0
+    t.cash = 400
+    expect(E.canSetPlanEquipment(t, 'eq-line', 2).ok).toBe(true) // 400 − 100 − 250 = 50
   })
 })
 
@@ -1180,34 +1218,55 @@ describe('部门资源：采购资源（供给加点 / 议价）与销售提价'
     return s
   }
 
-  it('池与成本：每名采购人员 2 点；供给成本 = 件数 × 档位成本（包材 1 / 芯片 4），池约束生效', () => {
-    const s = buyState(901, 5) // 池 10 点
+  it('池与成本：每名采购人员 2 点（5 人 4 点）；供给成本 = 件数 × 档位成本（包材 1 / 芯片 4），池约束生效', () => {
+    const s = buyState(901, 5) // 池 20 点（5 人 × 4）
     let d = E.derive(s)
-    expect(d.buyResource).toBe(10)
+    expect(d.buyResource).toBe(20)
     const baseChip = E.derive(E.newGame(901)).materials.chip.supply
-    E.setBuySupplyAlloc(s, 'chip', 2) // 2 件 × 4 点 = 8 点
+    E.setBuySupplyAlloc(s, 'chip', 3) // 3 件 × 4 点 = 12 点
     d = E.derive(s)
-    expect(d.materials.chip.supply).toBe(baseChip + 2)
-    expect(d.buyResourceUsed).toBe(8)
-    // 剩余 2 点：包材 1 点/件，请求 3 件 → 截到 2 件
-    E.setBuySupplyAlloc(s, 'pkg', 3)
+    expect(d.materials.chip.supply).toBe(baseChip + 3)
+    expect(d.buyResourceUsed).toBe(12)
+    // 剩余 8 点：包材 1 点/件，请求 9 件 → 截到 8 件
+    E.setBuySupplyAlloc(s, 'pkg', 9)
     d = E.derive(s)
-    expect(d.buySupplyPush.pkg).toBe(2)
-    expect(d.buyResourceUsed).toBe(10)
+    expect(d.buySupplyPush.pkg).toBe(8)
+    expect(d.buyResourceUsed).toBe(20)
   })
 
-  it('议价：采购 ≥4 时 4 点/档（每料上限 2 档），替代旧全局降档；<4 人不生效', () => {
-    const s = buyState(901, 4) // 池 8 点
+  it('量价联动：供给加点达基础供给 50% → 价格 +1 档；未达阈值不变', () => {
+    const s = buyState(901, 5) // 池 20 点
     const d0 = E.derive(s)
-    E.setBuyPriceAlloc(s, 'chip', 2) // 8 点
+    E.setBuySupplyAlloc(s, 'pkg', 8) // 低于阈值 12 → 档位不变，供给 +8
+    const d1 = E.derive(s)
+    expect(d1.materials.pkg.tierShift).toBe(d0.materials.pkg.tierShift)
+    expect(d1.materials.pkg.supply).toBe(d0.materials.pkg.supply + 8)
+    E.setBuySupplyAlloc(s, 'pkg', 12) // 达阈值（基础供给 24 的 50%）→ 价格 +1 档
+    const d2 = E.derive(s)
+    expect(d2.materials.pkg.tierShift).toBe(d0.materials.pkg.tierShift + 1)
+    expect(d2.materials.pkg.supply).toBe(d0.materials.pkg.supply + 12)
+  })
+
+  it('议价：每降 1 档该料供给 −2（2 人 1 档 / 4 人 2 档上限）', () => {
+    const s = buyState(901, 5) // 池 20 点
+    const d0 = E.derive(s)
+    E.setBuyPriceAlloc(s, 'chip', 2) // 2 档 × 4 点 = 8 点
     const d = E.derive(s)
-    expect(d.materials.chip.tierShift).toBe(Math.max(-3, d0.materials.chip.tierShift - 2))
     expect(d.buyPricePush.chip).toBe(2)
-    expect(d.buyResourceUsed).toBe(8)
-    // 2 人不解锁议价
+    expect(d.materials.chip.tierShift).toBe(Math.max(-3, d0.materials.chip.tierShift - 2))
+    expect(d.materials.chip.supply).toBe(Math.max(0, d0.materials.chip.supply - 4))
+    // 2 人：上限 1 档（池 4 点也只够 1 档）
     const s2 = buyState(901, 2)
-    s2.buyPriceAlloc.chip = 2
-    expect(E.derive(s2).buyPricePush.chip).toBe(0)
+    const d02 = E.derive(s2)
+    E.setBuyPriceAlloc(s2, 'chip', 2)
+    const d2 = E.derive(s2)
+    expect(d2.buyPricePush.chip).toBe(1)
+    expect(d2.buyResourceUsed).toBe(4)
+    expect(d2.materials.chip.supply).toBe(Math.max(0, d02.materials.chip.supply - 2))
+    // 1 人不解锁议价
+    const s1 = buyState(901, 1)
+    s1.buyPriceAlloc.chip = 2
+    expect(E.derive(s1).buyPricePush.chip).toBe(0)
   })
 
   it('C3 压价代价：选定原料供给 −2；未选定不扣', () => {
@@ -1219,24 +1278,30 @@ describe('部门资源：采购资源（供给加点 / 议价）与销售提价'
     expect(E.derive(s).materials.resin.supply).toBe(d0.materials.resin.supply)
   })
 
-  it('销售提价：销售 ≥4 时 8 点/档，仅现货档位 +1、该层需求 −1，订单档位不变', () => {
+  it('销售提价：销售 ≥2 时 8 点/档（2 人 1 档 / 4 人 2 档），仅现货档位 +N、该层需求 −N，订单档位不变', () => {
     const s = buyState(901, 0)
-    for (let i = 0; i < 4; i++) expect(E.hire(s, 'sell').ok).toBe(true)
+    for (let i = 0; i < 4; i++) expect(E.hire(s, 'sell').ok).toBe(true) // 池 16 点（4 人 × 4）
     const d0 = E.derive(s)
-    E.setSellPriceAlloc(s, 'high', 1)
+    E.setSellPriceAlloc(s, 'high', 2) // 4 人上限 2 档（16 点）
     const d = E.derive(s)
-    expect(d.spotShift.high).toBe(d0.spotShift.high + 1)
+    expect(d.sellPriceRaise.high).toBe(2)
+    expect(d.spotShift.high).toBe(d0.spotShift.high + 2)
     expect(d.priceShift.high).toBe(d0.priceShift.high)
-    expect(d.demand.high).toBe(Math.max(0, d0.demand.high - 1))
+    expect(d.demand.high).toBe(Math.max(0, d0.demand.high - 2))
+    // 2 人：上限 1 档
+    const s2 = buyState(901, 0)
+    for (let i = 0; i < 2; i++) E.hire(s2, 'sell')
+    E.setSellPriceAlloc(s2, 'high', 2)
+    expect(E.derive(s2).sellPriceRaise.high).toBe(1)
   })
 
   it('销售提价池约束：需求加点占用后余额不足 8 点则不可开', () => {
     const s = buyState(901, 0)
-    for (let i = 0; i < 4; i++) E.hire(s, 'sell') // 池 20 点
-    s.salesAlloc.low = 13 // 占 13 点，余 7 < 8
+    for (let i = 0; i < 4; i++) E.hire(s, 'sell') // 池 16 点
+    s.salesAlloc.low = 9 // 占 9 点，余 7 < 8
     expect(E.setSellPriceAlloc(s, 'low', 1)).toBeUndefined()
     expect(s.sellPriceAlloc.low).toBe(0)
-    s.salesAlloc.low = 12 // 余 8，可开
+    s.salesAlloc.low = 8 // 余 8，可开
     E.setSellPriceAlloc(s, 'low', 1)
     expect(s.sellPriceAlloc.low).toBe(1)
   })

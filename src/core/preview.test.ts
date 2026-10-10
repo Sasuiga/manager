@@ -32,7 +32,10 @@ describe('结算前现金（preSettleCash）', () => {
       if (s.depts.sell.staff > 0) {
         E.setAlloc(s, 'low', E.derive(s).salesPushCost.low * 2)
       }
-      if (E.derive(s).materials.pkg.supply > 0) E.signAgreement(s, 'pkg', 3)
+      if (E.derive(s).materials.pkg.supply > 0) {
+        if (!s.ipOwned.includes('J2')) s.ipOwned.push('J2') // 供应链联盟：协议槽 +1（长期协议为提案能力）
+        E.signAgreement(s, 'pkg', 3)
+      }
       for (const o of s.orders) if (!o.forced && !s.acceptedOrders.includes(o.id)) E.toggleOrder(s, o.id)
 
       const p = E.previewOperations(s)
@@ -86,13 +89,14 @@ describe('结算前现金（preSettleCash）', () => {
     s.debt = 200
     E.hire(s, 'ops') // 招聘费 50（行动阶段实付）
     E.buyEquipment(s, 'eq-line') // 设备 50（资本化，行动阶段实付）
+    s.ipOwned.push('J2') // 供应链联盟：协议槽 +1（长期协议为提案能力）
     E.signAgreement(s, 'pkg', 3) // 协议手续费 10（杂项，行动阶段实付）
     E.repay(s, 60) // 还款 60（资本性，行动阶段实付）
     E.buyMaterial(s, 'pkg', 'mid') // 采购形成计划（结算时统一支付，不进行动阶段实付）
 
     const p = E.preSettleCash(s)
-    // 行动阶段恒等式：期初现金 + 事件收益 + 事件现金（不计损益） − 各项已付 ≡ 当前现金（招聘费未蒸发在「期初」里）
-    expect(p.cashOpen + p.gainedMisc + p.eventCashIn - (p.paidHire + p.paidMisc + p.paidCapex + p.paidRepay + p.paidPurchase)).toBe(s.cash)
+    // 行动阶段恒等式：期初现金 + 实收（含借款）− 实付（含加班） ≡ 当前现金
+    expect(p.cashOpen + p.gainedMisc + p.eventCashIn + p.loanIn - (p.paidHire + p.paidMisc + p.paidCapex + p.paidRepay + p.paidPurchase + p.overtimePay)).toBe(s.cash)
     expect(p.paidHire).toBe(50)
     expect(p.paidCapex).toBe(50)
     expect(p.paidRepay).toBe(60)
@@ -143,13 +147,12 @@ describe('结算前现金（preSettleCash）', () => {
     const p = E.preSettleCash(s)
     expect(p.eventCashIn).toBe(100)
     expect(p.gainedMisc).toBe(0) // 损益中性，不进 miscIncome
-    // 桥接不变量：期初 + 事件收益 + 事件现金 − 已付 ≡ 当前现金
+    // 桥接不变量：期初 + 实收（含借款）− 实付（含加班） ≡ 当前现金
     expect(
-      p.cashOpen + p.gainedMisc + p.eventCashIn - (p.paidHire + p.paidMisc + p.paidCapex + p.paidRepay + p.paidPurchase),
+      p.cashOpen + p.gainedMisc + p.eventCashIn + p.loanIn -
+        (p.paidHire + p.paidMisc + p.paidCapex + p.paidRepay + p.paidPurchase + p.overtimePay),
     ).toBe(s.cash)
     // 预算页桥接总额（含全部扣减项）也等于当前现金
-    expect(p.cashAfter + (p.paidHire + p.paidMisc + p.paidCapex + p.paidRepay + p.paidPurchase)).toBe(
-      p.cashOpen + p.gainedMisc + p.eventCashIn,
-    )
+    expect(p.cashAfter + (p.purchasePlan + p.equipmentPlan + p.agreementSpend + p.rndInvest + p.interest + p.wagePaid)).toBe(s.cash)
   })
 })

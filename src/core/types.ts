@@ -641,10 +641,12 @@ export interface GameState {
   debt: Money
   /**
    * 当前借款的到期月（借款月 + LOAN_TERM_MONTHS − 1，即 3 个月期限）；0 = 无在借借款。
-   * 到期月结算时剩余本金强制现金全额归还（当月利息已按余额计提），现金仍为负则资金断裂；
-   * 剩余本金还清（提前还款）后期限约束解除，才能再借新笔；利息按月末余额计提，提前还款降低后续利息。
+   * 到期月结算时剩余本金强制现金全额归还（与当月利息一并支付），现金仍为负则资金断裂；
+   * 剩余本金还清（提前还款）后期限约束解除，才能再借新笔。
    */
   loanDueMonth: number
+  /** 当前借款的借款月；借款当月不计提利息，次月起按月末余额×月利率计提，到期/还款时剩余本金与当月利息一起还掉；还清后清零。 */
+  loanStartMonth: number
   paidIn: Money
   /** 股东以实物投入的资产（开局的初始产线），计入所有者权益 */
   ownerCapital: Money
@@ -675,9 +677,9 @@ export interface GameState {
   salesAlloc: Record<Tier, number>
   /** 本月采购资源分配（月初清零）：原料 id -> 供给加点件数（成本 = 件数 × 档位成本） */
   buySupplyAlloc: Record<string, number>
-  /** 本月议价（月初清零，采购 ≥4 人生效）：原料 id -> 档数（4 点/档，上限 2 档） */
+  /** 本月议价（月初清零，采购 ≥2 人生效）：原料 id -> 档数（4 点/档，2 人 1 档 / 4 人 2 档；每降 1 档该料供给 −2） */
   buyPriceAlloc: Record<string, number>
-  /** 本月销售提价（月初清零，销售 ≥4 人生效）：层 -> 档数（8 销售资源/档，上限 1 档；仅现货、该层需求 −1） */
+  /** 本月销售提价（月初清零，销售 ≥2 人生效）：层 -> 档数（8 销售资源/档，2 人 1 档 / 4 人 2 档；仅现货、每升 1 档该层需求 −1） */
   sellPriceAlloc: Record<Tier, number>
   /** C3 压价代价：本月供给 −2 的原料（采购页选择；null = 尚未选定，不扣） */
   c3PenaltyMat: string | null

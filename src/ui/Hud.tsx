@@ -143,6 +143,10 @@ function FundsSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const s = g.s
   const ps = E.preSettleCash(s)
   const over = ps.cashAfter < 0
+  /** 行动阶段实付/实收后的当前现金（= 期初 + 实收（含借款）− 实付（含加班）），与 state.cash 勾稽。 */
+  const currentCash =
+    ps.cashOpen + ps.gainedMisc + ps.eventCashIn + ps.loanIn -
+    (ps.paidHire + ps.paidMisc + ps.paidCapex + ps.paidRepay + ps.paidPurchase + ps.overtimePay)
   return (
     <Sheet title="期末资金" sub={`${s.month}月 · 期初资金 → 期末现金（回款前）`} onClose={onClose}>
       <div className="card">
@@ -150,15 +154,17 @@ function FundsSheet({ g, onClose }: { g: Game; onClose: () => void }) {
         <Row k="期初资金（= 上期结算后）" v={wan(ps.cashOpen)} />
         {ps.gainedMisc > 0 ? <Row k="+ 事件收益（已收）" v={wan(ps.gainedMisc)} /> : null}
         {ps.eventCashIn > 0 ? <Row k="+ 事件现金（纾困贷款 · 下月偿还）" v={wan(ps.eventCashIn)} /> : null}
+        {ps.loanIn > 0 ? <Row k="+ 借款（到账 · 负债同步增加）" v={wan(ps.loanIn)} /> : null}
         {ps.paidHire > 0 ? <Row k="− 招聘费（已付）" v={wan(ps.paidHire)} /> : null}
         {ps.paidMisc > 0 ? <Row k="− 杂项支出（已付）" v={wan(ps.paidMisc)} /> : null}
         {ps.paidCapex > 0 ? <Row k="− 设备购置（已付）" v={wan(ps.paidCapex)} /> : null}
         {ps.paidRepay > 0 ? <Row k="− 还款（已付）" v={wan(ps.paidRepay)} /> : null}
         {ps.paidPurchase > 0 ? <Row k="− 采购实付（已付）" v={wan(ps.paidPurchase)} /> : null}
+        {ps.overtimePay > 0 ? <Row k="− 加班费（安排时已付）" v={wan(ps.overtimePay)} /> : null}
+        <Row k="当前现金（实付/实收后）" v={wan(currentCash)} bold />
         {ps.purchasePlan > 0 ? <Row k="− 采购计划（结算时付）" v={wan(ps.purchasePlan)} /> : null}
         {ps.equipmentPlan > 0 ? <Row k="− 设备购置计划（结算时付）" v={wan(ps.equipmentPlan)} /> : null}
         {ps.agreementSpend > 0 ? <Row k="− 协议自动采购" v={wan(ps.agreementSpend)} /> : null}
-        {ps.overtimePay > 0 ? <Row k="− 加班费" v={wan(ps.overtimePay)} /> : null}
         {ps.rndInvest > 0 ? <Row k="− 研发投入" v={wan(ps.rndInvest)} /> : null}
         {ps.interest > 0 ? <Row k="− 借款利息" v={wan(ps.interest)} /> : null}
         {ps.wagePaid > 0 ? <Row k="− 上月工资" v={wan(ps.wagePaid)} /> : null}

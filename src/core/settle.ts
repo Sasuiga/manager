@@ -516,7 +516,8 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   const tax = preTax > 0 ? Math.round(preTax * TAX_RATE) : 0
   state.cash -= tax
   /**
-   * 借款到期（3 个月期限）：到期月结算时，未还清的剩余本金强制现金全额归还（当月利息已按余额计提）。
+   * 借款到期（3 个月期限）：到期月结算时，未还清的剩余本金与当月利息一并强制现金全额归还。
+   * （借款当月不计息，次月起每月末按余额计提；到期月 = 最后一个月，本息同批支付。）
    * 现金与负债同步减少，恒等式不变；现金仍为负则进下方终局判定（资金断裂）。
    */
   if (state.month === state.loanDueMonth && state.debt > 0) {
@@ -524,6 +525,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
     state.cash -= due
     state.debt = 0
     state.loanDueMonth = 0
+    state.loanStartMonth = 0
     state.monthLedger.push({
       dept: 'ops',
       item: '借款到期还款',

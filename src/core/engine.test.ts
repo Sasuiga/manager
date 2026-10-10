@@ -393,7 +393,7 @@ describe('引擎', () => {
     expect(rep.ledger.parts['设备折旧']).toBe(0)
   })
   /**
-   * 订单量是销售的第二个出口：招销售既提高订单数，也应该给出 8~12 件的规模。
+   * 订单量是销售的第二个出口：招销售既提高订单数，也应该给出 8~12 件的规模（销售 3 人后每单 +1）。
    *
    * 历史 bug：mergeMods 把未声明的 orderQty 一律写成 0，
    * 使得下游 `mods.orderQty ?? 10` 永远取不到基准，
@@ -412,7 +412,8 @@ describe('引擎', () => {
       expect(s.orders.length, `销售 ${sell} 人的订单数`).toBe(wantCount)
       for (const o of s.orders) {
         expect(o.qty, `销售 ${sell} 人的订单量`).toBeGreaterThanOrEqual(8)
-        expect(o.qty).toBeLessThanOrEqual(12)
+        // 销售 3 人每单 +1：基准 11，上限 13；否则基准 10，上限 12
+        expect(o.qty).toBeLessThanOrEqual(sell >= 3 ? 13 : 12)
       }
     }
   })
@@ -687,7 +688,7 @@ describe('引擎', () => {
     s.monthMods = {}
     E.enterDraw(s)
     E.enterOperate(s)
-    s.depts.buy.staff = 3
+    s.ipOwned.push('J2') // 供应链联盟：协议槽 +1（长期协议为提案能力，部门基础名额已取消）
     const gapOf = () => {
       const b = E.balanceSheet(s)
       return Math.round((b.totalAssets - b.debt - b.wagePayable - b.equity) * 10000) / 10000
@@ -844,5 +845,40 @@ describe('引擎', () => {
     expect(due!.creditAmt).toBe(20)
     const b = E.balanceSheet(s)
     expect(b.totalAssets - b.debt - b.wagePayable - b.equity).toBe(0)
+  })
+
+  it('借款当月不计息，次月起息；到期月本金与当月利息同批还掉', () => {
+    const s = E.newGame(34)
+    E.startGame(s)
+    E.beginMonthEvent(s)
+    E.enterDraw(s)
+    E.enterOperate(s)
+    expect(E.borrow(s, 50).ok).toBe(true)
+    // 借款当月：不计提利息（期末资金不被利息拉低）
+    expect(E.derive(s).interest).toBe(0)
+    const rep1 = E.settleMonth(s)
+    expect(rep1.ledger.parts['借款利息']).toBe(0)
+    // 次月：按月末余额起息
+    E.nextMonth(s)
+    expect(s.month).toBe(2)
+    const rate2 = E.derive(s).rate
+    const interest2 = Math.max(0, Math.round(50 * rate2))
+    expect(interest2).toBeGreaterThan(0)
+    const rep2 = E.settleMonth(s)
+    expect(rep2.ledger.parts['借款利息']).toBe(interest2)
+    // 到期月（第 3 月）：当月利息 + 剩余本金同批强制归还
+    E.nextMonth(s)
+    expect(s.month).toBe(3)
+    expect(s.debt).toBe(50)
+    const rate3 = E.derive(s).rate
+    const interest3 = Math.max(0, Math.round(50 * rate3))
+    const cash0 = s.cash
+    const rep3 = E.settleMonth(s)
+    expect(rep3.ledger.parts['借款利息']).toBe(interest3)
+    expect(s.cash).toBe(cash0 - 50 - interest3) // 本金 50 + 利息同批扣现金
+    expect(s.debt).toBe(0)
+    expect(s.loanDueMonth).toBe(0)
+    expect(s.loanStartMonth).toBe(0)
+    expect(E.derive(s).interest).toBe(0)
   })
 })

@@ -1,7 +1,7 @@
 import {
   BOMS,
-  BUY_PRICE_NEGOTIATE_CAP,
   BUY_PRICE_NEGOTIATE_STAFF,
+  BUY_TRADER_EXTRA_STAFF,
   CARD_BY_ID,
   MATERIAL_BY_ID,
   CARDS,
@@ -12,6 +12,7 @@ import {
   LOAN_TERM_MONTHS,
   MATERIALS,
   NEW_MATERIALS,
+  buyNegotiateCapOf,
   overtimeCostOf,
   overtimeGainOf,
   RND_PROJECTS,
@@ -27,6 +28,7 @@ import {
 } from '../data/game'
 import { cardEffectToMods, derive, makerPerStaff, mergeMods, unitCost } from './derive'
 import { materialPriceAt, priceAtProduct } from './settle'
+import { preSettleCash } from './preview'
 import { Rng } from './rng'
 import type {
   CardCtx,
@@ -643,9 +645,9 @@ export function setPurchasePlan(state: GameState, materialId: string, lot: LotSi
   const clearsPlan = plannedTotal(state) > 0 && mat.qty + nextQty < needed
   if (clearsPlan && !lot) return fail('该采购计划已被生产占用，请先调整生产安排')
 
-  const nextCost = lot ? nextQty * lotPrice(state, materialId, lot) : 0
-  const costWithoutThis = plannedPurchaseCost(state) - plannedPurchaseLine(state, materialId).cost
-  if (costWithoutThis + nextCost + planEquipmentCost(state) > state.cash) return fail('可用现金不足（含设备计划）')
+  // 现金口径：档位切换后「期末资金（回款前）」不得为负（与 HUD「期末资金」同口径，
+  // 含采购计划、设备计划、协议自动采购、加班、研发、利息、上月工资等结算时支出）
+  if (preSettleCashAfterLot(state, materialId, lot) < 0) return fail('可用现金不足（期末资金将为负）')
 
   mat.chosenLot = lot
   state.lotsUsed = usedWithoutThis + (lot ? 1 : 0)
@@ -704,6 +706,17 @@ export function plannedPurchaseCost(state: GameState): Money {
 
 export function availableCashAfterPurchasePlan(state: GameState): Money {
   return state.cash - plannedPurchaseCost(state) - planEquipmentCost(state)
+}
+
+/** 应用指定原料采购档位后的「期末资金（回款前）」：试应用新档位并重算（协议自动采购随仓容/现金联动）；为负 = 计划超出资金能力。 */
+export function preSettleCashAfterLot(state: GameState, materialId: string, lot: LotSize | null): Money {
+  const mat = state.materials[materialId]
+  if (!mat) return preSettleCash(state).cashAfter
+  const prev = mat.chosenLot
+  mat.chosenLot = lot
+  const cashAfter = preSettleCash(state).cashAfter
+  mat.chosenLot = prev
+  return cashAfter
 }
 
 /** 生产可用原料：现有库存 + 计划采购到货。 */
@@ -872,16 +885,16 @@ export function lotLabel(lot: LotSize) {
   return lot === 'small' ? '小批采购' : lot === 'mid' ? '中批采购' : '大批采购'
 }
 
-/** 贸易商：每月随机供应一种原料的小批，价格 +1 档，不占档数。 */
+/** 贸易商：每月随机供应小批（基础 1 种，采购 ≥3 人后 2 种），价格 +1 档，不占档数。 */
 export function traderOffer(state: GameState) {
   const d = derive(state)
-  const count = state.depts.buy.staff >= 4 ? 2 : state.depts.buy.staff >= 2 ? 2 : 1
+  const count = state.depts.buy.staff >= BUY_TRADER_EXTRA_STAFF ? 2 : 1
   const rng = Rng.fromState(state.seed + state.month * 977)
   const pool = MATERIALS.filter((m) => (d.materials[m.id]?.supply ?? 0) > 0)
   const picked = rng.sample(pool, Math.min(count, pool.length))
   return picked.map((m) => {
     const qty = lotQty(state, m.id, 'small')
-    const shift = 1 - (state.depts.buy.staff >= 4 ? 1 : 0)
+    const shift = 1
     const price = priceAtShift(m.id, (d.materials[m.id]?.tierShift ?? 0) + shift + buyCardShift(state))
     return { materialId: m.id, qty, price }
   })
@@ -1018,22 +1031,22 @@ export function swapMaterials(state: GameState, sellId: string, buyId: string): 
   return { ok: true, msg: `出 ${sellQty} 入 ${added} 单位` }
 }
 
-/** 长期协议。 */
+/** 长期协议名额。 */
 export function agreementSlots(state: GameState): number {
   const d = derive(state)
-  let base = state.depts.buy.staff >= 3 ? 1 : 0
-  if (state.depts.buy.staff >= 5) base = 2
+  // 长期协议为提案能力：部门基础名额已取消（原 3 人 1 个 / 5 人 2 个），
+  // 名额来自 C14 供应合约（本月 +N）/ C5 强化（agreementDouble +2）/ J2 供应链联盟（永久 +1）
+  let base = 0
   base += d.flags.includes('agreementDouble') ? 2 : 0
   if (state.ipOwned.includes('J2')) base += 1
-  base += d.agreeSlotsPlus ?? 0 // C14 供应合约 / 员工联动：协议槽 +N
+  base += d.agreeSlotsPlus ?? 0 // C14 供应合约：协议槽 +N
   return base
 }
 
 export function signAgreement(state: GameState, materialId: string, months: number, free = false): ActionResult {
   if (!free) {
-    if (state.depts.buy.staff < 3) return fail('需要采购 3 人解锁')
     const used = state.agreements.length
-    if (used >= agreementSlots(state)) return fail('协议名额已满')
+    if (used >= agreementSlots(state)) return fail('协议名额已满（名额来自 C14/C5 强化/J2）')
     if (state.ap < 1) return fail('AP 不足')
     if (state.cash < 10) return fail('现金不足')
   }
@@ -1181,11 +1194,14 @@ export function setPlanEquipment(state: GameState, modelId: string, count: numbe
   const model = EQUIPMENT_MODELS[modelId]
   if (!model) return fail('未知设备型号')
   if (count < 0 || count > 5) return fail('单型号每月最多计划 5 台')
-  const ownPlanned = state.plan.equipment.filter((id) => id === modelId).length
-  const others = planEquipmentCost(state) - ownPlanned * model.price
-  if (others + model.price * count + plannedPurchaseCost(state) > state.cash) return fail('可用现金不足（含采购计划）')
   const prev = state.plan.equipment.filter((id) => id !== modelId)
-  state.plan.equipment = [...prev, ...Array.from({ length: count }, () => modelId)]
+  const next = [...prev, ...Array.from({ length: count }, () => modelId)]
+  // 现金口径（同采购计划）：切换后「期末资金（回款前）」不得为负
+  state.plan.equipment = next
+  if (preSettleCash(state).cashAfter < 0) {
+    state.plan.equipment = prev
+    return fail('可用现金不足（期末资金将为负）')
+  }
   pushLog(
     state, 'action',
     `设备计划：${model.name} ×${count}`,
@@ -1408,7 +1424,7 @@ export function setBuySupplyAlloc(state: GameState, matId: string, units: number
   state.buySupplyAlloc[matId] = Math.max(0, Math.min(maxUnits, units))
 }
 
-/** 设置某原料本月议价档数（0 清除；需采购 ≥4；点数/档受卡牌修正，每料上限 2 档）。 */
+/** 设置某原料本月议价档数（0 清除；需采购 ≥2；点数/档受卡牌修正，档上限随人数：2 人 1 档 / 4 人 2 档）。 */
 export function setBuyPriceAlloc(state: GameState, matId: string, tiers: number): void {
   const d = derive(state)
   if (state.depts.buy.staff < BUY_PRICE_NEGOTIATE_STAFF) {
@@ -1422,11 +1438,11 @@ export function setBuyPriceAlloc(state: GameState, matId: string, tiers: number)
   }
   const current = d.buyPricePush[matId] * d.buyNegotiateCost
   const remaining = Math.max(0, d.buyResource - usedOthers - current)
-  const maxTiers = Math.min(BUY_PRICE_NEGOTIATE_CAP, Math.floor(remaining / d.buyNegotiateCost))
+  const maxTiers = Math.min(buyNegotiateCapOf(state.depts.buy.staff), Math.floor(remaining / d.buyNegotiateCost))
   state.buyPriceAlloc[matId] = Math.max(0, Math.min(maxTiers, tiers))
 }
 
-/** 设置某层本月提价档数（0~上限；需销售 ≥4；消耗销售资源，与需求加点共用池；仅现货、该层需求 −1；S12/S15 可降点数/升上限）。 */
+/** 设置某层本月提价档数（0~上限；需销售 ≥2；消耗销售资源，与需求加点共用池；档上限随人数 2 人 1 档 / 4 人 2 档；仅现货、该层需求 −1；S12/S15 可降点数/升上限）。 */
 export function setSellPriceAlloc(state: GameState, tier: Tier, on: number): void {
   const d = derive(state)
   if (state.depts.sell.staff < SELL_PRICE_RAISE_STAFF) {
@@ -1670,6 +1686,7 @@ export function borrow(state: GameState, amount: Money): ActionResult {
   state.debt += amount
   const dueMonth = state.month + LOAN_TERM_MONTHS - 1
   state.loanDueMonth = dueMonth
+  state.loanStartMonth = state.month // 借款当月不计提利息，次月起按月末余额计提
   state.monthLedger.push({
     dept: 'ops',
     item: '借款',
@@ -1679,13 +1696,13 @@ export function borrow(state: GameState, amount: Money): ActionResult {
     creditAmt: amount,
     detail: [
       `到账 ${(amount / 10).toFixed(2)}w，新增负债 ${(amount / 10).toFixed(2)}w`,
-      `期限 ${LOAN_TERM_MONTHS} 个月：第 ${dueMonth} 月末到期，未还部分到期强制全额归还`,
-      '现金与负债同步增加，净资产不变；利息按月末余额 × 月利率确认进财务费用，提前还款可降低后续利息',
+      `期限 ${LOAN_TERM_MONTHS} 个月：第 ${dueMonth} 月末到期，未还部分到期与当月利息一并强制归还`,
+      '借款当月不计息，次月起按月末余额 × 月利率计提进财务费用；提前还款可降低后续利息',
     ],
   })
   pushLog(state, 'action', `借款 ${(amount / 10).toFixed(2)}w`, [
-    `月利率 ${(d.rate * 100).toFixed(1)}% · 期限 ${LOAN_TERM_MONTHS} 个月（第 ${dueMonth} 月到期）`,
-    '还清前不能借新笔；提前还款按剩余余额少计利息',
+    `月利率 ${(d.rate * 100).toFixed(1)}% · 期限 ${LOAN_TERM_MONTHS} 个月（第 ${dueMonth} 月到期），还清前不能借新笔`,
+    '当月不计息，次月起按月末余额计息；到期/还款时剩余本金与当月利息一起还掉',
   ])
   return { ok: true, msg: `到账 ${(amount / 10).toFixed(2)}w · 第 ${dueMonth} 月到期` }
 }
@@ -1697,7 +1714,10 @@ export function repay(state: GameState, amount: Money): ActionResult {
   state.cash -= amount
   state.debt -= amount
   const cleared = state.debt === 0
-  if (cleared) state.loanDueMonth = 0
+  if (cleared) {
+    state.loanDueMonth = 0
+    state.loanStartMonth = 0
+  }
   state.monthLedger.push({
     dept: 'ops',
     item: '还款',

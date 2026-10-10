@@ -220,12 +220,12 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '采购人员',
     hireFees: [50, 40, 30, 20, 10],
     salary: 10,
-    base: ['每月采购资源 +2（供给加点 / 议价共用点数）'],
+    base: ['每月采购资源 +2/人（供给加点 / 议价共用点数）'],
     unlocks: [
-      { at: 2, text: '贸易商每月随机供应品种 +1；提案 1 档解锁' },
-      { at: 3, text: '解锁长期供货协议；提案 2 档解锁' },
-      { at: 4, text: '解锁议价：4 点 = 1 种原料价格降 1 档（每料最多 2 档）' },
-      { at: 5, text: '可同时签 2 份长期协议，且锁定期可选 6 个月；提案 3 档解锁', achievement: '供应链联盟' },
+      { at: 2, text: '解锁议价：4 点 = 1 种原料价格降 1 档（每料最多 1 档）；提案 1 档解锁' },
+      { at: 3, text: '贸易商每月随机供应品种 +1；提案 2 档解锁' },
+      { at: 4, text: '议价档上限 1 → 2（每料最多降 2 档）' },
+      { at: 5, text: '每人采购资源 2 → 4；提案 3 档解锁', achievement: '供应链联盟' },
     ],
   },
   make: {
@@ -246,12 +246,12 @@ export const STAFF: Record<Dept, StaffDef> = {
     name: '销售人员',
     hireFees: [50, 40, 30, 20, 10],
     salary: 15,
-    base: ['每人销售资源 +4'],
+    base: ['每月销售资源 +4/人（需求加点 / 提价共用点数）'],
     unlocks: [
-      { at: 2, text: '每月获得 1 个确定性订单；提案 1 档解锁' },
-      { at: 3, text: '每人销售资源 +4 → +6；提案 2 档解锁' },
-      { at: 4, text: '每月获得 2 个确定性订单；解锁提价：8 点销售资源 = 某层价格升 1 档（仅现货、该层需求 −1）' },
-      { at: 5, text: '每人 +6 → +8，并实现成本转移；提案 3 档解锁', achievement: '品牌' },
+      { at: 2, text: '解锁提价：8 点 = 某层价格升 1 档（仅现货、该层需求 −1，每层每月最多 1 档）；每月获得 1 个确定性订单；提案 1 档解锁' },
+      { at: 3, text: '每单订单数量 +1；提案 2 档解锁' },
+      { at: 4, text: '提价档上限 1 → 2（每层每月最多升 2 档）；每月获得 2 个确定性订单' },
+      { at: 5, text: '销售资源每人 4 → 8，品牌 +3 并实现成本转移；提案 3 档解锁', achievement: '品牌' },
     ],
   },
   rnd: {
@@ -269,10 +269,22 @@ export const STAFF: Record<Dept, StaffDef> = {
   },
 }
 
-/** 销售人员每人的销售资源贡献（§7.2.4）。 */
-export const SALES_RESOURCE_STEPS = [0, 4, 4, 6, 6, 8]
+/**
+ * 销售资源（点）：每名销售人员每月产出的点数，需求加点与提价共用同一池。
+ * 基础 4 点/人；销售 5 人后提升至 8 点/人（与采购资源同规则）。
+ */
+export const SELL_RESOURCE_PER_STAFF = 4
+export const SELL_RESOURCE_PLUS_STAFF = 5
+export const SELL_RESOURCE_PER_STAFF_PLUS = 8
+/** 每人销售资源产出（4 点；5 人 8 点）。 */
+export function sellResourcePerStaffOf(staff: number): number {
+  return staff >= SELL_RESOURCE_PLUS_STAFF ? SELL_RESOURCE_PER_STAFF_PLUS : SELL_RESOURCE_PER_STAFF
+}
 /** 每月确定性订单数（§7.2.6）：2 人解锁第 1 个订单槽，4 人解锁第 2 个。 */
 export const SALES_ORDER_COUNT = [0, 0, 1, 1, 2, 2]
+/** 销售 3 人：每单订单数量 +1（渠道加量，对应采购 3 人「贸易商品种 +1」）。 */
+export const SELL_ORDER_QTY_PLUS_STAFF = 3
+export const SELL_ORDER_QTY_PLUS = 1
 export const BASE_SALES_RESOURCE = 0 // 基础销售资源池：开局 0 点（全部靠销售人员/事件/卡牌/知产获得）
 export const BASE_HAND = 5
 export const BASE_PLAYS = 2
@@ -283,13 +295,40 @@ export const START_CASH = 400 // 40w
  * 采购档位已取消：每种原料每月可自由选 1 档（小/中/大批），
  * 数量受当月市场供给（气候/事件/知产/采购资源加点）与库存上限约束。
  */
-/** 采购资源（点）：每名采购人员每月产出的点数，供给加点与议价共用同一池。 */
+/**
+ * 采购资源（点）：每名采购人员每月产出的点数，供给加点与议价共用同一池。
+ * 基础 2 点/人；采购 5 人后提升至 4 点/人。
+ */
 export const BUY_RESOURCE_PER_STAFF = 2
-/** 议价（采购 ≥4 人）：指定原料每降 1 档所需点数。 */
-export const BUY_PRICE_NEGOTIATE_STAFF = 4
+export const BUY_RESOURCE_PLUS_STAFF = 5
+export const BUY_RESOURCE_PER_STAFF_PLUS = 4
+/** 每人采购资源产出（2 点；5 人 4 点）。 */
+export function buyResourcePerStaffOf(staff: number): number {
+  return staff >= BUY_RESOURCE_PLUS_STAFF ? BUY_RESOURCE_PER_STAFF_PLUS : BUY_RESOURCE_PER_STAFF
+}
+/** 议价（采购 ≥2 人解锁）：指定原料每降 1 档所需点数。 */
+export const BUY_PRICE_NEGOTIATE_STAFF = 2
 export const BUY_PRICE_NEGOTIATE_COST = 4
-/** 议价：每原料每月最多降 2 档。 */
-export const BUY_PRICE_NEGOTIATE_CAP = 2
+/** 议价：每原料每月最多降档（基础 1 档；采购 4 人后 2 档）。 */
+export const BUY_PRICE_NEGOTIATE_CAP = 1
+export const BUY_PRICE_NEGOTIATE_CAP_PLUS_STAFF = 4
+export const BUY_PRICE_NEGOTIATE_CAP_PLUS = 2
+/** 议价档上限（2 人 1 档 / 4 人 2 档）。 */
+export function buyNegotiateCapOf(staff: number): number {
+  return staff >= BUY_PRICE_NEGOTIATE_CAP_PLUS_STAFF ? BUY_PRICE_NEGOTIATE_CAP_PLUS : BUY_PRICE_NEGOTIATE_CAP
+}
+/**
+ * 采购资源使用规则（量价联动）：
+ * ① 供给加点：点数投到某原料达到其基础供给的 50% 时，该原料价格 +1 档（市场吸量）；
+ * ② 议价：每降 1 档，该原料供给 −2（以量换价）。
+ */
+export const BUY_PRICE_SUPPLY_LOSS = 2
+/** 供给加点档位抬升阈值：加点件数达到基础供给 50%（向上取整，0 = 无阈值）→ 价格 +1 档。 */
+export function supplyPushRaiseOf(matId: string): number {
+  return Math.ceil(0.5 * (MATERIAL_BY_ID[matId]?.baseSupply ?? 0))
+}
+/** 贸易商供应品种：基础 1 种，采购 3 人后 +1 种。 */
+export const BUY_TRADER_EXTRA_STAFF = 3
 /** 供给加点：每 +1 供给的成本（点），按原料档位：包材 1 / 树脂 2 / 合金 3 / 复合 3 / 芯片 4 / 微机电 5。 */
 export function supplyPushCostOf(matId: string): number {
   return MATERIAL_BY_ID[matId]?.grade ?? 1
@@ -298,11 +337,17 @@ export function supplyPushCostOf(matId: string): number {
 export function supplyPushCapOf(matId: string): number {
   return Math.max(0, 3 * (MATERIAL_BY_ID[matId]?.baseSupply ?? 0))
 }
-/** 销售提价（销售 ≥4 人）：每层现货价每升 1 档所需销售资源（订单不受影响，该层需求 −1）。 */
-export const SELL_PRICE_RAISE_STAFF = 4
+/** 销售提价（销售 ≥2 人解锁）：每层现货价每升 1 档所需销售资源（订单不受影响，该层需求 −1）。 */
+export const SELL_PRICE_RAISE_STAFF = 2
 export const SELL_PRICE_RAISE_COST = 8
-/** 销售提价：每层每月最多升 1 档。 */
+/** 销售提价：每层每月最多升档（基础 1 档；销售 4 人后 2 档，与议价同规则）。 */
 export const SELL_PRICE_RAISE_CAP = 1
+export const SELL_PRICE_RAISE_CAP_PLUS_STAFF = 4
+export const SELL_PRICE_RAISE_CAP_PLUS = 2
+/** 提价档上限（2 人 1 档 / 4 人 2 档）。 */
+export function sellRaiseCapOf(staff: number): number {
+  return staff >= SELL_PRICE_RAISE_CAP_PLUS_STAFF ? SELL_PRICE_RAISE_CAP_PLUS : SELL_PRICE_RAISE_CAP
+}
 
 /** 老板自产产能（玩家亲自下场的固定贡献，无工人也生效）。 */
 export const OWNER_CAPACITY = 5
@@ -726,7 +771,7 @@ export const GOAL_POOL: Record<Climate, { basic: GoalDef[]; challenge: GoalDef[]
       { id: 'OC2', climate: 'overheat', kind: 'challenge', name: '季度累计净利润 ≥ 上季度 × 1.2', desc: '过热期也要增长。', metric: 'netProfitQ', compare: 'gte', growth: { base: 'netProfitQ', factor: 1.2 }, points: 20 },
       { id: 'OC3', climate: 'overheat', kind: 'challenge', name: '季度末负债 ≤ 总资产 × 0.4', desc: '别在利率高点加杠杆。', metric: 'debtToAssets', compare: 'lte', value: 40, points: 15 },
       { id: 'OC4', climate: 'overheat', kind: 'challenge', name: '本季度至少 1 个月需求满足率 ≥ 95%', desc: '把需求吃干净。', metric: 'demandFillBest', compare: 'gte', value: 95, points: 20 },
-      { id: 'OC5', climate: 'overheat', kind: 'challenge', name: '签订并生效 1 份长期供货协议', desc: '需要采购 3 人解锁。', metric: 'agreementsSigned', compare: 'gte', value: 1, points: 15 },
+      { id: 'OC5', climate: 'overheat', kind: 'challenge', name: '签订并生效 1 份长期供货协议', desc: '长期协议为提案能力：打出【长期协议】/ 相关事件即可。', metric: 'agreementsSigned', compare: 'gte', value: 1, points: 15 },
       { id: 'OC6', climate: 'overheat', kind: 'challenge', name: '季度末存货 ≤ 上季度末 × 0.8', desc: '把库存降下来。', metric: 'inventory', compare: 'lte', growth: { base: 'inventory', factor: 0.8 }, points: 15 },
     ],
   },
@@ -940,7 +985,7 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'C12', name: '谈判专家', kind: 'buy', tier: 2, tag: 'staff', sub: 'mod',
-    text: '本月议价 4 点/档 → 3 点/档（需议价已解锁，即采购 ≥ 4 人）。',
+    text: '本月议价 4 点/档 → 3 点/档（需议价已解锁，即采购 ≥ 2 人）。',
     cond: '需议价已解锁',
     empowered: '本月议价 4 点/档 → 2 点/档。',
     base: () => ({ negotiateCost: 3 }),
@@ -956,7 +1001,7 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'C14', name: '供应合约', kind: 'buy', tier: 3, tag: 'staff', sub: 'amp',
-    text: '本月长期协议槽 +1，且锁定期可选 6 个月（需采购 3 人解锁协议）。',
+    text: '本月长期协议槽 +1，且锁定期可选 6 个月（协议为提案能力：采购页「长期协议」组件中签订）。',
     empowered: '本月长期协议槽 +2，且锁定期可选 6 个月。',
     base: () => ({ agreeSlotsPlus: 1, flags: ['agreeLock6'] }),
     strong: () => ({ agreeSlotsPlus: 2, flags: ['agreeLock6'] }),
@@ -1167,7 +1212,7 @@ export const CARDS: CardDef[] = [
   },
   {
     id: 'S12', name: '高端定价', kind: 'sell', tier: 2, tag: 'staff', sub: 'mod',
-    text: '本月提价 8 点/档 → 6 点/档（需提价已解锁，即销售 ≥ 4 人）。',
+    text: '本月提价 8 点/档 → 6 点/档（需提价已解锁，即销售 ≥ 2 人）。',
     cond: '需提价已解锁',
     empowered: '本月提价 8 点/档 → 4 点/档。',
     base: () => ({ priceRaiseCost: 6 }),

@@ -43,6 +43,7 @@ export function newGame(seed: number): GameState {
     openingCash: START_CASH,
     debt: 0,
     loanDueMonth: 0,
+    loanStartMonth: 0,
     paidIn: START_CASH,
     ownerCapital: 0, // 新模型开局无初始设备，实物投入归零
     prepaid: 0,

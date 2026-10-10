@@ -32,13 +32,13 @@ export interface ProductPreview {
 
 /**
  * 本期现金计划分解（确定性，不含销售回款与所得税）：
- * 从期初现金（本月月初真值）出发，按资金时间序逐项过账：
- *   行动阶段实付：招聘费 / 杂项支出 / 设备购置 / 还款 / 采购与贸易商实付；
- *   结算时付：采购计划（核心）/ 协议 / 加班 / 研发 / 利息 / 上月工资。
+ * 以当前现金（state.cash）为基期，按资金时间序列出各扣减项：
+ *   已实收/实付（已计入 state.cash）：招聘费 / 杂项支出 / 设备购置 / 还款 / 采购与贸易商实付 / 加班（安排时即付）/ 借款（到账）；
+ *   结算时付（尚未发生，从 state.cash 中预留）：采购计划（核心）/ 协议 / 研发 / 利息 / 上月工资。
  * 得到「本期期末资金（回款前）」——本期闭环的现金位置（不含结算边界回款到账）。
  * 为负 = 计划超出资金能力。
  *
- * 勾稽不变量：cashOpen + gainedMisc + eventCashIn − (paidHire + paidMisc + paidCapex + paidRepay + paidPurchase) ≡ state.cash
+ * 勾稽不变量：cashOpen + gainedMisc + eventCashIn + loanIn − (paidHire + paidMisc + paidCapex + paidRepay + paidPurchase + overtimePay) ≡ state.cash
  * （行动阶段所有现金收付均已计入以上科目或挂账字段，无双重计算）。
  */
 export interface PreSettleCash {
@@ -52,27 +52,33 @@ export interface PreSettleCash {
   gainedMisc: Money
   /** 事件直接收到、不计损益的现金（如 X10 政府纾困无息贷款：负债侧已挂 pendingCost），行动阶段实收 */
   eventCashIn: Money
+  /** 借款到账（行动阶段实收，负债同步增加；不计损益），行动阶段实收 */
+  loanIn: Money
   /** 设备购置（资本化：商店 + 事件对价），行动阶段实付 */
   paidCapex: Money
   /** 还款（资本性支出），行动阶段实付 */
   paidRepay: Money
   /** 采购/贸易商采购实付（完整模式采购行动阶段入账；核心模式仅贸易商实付，普通采购为计划） */
   paidPurchase: Money
+  /** 加班费（安排时即支付，已计入 state.cash；计入实付组而非结算时付组） */
+  overtimePay: Money
   /** 采购计划（结算时付；完整模式即时采购路径已退场） */
   purchasePlan: Money
   /** 设备购置计划（结算时付） */
   equipmentPlan: Money
   /** 协议自动采购额（按结算执行同规则确定性模拟） */
   agreementSpend: Money
-  /** 加班费 */
-  overtimePay: Money
   /** 研发投入（结算实付） */
   rndInvest: Money
   /** 借款利息 */
   interest: Money
   /** 上月工资实付（当月计提、次月实付） */
   wagePaid: Money
-  /** = cashOpen + gainedMisc + eventCashIn − (paidHire + paidMisc + paidCapex + paidRepay + paidPurchase + purchasePlan + equipmentPlan + agreementSpend + overtimePay + rndInvest + interest + wagePaid)；为负 = 计划超出资金能力 */
+  /**
+   * = state.cash − (purchasePlan + equipmentPlan + agreementSpend + rndInvest + interest + wagePaid)。
+   * 以当前现金为基期（与「期初 + 实收（含借款）− 实付（含加班）」勾稽等价，直接取真值更稳健）；
+   * 为负 = 计划超出资金能力。
+   */
   cashAfter: Money
 }
 
@@ -88,6 +94,8 @@ export function preSettleCash(state: GameState): PreSettleCash {
   const eventCashIn = state.eventCashGift
   const paidCapex = ledgerSpend((row) => row.item.startsWith('设备购置'))
   const paidRepay = ledgerSpend((row) => row.item === '还款')
+  /** 借款到账：现金与负债同步增加，不计损益（桥接展示用；已含在 state.cash 中，不参与 cashAfter 扣减）。 */
+  const loanIn = ledgerSpend((row) => row.item === '借款')
   /** 采购实付：贸易商采购（普通采购已计划化，记在 purchasePlan）；协议手续费/供应商开发在 paidMisc，不重复计。 */
   const paidPurchase = ledgerSpend(
     (row) => row.dept === 'buy' && (row.item.startsWith('采购') || row.item.startsWith('贸易商采购')),
@@ -96,7 +104,7 @@ export function preSettleCash(state: GameState): PreSettleCash {
   const purchasePlan = plannedPurchaseCost(state)
   /** 设备购置计划：结算时未付款（资本化）。 */
   const equipmentPlan = planEquipmentCost(state)
-  /** 加班费：安排时已发生支付（state.overtimePaid），桥接按锁定额计。 */
+  /** 加班费：安排时已发生支付（state.overtimePaid，已计入 state.cash），桥接按锁定额计入实付组。 */
   const overtimePay = state.overtimePaid
   const rndInvest = Math.max(0, d.rndCostTotal)
   const interest = d.interest
@@ -123,19 +131,15 @@ export function preSettleCash(state: GameState): PreSettleCash {
     cash -= unit * want
     agreementSpend += unit * want
   }
+  /**
+   * 勾稽：cashAfter 以 state.cash 为基期（行动阶段实收/实付已全部反映在 state.cash 中：
+   * 期初快照 + 事件 + 借款 − 招聘/杂项/设备/还款/采购实付/加班）。明细字段仍按期初口径列示供展示。
+   */
   const cashAfter =
-    state.openingCash +
-    gainedMisc +
-    eventCashIn -
-    (paidHire +
-      paidMisc +
-      paidCapex +
-      paidRepay +
-      paidPurchase +
-      purchasePlan +
+    state.cash -
+    (purchasePlan +
       equipmentPlan +
       agreementSpend +
-      overtimePay +
       rndInvest +
       interest +
       wagePaid)
@@ -145,6 +149,7 @@ export function preSettleCash(state: GameState): PreSettleCash {
     paidMisc,
     gainedMisc,
     eventCashIn,
+    loanIn,
     paidCapex,
     paidRepay,
     paidPurchase,

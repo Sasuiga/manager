@@ -140,7 +140,7 @@ describe('员工联动卡（增效 / 改良 / 替换）', () => {
     expect(E.playCard(s, s.hand[0].uid).ok).toBe(true)
     const d = E.derive(s)
     expect(d.sellRaiseCost).toBe(4)
-    expect(d.sellRaiseCap).toBe(1)
+    expect(d.sellRaiseCap).toBe(2) // 销售 5 人 ≥4：档上限 2（S15 基础不降上限）
     s.ap = 5
     s.hand.push({ uid: 's15b#t', defId: 'S15', empowered: true })
     expect(E.playCard(s, 's15b#t').ok).toBe(true)
@@ -196,7 +196,7 @@ describe('员工联动卡（增效 / 改良 / 替换）', () => {
     push(s, 'S13')
     expect(E.playCard(s, s.hand[0].uid).ok).toBe(true)
     const d = E.derive(s)
-    expect(d.orderQty).toBe(15) // 基准 10 + 5
+    expect(d.orderQty).toBe(16) // 基准 10 + 销售 3 人 1 + 卡 5
     expect(d.orderPriceShift).toBe(0) // +1 基准 −1 卡
   })
 
@@ -256,7 +256,7 @@ describe('员工联动卡（增效 / 改良 / 替换）', () => {
     s.ap = 5
     push(s, 'C14')
     expect(E.playCard(s, s.hand[0].uid).ok).toBe(true)
-    expect(E.agreementSlots(s)).toBe(3) // 2（buy 5 人）+ 1
+    expect(E.agreementSlots(s)).toBe(1) // C14 +1（部门基础名额已取消，名额仅来自 C14/C5 强化/J2）
   })
 
   it('替换：M6 即时授权——管理招聘 AP +1 即时生效', () => {

@@ -1,13 +1,13 @@
 import { useState, Fragment } from 'react'
 import * as E from '../../core/engine'
-import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, EQUIP_CAP_PER_WORKER, IP_BY_ID, DEPT_SHORT, DEPT_NAMES, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIALS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS, LOAN_TERM_MONTHS, BUY_PRICE_NEGOTIATE_CAP, BUY_PRICE_NEGOTIATE_STAFF, SELL_PRICE_RAISE_STAFF, supplyPushCostOf, supplyPushCapOf, overtimeCostOf, overtimeGainOf, TIER_COST, TIER_STAFF, tierUnlockedOf } from '../../data/game'
+import { STAFF, CARD_BY_ID, PRODUCT_PRICE, EQUIPMENT_SHOP, EQUIP_CAP_PER_WORKER, IP_BY_ID, DEPT_SHORT, DEPT_NAMES, TIER_LABEL, RND_COST_PER_PROJECT, BOMS, MATERIALS, MATERIAL_BY_ID, CLIMATE_MATERIAL, CLIMATE_NAMES, EVENTS, LOAN_TERM_MONTHS, BUY_PRICE_NEGOTIATE_STAFF, BUY_PRICE_SUPPLY_LOSS, SELL_PRICE_RAISE_STAFF, buyNegotiateCapOf, supplyPushCostOf, supplyPushCapOf, supplyPushRaiseOf, overtimeCostOf, overtimeGainOf, TIER_COST, TIER_STAFF, tierUnlockedOf } from '../../data/game'
 import type { CardCtx } from '../../data/game'
 import type { CardInstance } from '../../core/types'
 import type { Tier } from '../../core/types'
 import { Icon, type IconName } from '../icons'
 import { Medallion } from '../ornaments'
 import { Row, Sheet } from '../Sheet'
-import { wan, tierClass, tierName, TIER_ORDER, clamp } from '../format'
+import { wan, tierClass, tierName, TIER_ORDER, clamp, wanSigned } from '../format'
 import type { Game } from '../useGame'
 import { PreviewPage } from './Preview'
 
@@ -66,14 +66,14 @@ function LedgerSection({ g, dept }: { g: Game; dept: E.Dept }) {
     if (r.item.includes('加班')) return ['加班费 = 2× 本月生产工资计提额，安排时发生即支付（选定后不可取消、费用不退还，需生产 ≥ 3 人；效果 = 本月产能 +1× 员工产能，含设备加成）']
     if (r.item.includes('研发')) return [`每个项目每月 ${wan(RND_COST_PER_PROJECT)}`, '本月推进 1 个项目']
     if (r.item.includes('提案')) return ['提案实施费用合计（含卡牌费用），计入管理费用']
-    if (r.item.includes('借款到期还款')) return [`期限 ${LOAN_TERM_MONTHS} 个月届满，剩余本金到期强制现金全额归还`, '当月利息已按月末余额计提；现金仍为负则资金断裂']
-    if (r.item.includes('借款利息')) return ['借款余额 × 月利率，计入财务费用；提前还款按剩余余额少计']
+    if (r.item.includes('借款到期还款')) return [`期限 ${LOAN_TERM_MONTHS} 个月届满，剩余本金与当月利息到期一并强制现金全额归还`, '借款当月不计息，次月起息；现金仍为负则资金断裂']
+    if (r.item.includes('借款利息')) return ['借款余额 × 月利率，计入财务费用；借款当月不计息，提前还款按剩余余额少计']
     if (r.item.includes('生产费用结转')) return ['制造费用未转入存货的部分（工资/折旧/加班/降本差异）当期费用化，与损益表「生产费用」一致']
     if (r.item.includes('流水线入库')) return ['白得产出按本批单位成本计价入库，贷记营业外收入，恒等式不漂移']
     if (r.item.includes('协议手续费')) return ['签订长期协议费用 1w，计入事件与杂项支出']
     if (r.item.includes('供应商开发')) return ['开发费 3w 计入事件与杂项支出；基础供给 +2 立即生效']
     if (r.item.includes('设备购置')) return ['现金资本化为固定资产，不计当期损益；折旧逐月进生产费用']
-    if (r.item.includes('借款')) return ['现金与负债同步增减，净资产不变；期限 3 个月，到期未还部分强制全额归还；利息按月末余额确认进财务费用']
+    if (r.item.includes('借款')) return ['现金与负债同步增减，净资产不变；期限 3 个月，借款当月不计息、次月起息，到期时剩余本金与当月利息一起还掉']
     // 手工记账行的兜底说明（正常路径由 r.detail 提供）
     if (r.item.startsWith('采购') || r.item.includes('贸易商') || r.item.includes('协议到货'))
       return ['现金实付全额转入库存（移动加权平均计价）', '库存增加额 = 现金扣减额，与生产领料出库勾稽']
@@ -322,7 +322,7 @@ function OpsPage({ g }: { g: Game }) {
         </div>
       ) : null}
 
-      {/* 融资：额度内以 1w 为单位借/还；期限 3 个月，到期未还部分强制全额归还；未还清不能借新笔；利息按月末余额 × 月利率进财务费用 */}
+      {/* 融资：额度内以 1w 为单位借/还；期限 3 个月，到期未还部分强制全额归还；未还清不能借新笔；借款当月不计息，次月起按月末余额 × 月利率计息，到期/还款时剩余本金与当月利息一起还掉 */}
       <div className="card">
         <div className="hstack-between">
           <h3>融资</h3>
@@ -335,7 +335,9 @@ function OpsPage({ g }: { g: Game }) {
         ) : null}
         <Row k="可用额度" v={wan(d.creditAvailable)} cls={d.creditAvailable > 0 ? 'gold' : ''} />
         <Row k="月利率" v={`${(d.rate * 100).toFixed(1)}%`} />
-        {s.debt > 0 ? <Row k="本月利息" v={wan(d.interest)} /> : null}
+        {s.debt > 0 ? (
+          <Row k="本月利息" v={d.interest > 0 ? wan(d.interest) : '不计息（借款当月，次月起息）'} />
+        ) : null}
         <div className="stack" style={{ marginTop: 'var(--s3)' }}>
           <button
             className="btn btn-mini"
@@ -350,7 +352,7 @@ function OpsPage({ g }: { g: Game }) {
                   ? '先还清上一笔，再借新笔'
                   : d.creditAvailable < 10
                     ? '可用额度不足 1w'
-                    : `可用 ${wan(d.creditAvailable)} · 以 1w 为单位 · 期限 ${LOAN_TERM_MONTHS} 个月`}
+                    : `可用 ${wan(d.creditAvailable)} · 以 1w 为单位 · 期限 ${LOAN_TERM_MONTHS} 个月 · 当月不计息`}
             </span>
           </button>
           <button className="btn btn-mini" disabled={s.debt <= 0} onClick={() => setLoan('repay')}>
@@ -531,12 +533,12 @@ function BuyPage({ g }: { g: Game }) {
   const gs = g.s
   const d = E.derive(gs)
   const mats = E.materialViews(gs)
-  /** 本期期末资金（回款前，与预算页同一口径）：期初现金 + 事件收益 − 已付/结算时付各项 */
-  const presettle = E.preSettleCash(gs)
+  /** 议价（采购 ≥2 人解锁）：4 点/档，档上限随人数（2 人 1 档 / 4 人 2 档） */
+  const canPrice = gs.depts.buy.staff >= BUY_PRICE_NEGOTIATE_STAFF
+  const priceCap = buyNegotiateCapOf(gs.depts.buy.staff)
   const [buy, setBuy] = useState<{ id: string; lot: E.LotSize } | null>(null)
   const [pickLot, setPickLot] = useState<string | null>(null)
   const [trader, setTrader] = useState(false)
-  const [agreement, setAgreement] = useState(false)
   const [urgent, setUrgent] = useState(false)
   const [clearance, setClearance] = useState(false)
   const [swap, setSwap] = useState(false)
@@ -667,7 +669,7 @@ function BuyPage({ g }: { g: Game }) {
             const tiers = gs.buyPriceAlloc[mdef.id] ?? 0
             const sCost = supplyPushCostOf(mdef.id)
             const sCap = d.supplyPushHalf ? Math.floor(supplyPushCapOf(mdef.id) / 2) : supplyPushCapOf(mdef.id)
-            const canPrice = gs.depts.buy.staff >= BUY_PRICE_NEGOTIATE_STAFF
+            const sRaise = supplyPushRaiseOf(mdef.id) // 供给加点达基础供给 50% → 价格 +1 档
             const free = Math.max(0, d.buyResource - d.buyResourceUsed)
             const pushDisabled = d.matFocusActive || sCap <= 0 // 材料聚焦（C13）：点数不再用于供给加点
             return (
@@ -677,7 +679,7 @@ function BuyPage({ g }: { g: Game }) {
               >
                 <span className="sm">
                   <b>{mdef.name}</b>
-                  <span className="faint xs"> · {sCost} 点/件</span>
+                  <span className="faint xs"> · {sCost} 点/件{sRaise > 0 ? ` · 投满 ${sRaise} 件价格 +1 档` : ''}</span>
                 </span>
                 <span className="hstack" style={{ gap: 'var(--s2)', justifyContent: 'flex-end' }}>
                   <span className="xs faint">供给{d.matFocusActive ? '（聚焦停用）' : ''}</span>
@@ -719,9 +721,9 @@ function BuyPage({ g }: { g: Game }) {
                     style={{
                       width: 'auto',
                       padding: '2px var(--s3)',
-                      opacity: !canPrice || free < d.buyNegotiateCost || tiers >= BUY_PRICE_NEGOTIATE_CAP ? 0.4 : 1,
+                      opacity: !canPrice || free < d.buyNegotiateCost || tiers >= priceCap ? 0.4 : 1,
                     }}
-                    disabled={!canPrice || free < d.buyNegotiateCost || tiers >= BUY_PRICE_NEGOTIATE_CAP}
+                    disabled={!canPrice || free < d.buyNegotiateCost || tiers >= priceCap}
                     onClick={() => g.mutate((st) => E.setBuyPriceAlloc(st, mdef.id, (st.buyPriceAlloc[mdef.id] ?? 0) + 1))}
                   >
                     <span>+</span>
@@ -732,10 +734,11 @@ function BuyPage({ g }: { g: Game }) {
           })}
         </div>
         <div className="hint">
-          本月采购资源 {d.buyResource} 点 · 已用 {d.buyResourceUsed} 点（供给成本 = 件数 × 档位成本{d.supplyPushHalf ? '，上限减半（锁价谈判）' : ''}，上限 3× 基础供给
+          本月采购资源 {d.buyResource} 点 · 已用 {d.buyResourceUsed} 点（供给成本 = 件数 × 档位成本{d.supplyPushHalf ? '，上限减半（锁价谈判）' : ''}，上限 3× 基础供给；
+          供给加点达到该料基础供给 50% 时价格 +1 档；
           {gs.depts.buy.staff < BUY_PRICE_NEGOTIATE_STAFF
-            ? `；议价需采购 ${BUY_PRICE_NEGOTIATE_STAFF} 人解锁（${d.buyNegotiateCost} 点/档，每料最多 ${BUY_PRICE_NEGOTIATE_CAP} 档）`
-            : `；议价 ${d.buyNegotiateCost} 点/档（基础 4，卡牌可降），每料最多 ${BUY_PRICE_NEGOTIATE_CAP} 档`}
+            ? `议价需采购 ${BUY_PRICE_NEGOTIATE_STAFF} 人解锁（${d.buyNegotiateCost} 点/档，每料最多 ${priceCap} 档，每降 1 档该料供给 −${BUY_PRICE_SUPPLY_LOSS}）`
+            : `议价 ${d.buyNegotiateCost} 点/档（基础 4，卡牌可降），每料最多 ${priceCap} 档，每降 1 档该料供给 −${BUY_PRICE_SUPPLY_LOSS}`}
           ）
         </div>
       </div>
@@ -796,17 +799,7 @@ function BuyPage({ g }: { g: Game }) {
         <div className="stack">
           <button className="btn btn-mini" onClick={() => setTrader(true)}>
             <span className="btn-main">查看贸易商</span>
-            <span className="btn-sub">随机品种 · 小批 · 额外批次</span>
-          </button>
-          <button
-            className="btn btn-mini"
-            disabled={gs.depts.buy.staff < 3}
-            onClick={() => setAgreement(true)}
-          >
-            <span className="btn-main">签订长期协议</span>
-            <span className="btn-sub">
-              {gs.depts.buy.staff < 3 ? '需采购 3 人解锁' : '1 AP + 1w'}
-            </span>
+            <span className="btn-sub">随机品种（3 人 +1 种）· 小批 · 额外批次</span>
           </button>
           {urgentOn ? (
             <button className="btn btn-mini" onClick={() => setUrgent(true)}>
@@ -829,36 +822,14 @@ function BuyPage({ g }: { g: Game }) {
         </div>
       </div>
 
-      {gs.agreements.length > 0 ? (
-        <div className="card">
-          <h3>生效协议</h3>
-          <div className="title-rule" />
-          <div className="stack-sm">
-            {gs.agreements.map((a, i) => {
-              const mv = E.materialViews(gs).find((m) => m.id === a.materialId)
-              const unit = E.materialPriceAt(a.materialId, a.priceTierShift)
-              return (
-                <div key={i} className="card">
-                  <div className="hstack-between">
-                    <span className="sm">
-                      {mv?.name ?? a.materialId} · 余 {a.monthsLeft} 月
-                    </span>
-                    <button className="btn btn-nav" style={{ width: 'auto', padding: '2px var(--s2)' }} onClick={() => g.act((st) => E.cancelAgreement(st, i))}>
-                      <span className="xs">终止</span>
-                    </button>
-                  </div>
-                  <Row k="每月自动到货" v={`${a.qty} 件 × ${wan(unit)} = ${wan(a.qty * unit)}（锁定档位价）`} />
-                </div>
-              )
-            })}
-          </div>
-          <p className="hint">本月协议合计 {wan(presettle.agreementSpend)}，仓容或现金不足时整批跳过。</p>
-        </div>
-      ) : null}
+      {gs.agreements.length > 0 || E.agreementSlots(gs) > gs.agreements.length ? <AgreementsCard g={g} /> : null}
 
       {pickLot ? (
         <Sheet title="选择采购档位" sub={mats.find((x) => x.id === pickLot)?.name} onClose={() => setPickLot(null)}>
           <div className="stack">
+            <div className="hint sm">
+              期末资金（回款前）{wan(E.preSettleCash(gs).cashAfter)} · 超出可用现金的档位不可选
+            </div>
             {(['small', 'mid', 'large'] as E.LotSize[]).map((lot) => {
               const qty = E.plannedLotQty(gs, pickLot, lot)
               const price = E.lotPrice(gs, pickLot, lot)
@@ -924,7 +895,6 @@ function BuyPage({ g }: { g: Game }) {
       {urgent ? <UrgentClearanceSheet g={g} mode="urgent" onClose={() => setUrgent(false)} /> : null}
       {clearance ? <UrgentClearanceSheet g={g} mode="clearance" onClose={() => setClearance(false)} /> : null}
       {swap ? <SwapSheet g={g} onClose={() => setSwap(false)} /> : null}
-      {agreement ? <AgreementSheet g={g} onClose={() => setAgreement(false)} /> : null}
     </>
   )
 }
@@ -944,6 +914,7 @@ function BuyConfirmSheet({
   const price = E.lotPrice(gs, data.id, data.lot)
   const total = qty * price
   const canConfirm = E.canSetPurchasePlan(gs, data.id, data.lot).ok
+  const cashAfter = E.preSettleCashAfterLot(gs, data.id, data.lot)
   const clearsPlan = E.purchasePlanClearsProduction(gs, data.id, data.lot)
   const [showPriceSrc, setShowPriceSrc] = useState(false)
 
@@ -976,7 +947,7 @@ function BuyConfirmSheet({
           </button>
         </div>
         <Row k="总价" v={wan(total)} bold />
-        <Row k="计划后可用现金" v={wan(E.availableCashAfterPurchasePlan(gs) - total + E.plannedPurchaseLine(gs, data.id).cost)} />
+        <Row k="计划后期末资金（回款前）" v={wan(cashAfter)} cls={cashAfter < 0 ? 'red' : ''} />
         {clearsPlan ? (
           <div className="info" style={{ marginTop: 'var(--s2)' }}>
             该原料采购量低于原生产需求，确认后生产计划将清空，请重新安排生产。
@@ -1008,8 +979,11 @@ function BuyConfirmSheet({
               const climateShift = CLIMATE_MATERIAL[gs.climate].tierShift[m.id] ?? 0
               const eventShift = gs.monthMods.allTierShift ?? 0
               const cardShift = E.buyCardShift(gs)
-              const staffShift = gs.depts.buy.staff >= 4 ? -1 : 0
               const lotShift = data.lot === 'small' ? 1 : data.lot === 'large' ? -1 : 0
+              const d2 = E.derive(gs)
+              const negoShift = d2.buyPricePush[m.id] ?? 0 // 议价（采购 ≥2 人）：每降 1 档，该料供给 −2
+              const pushRaise = supplyPushRaiseOf(m.id)
+              const pushRaiseShift = pushRaise > 0 && (d2.buySupplyPush[m.id] ?? 0) >= pushRaise ? 1 : 0 // 供给加点达基础供给 50% → 价格 +1 档
               // 查找事件名称
               const eventNames: string[] = []
               if (eventShift !== 0) {
@@ -1049,7 +1023,8 @@ function BuyConfirmSheet({
                       <span className="row-val">{cardShift > 0 ? '+' : ''}{cardShift} 档</span>
                     </div>
                   ) : null}
-                  {staffShift !== 0 ? <Row k="采购人数" v={`${staffShift} 档`} /> : null}
+                  {negoShift > 0 ? <Row k="议价" v={`−${negoShift} 档`} /> : null}
+                  {pushRaiseShift > 0 ? <Row k="供给加点" v={`+${pushRaiseShift} 档`} /> : null}
                   <Row k="市场基准价" v={`${wan(m.price)}/件`} />
                   <Row k="批量修正" v={`${lotShift > 0 ? '+' : ''}${lotShift} 档`} />
                   <Row k="最终单价" v={`${wan(price)}/件`} bold />
@@ -1228,63 +1203,81 @@ function SwapSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   )
 }
 
-function AgreementSheet({ g, onClose }: { g: Game; onClose: () => void }) {
+/**
+ * 长期协议：专属 UI 组件（采购页展示）。
+ * 一般能力已取消：不再由部门人数解锁签订，协议由提案/事件授予——
+ * C5【长期协议】立即签订（≥4 采购人员锁定期 6 个月，强化 2 份）、
+ * C14【供应合约】本月协议槽 +N 且锁定期 6 个月、J2【供应链联盟】永久 +1 名额、
+ * 事件【签订长约】【长期协议】立即签订。有可用名额时（1 AP + 1w）可在此签订。
+ */
+function AgreementsCard({ g }: { g: Game }) {
   const gs = g.s
-  const mats = E.materialViews(gs).filter((m) => m.supply > 0)
+  const d = E.derive(gs)
+  const presettle = E.preSettleCash(gs)
   const slots = E.agreementSlots(gs)
-  /** 锁定期：采购 5 人 或 供应合约（C14）本月可选 6 个月，否则 3 个月 */
-  const months = gs.depts.buy.staff >= 5 || E.derive(gs).flags.includes('agreeLock6') ? 6 : 3
-
+  const used = gs.agreements.length
+  const free = Math.max(0, slots - used)
+  /** 锁定期：供应合约（C14）本月可选 6 个月，否则 3 个月 */
+  const months = d.flags.includes('agreeLock6') ? 6 : 3
+  const signableMats = E.materialViews(gs).filter((mv) => mv.supply > 0 && !gs.agreements.some((a) => a.materialId === mv.id))
   return (
-    <Sheet
-      title="签订长期协议"
-      sub={`协议 ${gs.agreements.length}/${slots} · 锁定期 ${months} 个月`}
-      onClose={onClose}
-    >
-      {gs.agreements.length ? (
-        <div className="card">
-          <div className="section-label">已生效</div>
-          {gs.agreements.map((a, i) => (
-            <div key={i} className="hstack-between" style={{ padding: 'var(--s1) 0' }}>
-              <span className="sm">
-                {E.materialViews(gs).find((m) => m.id === a.materialId)?.name} · 余 {a.monthsLeft} 个月
-              </span>
-              <button className="btn btn-nav" style={{ width: 'auto', padding: '2px var(--s2)' }} onClick={() => g.act((st) => E.cancelAgreement(st, i))}>
-                <span className="xs">终止</span>
-              </button>
-            </div>
-          ))}
+    <div className="card">
+      <div className="hstack-between">
+        <h3>长期协议</h3>
+        <span className="xs faint mono">名额 {used}/{slots}</span>
+      </div>
+      <div className="title-rule" />
+      {used > 0 ? (
+        <div className="stack-sm">
+          {gs.agreements.map((a, i) => {
+            const mv = E.materialViews(gs).find((m) => m.id === a.materialId)
+            const unit = E.materialPriceAt(a.materialId, a.priceTierShift)
+            return (
+              <div key={i} className="card">
+                <div className="hstack-between">
+                  <span className="sm">
+                    {mv?.name ?? a.materialId} · 余 {a.monthsLeft} 月
+                  </span>
+                  <button className="btn btn-nav" style={{ width: 'auto', padding: '2px var(--s2)' }} onClick={() => g.act((st) => E.cancelAgreement(st, i))}>
+                    <span className="xs">终止</span>
+                  </button>
+                </div>
+                <Row k="每月自动到货" v={`${a.qty} 件 × ${wan(unit)} = ${wan(a.qty * unit)}（锁定档位价）`} />
+              </div>
+            )
+          })}
+          <p className="hint">本月协议合计 {wan(presettle.agreementSpend)}，仓容或现金不足时整批跳过。</p>
         </div>
-      ) : null}
-
-      <div className="section-label">可选原料</div>
-      <div className="stack">
-        {mats.map((m) => {
-          const qty = E.lotQty(gs, m.id, 'mid')
-          const price = E.lotPrice(gs, m.id, 'mid')
-          const disabled = gs.agreements.length >= slots || gs.ap < 1 || gs.cash < 10 || gs.agreements.some((a) => a.materialId === m.id)
-          return (
-            <div key={m.id} className="card">
-              <Row k={m.name} v={`每月 ${qty} 件`} />
-              <Row k="当前单价" v={wan(price)} cls={tierClass(m.tierShift)} />
-              <Row k="锁定档位" v={tierName(m.tierShift)} />
-              <div style={{ marginTop: 'var(--s3)' }}>
+      ) : (
+        <p className="hint sm">
+          无生效协议。长期协议由提案/事件授予：C5【长期协议】立即签订（采购 ≥ 4 人锁定期 6 个月）、C14【供应合约】本月加名额且 6 月锁定、J2【供应链联盟】永久 +1 名额、事件【签订长约/长期协议】立即签订。
+        </p>
+      )}
+      {free > 0 ? (
+        <div className="stack-sm" style={{ marginTop: 'var(--s2)' }}>
+          <div className="section-label">可签订（1 AP + 1w · 锁定 {months} 个月）</div>
+          {signableMats.length > 0 ? (
+            signableMats.map((mv) => (
+              <div key={mv.id} className="hstack-between" style={{ padding: '2px 0' }}>
+                <span className="sm">
+                  {mv.name} · 每月 {E.lotQty(gs, mv.id, 'mid')} 件 · 锁定 {tierName(mv.tierShift)}（{wan(E.materialPriceAt(mv.id, mv.tierShift))}/件）
+                </span>
                 <button
                   className="btn btn-mini"
-                  disabled={disabled}
-                  onClick={() => g.act((st) => E.signAgreement(st, m.id, months))}
+                  style={{ width: 'auto', padding: '2px var(--s3)' }}
+                  disabled={gs.ap < 1 || gs.cash < 10}
+                  onClick={() => g.act((st) => E.signAgreement(st, mv.id, months))}
                 >
-                  <span className="btn-main">
-                    {gs.agreements.some((a) => a.materialId === m.id) ? '已签订' : '签订'}
-                  </span>
-                  <span className="btn-sub">1 AP + 1w</span>
+                  <span className="xs">签订</span>
                 </button>
               </div>
-            </div>
-          )
-        })}
-      </div>
-    </Sheet>
+            ))
+          ) : (
+            <p className="hint sm">本月没有可签的原料（需供给 &gt; 0）。</p>
+          )}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -1764,41 +1757,70 @@ function SellPage({ g }: { g: Game }) {
       </div>
 
       <div className="card">
-        <h3>销售资源分配</h3>
+        <h3>销售资源</h3>
         <div className="title-rule" />
         <div className="stack-sm">
           {/* 未解锁的产品线没有分配必要，解锁一个出一个 */}
           {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
             const cost = d.salesPushCost[t]
             const cap = d.salesPushCap[t]
-            const remaining = d.salesResource - used - priceRaiseUsed
             const alloc = gs.salesAlloc[t]
             const units = Math.floor(alloc / cost)
-            const plusDisabled = remaining < cost || units >= cap
-            const minusDisabled = alloc <= 0
+            const raise = gs.sellPriceAlloc[t] ?? 0
+            const canRaise = gs.depts.sell.staff >= SELL_PRICE_RAISE_STAFF // 2 人解锁提价（4 人档上限 1→2）
+            const raiseCap = d.sellRaiseCap
+            const free = Math.max(0, d.salesResource - used - priceRaiseUsed)
+            const demandPlusDisabled = free < cost || units >= cap
+            const raisePlusDisabled = !canRaise || free < d.sellRaiseCost || raise >= raiseCap
             return (
-              <div key={t} className="hstack-between">
+              <div
+                key={t}
+                style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 1fr) 1fr 1fr', columnGap: 'var(--s4)', rowGap: 'var(--s2)', alignItems: 'center' }}
+              >
                 <span className="sm">
-                  {TIER_LABEL[t]}
+                  <b>{TIER_LABEL[t]}</b>
                   <span className="faint xs"> · {cost} 点/需求</span>
                 </span>
-                <span className="hstack" style={{ gap: 'var(--s2)' }}>
+                <span className="hstack" style={{ gap: 'var(--s2)', justifyContent: 'flex-end' }}>
+                  <span className="xs faint">需求</span>
                   <button
                     className="btn btn-nav"
-                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: minusDisabled ? 0.4 : 1 }}
-                    disabled={minusDisabled}
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: alloc <= 0 ? 0.4 : 1 }}
+                    disabled={alloc <= 0}
                     onClick={() => g.mutate((st) => E.setAlloc(st, t, st.salesAlloc[t] - cost))}
                   >
                     <span>−</span>
                   </button>
                   <span className="mono gold" style={{ minWidth: 28, textAlign: 'center' }}>
-                    {alloc}
+                    +{units}
                   </span>
                   <button
                     className="btn btn-nav"
-                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: plusDisabled ? 0.4 : 1 }}
-                    disabled={plusDisabled}
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: demandPlusDisabled ? 0.4 : 1 }}
+                    disabled={demandPlusDisabled}
                     onClick={() => g.mutate((st) => E.setAlloc(st, t, st.salesAlloc[t] + cost))}
+                  >
+                    <span>+</span>
+                  </button>
+                </span>
+                <span className="hstack" style={{ gap: 'var(--s2)', justifyContent: 'flex-end' }}>
+                  <span className="xs faint">价格</span>
+                  <button
+                    className="btn btn-nav"
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: !canRaise || raise <= 0 ? 0.4 : 1 }}
+                    disabled={!canRaise || raise <= 0}
+                    onClick={() => g.mutate((st) => E.setSellPriceAlloc(st, t, (st.sellPriceAlloc[t] ?? 0) - 1))}
+                  >
+                    <span>−</span>
+                  </button>
+                  <span className="mono xs" style={{ minWidth: 28, textAlign: 'center' }}>
+                    +{raise} 档
+                  </span>
+                  <button
+                    className="btn btn-nav"
+                    style={{ width: 'auto', padding: '2px var(--s3)', opacity: raisePlusDisabled ? 0.4 : 1 }}
+                    disabled={raisePlusDisabled}
+                    onClick={() => g.mutate((st) => E.setSellPriceAlloc(st, t, (st.sellPriceAlloc[t] ?? 0) + 1))}
                   >
                     <span>+</span>
                   </button>
@@ -1807,34 +1829,12 @@ function SellPage({ g }: { g: Game }) {
             )
           })}
         </div>
-        {gs.depts.sell.staff >= SELL_PRICE_RAISE_STAFF ? (
-          <div style={{ marginTop: 'var(--s2)' }}>
-            <div className="section-label">提价（{d.sellRaiseCost} 点/档 · 每层最多 {d.sellRaiseCap} 档 · 仅现货 · 该层需求 −1）</div>
-            <div className="stack-sm" style={{ marginTop: 'var(--s1)' }}>
-              {TIER_ORDER.filter((t) => gs.products[t].built).map((t) => {
-                const n = gs.sellPriceAlloc[t] ?? 0
-                const cap = d.sellRaiseCap
-                const next = n >= cap ? 0 : n + 1
-                const free = Math.max(0, d.salesResource - used - priceRaiseUsed)
-                return (
-                  <div key={`raise-${t}`} className="hstack-between">
-                    <span className="sm">{TIER_LABEL[t]}</span>
-                    <button
-                      className={`btn btn-mini ${n > 0 ? '' : 'btn-nav'}`}
-                      style={{ width: 'auto', padding: '2px var(--s2)', opacity: n === 0 && free < d.sellRaiseCost ? 0.4 : 1 }}
-                      disabled={n === 0 && free < d.sellRaiseCost}
-                      onClick={() => g.mutate((st) => E.setSellPriceAlloc(st, t, next))}
-                    >
-                      {n > 0 ? `提价 +${n} 档生效中（点取消）` : `提价 +1 档（现货${cap > 1 ? `，最多 ${cap} 档` : ''}）`}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        ) : null}
         <div className="hint">
-          剩余可分配 {Math.max(0, d.salesResource - used - priceRaiseUsed)} 点
+          本月销售资源 {d.salesResource} 点 · 已用 {used + priceRaiseUsed} 点（需求成本 = 需求数 × 档位成本，上限 3× 基础需求；
+          {gs.depts.sell.staff < SELL_PRICE_RAISE_STAFF
+            ? `提价需销售 ${SELL_PRICE_RAISE_STAFF} 人解锁（${d.sellRaiseCost} 点/档，每层最多 ${d.sellRaiseCap} 档，每升 1 档该层需求 −1，仅现货）`
+            : `提价 ${d.sellRaiseCost} 点/档（基础 8，卡牌可降），每层最多 ${d.sellRaiseCap} 档（2 人 1 档 / 4 人 2 档），每升 1 档该层需求 −1，仅现货`}
+          ）
         </div>
       </div>
 
@@ -2238,6 +2238,13 @@ function LoanSheet({ g, mode, onClose }: { g: Game; mode: 'borrow' | 'repay'; on
   const d = E.derive(s)
   const presets = [10, 50, 100, 200] // 1w / 5w / 10w / 20w
   const full = mode === 'borrow' ? d.creditAvailable : s.debt
+  /** 本笔操作带来的「本月利息」变化：借款当月不计息（次月才起息），其余月份按月末余额×月利率在结算时确认（行动阶段不直接扣现金），单独模拟当前金额。 */
+  const interestDelta = (a: number): number => {
+    const copy = JSON.parse(JSON.stringify(s)) as E.GameState
+    if (mode === 'borrow') E.borrow(copy, a)
+    else E.repay(copy, a)
+    return E.derive(copy).interest - d.interest
+  }
   const reasonOf = (a: number): string | null => {
     if (mode === 'borrow') {
       if (s.debt > 0) return '先还清上一笔借款，再借新笔'
@@ -2268,14 +2275,22 @@ function LoanSheet({ g, mode, onClose }: { g: Game; mode: 'borrow' | 'repay'; on
       </button>
     )
   }
-  const note = (a: number) =>
-    mode === 'borrow' ? `现金 +${wan(a)} · 负债 +${wan(a)}` : `现金 −${wan(a)} · 负债 −${wan(a)}`
+  const note = (a: number) => {
+    const delta = interestDelta(a)
+    const interestPart =
+      mode === 'borrow' && delta === 0
+        ? '当月不计息（次月起息，到期/还款时本息一起还掉）'
+        : `本月利息 ${wanSigned(delta)}（结算时确认，行动阶段不直接扣现金）`
+    return mode === 'borrow'
+      ? `现金 +${wan(a)} · 负债 +${wan(a)} · ${interestPart}`
+      : `现金 −${wan(a)} · 负债 −${wan(a)} · ${interestPart}`
+  }
   return (
     <Sheet
       title={mode === 'borrow' ? '借款' : '还款'}
       sub={
         mode === 'borrow'
-          ? `可用额度 ${wan(d.creditAvailable)} · 月利率 ${(d.rate * 100).toFixed(1)}% · 期限 ${LOAN_TERM_MONTHS} 个月`
+          ? `可用额度 ${wan(d.creditAvailable)} · 月利率 ${(d.rate * 100).toFixed(1)}% · 期限 ${LOAN_TERM_MONTHS} 个月 · 当月不计息、次月起息`
           : `余额 ${wan(s.debt)}${s.loanDueMonth > 0 ? ` · 第 ${s.loanDueMonth} 月到期` : ''} · 现金 ${wan(s.cash)}`
       }
       onClose={onClose}

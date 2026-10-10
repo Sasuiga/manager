@@ -49,6 +49,7 @@ export {
   plannedPurchaseLine,
   plannedPurchaseCost,
   availableCashAfterPurchasePlan,
+  preSettleCashAfterLot,
   materialAvailableForProduction,
   executePlannedPurchases,
   plannedMaterialUnitCost,
