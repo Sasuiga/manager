@@ -756,10 +756,10 @@ export const OPENING_BASIC: GoalDef[] = [
 ]
 
 export const OPENING_CHALLENGE: GoalDef[] = [
-  { id: 'C1', climate: 'opening', kind: 'challenge', name: '本季度累计净利润 ≥ 10w', desc: '在第一季度就实现盈利。', metric: 'netProfitQ', compare: 'gte', value: 100, points: 15 },
+  { id: 'C1', climate: 'opening', kind: 'challenge', name: '本季度累计净利润 ≥ 15w', desc: '在第一季度就实现盈利。', metric: 'netProfitQ', compare: 'gte', value: 150, points: 15 },
   { id: 'C2', climate: 'opening', kind: 'challenge', name: '季度末现金 ≥ 35w', desc: '留足现金储备。', metric: 'cashEnd', compare: 'gte', value: 350, points: 15 },
-  { id: 'C3', climate: 'opening', kind: 'challenge', name: '季度末员工总数 ≥ 3', desc: '搭起最小团队。', metric: 'staffTotal', compare: 'gte', value: 3, points: 15 },
-  { id: 'C4', climate: 'opening', kind: 'challenge', name: '本季度至少 2 个月毛利 ≥ 4w', desc: '本季度内任意 2 个月毛利达到 4w 即可，不要求连续。', metric: 'grossProfitMonths', compare: 'gte', value: 2, points: 20 },
+  { id: 'C3', climate: 'opening', kind: 'challenge', name: '季度末员工总数 ≥ 5', desc: '搭起完整团队。', metric: 'staffTotal', compare: 'gte', value: 5, points: 15 },
+  { id: 'C4', climate: 'opening', kind: 'challenge', name: '本季度至少 2 个月毛利 ≥ 8w', desc: '本季度内任意 2 个月毛利达到 8w 即可，不要求连续。', metric: 'grossProfitMonths', compare: 'gte', value: 2, param: 80, points: 20 },
   { id: 'C5', climate: 'opening', kind: 'challenge', name: '本季度累计收入 ≥ 50w', desc: '把销售规模做起来。', metric: 'revenueQ', compare: 'gte', value: 500, points: 15 },
   { id: 'C6', climate: 'opening', kind: 'challenge', name: '本季度完成 1 次研发立项', desc: '选择研发项目并投入至少 1 名研发人员。', metric: 'rndStartsQ', compare: 'gte', value: 1, points: 15 },
 ]
@@ -767,31 +767,31 @@ export const OPENING_CHALLENGE: GoalDef[] = [
 export const GOAL_POOL: Record<Climate, { basic: GoalDef[]; challenge: GoalDef[] }> = {
   recovery: {
     basic: [
-      { id: 'RB1', climate: 'recovery', kind: 'basic', name: '季度累计净利润 ≥ 上季度 × 1.1 + 2w', desc: '在复苏中保持盈利增长。', metric: 'netProfitQ', compare: 'gte', growth: { base: 'netProfitQ', factor: 1.1, plus: 20 }, points: 10 },
-      { id: 'RB2', climate: 'recovery', kind: 'basic', name: '季度末现金 ≥ 上季度末 + 5w', desc: '把复苏变成真金白银。', metric: 'cashEnd', compare: 'gte', growth: { base: 'cashEnd', factor: 1, plus: 50 }, points: 10 },
+      { id: 'RB1', climate: 'recovery', kind: 'basic', name: '季度累计净利润 ≥ 上季度 × 1.05 + 1w', desc: '在复苏中保持盈利增长。', metric: 'netProfitQ', compare: 'gte', growth: { base: 'netProfitQ', factor: 1.05, plus: 10 }, points: 10 },
+      { id: 'RB2', climate: 'recovery', kind: 'basic', name: '季度末现金 ≥ 上季度末 + 3w', desc: '把复苏变成真金白银。', metric: 'cashEnd', compare: 'gte', growth: { base: 'cashEnd', factor: 1, plus: 30 }, points: 10 },
       { id: 'RB3', climate: 'recovery', kind: 'basic', name: '本季度完成 1 次设备购买或研发立项', desc: '为下一轮扩张做准备。', metric: 'capexOrRndQ', compare: 'gte', value: 1, points: 10 },
     ],
     challenge: [
       { id: 'RC1', climate: 'recovery', kind: 'challenge', name: '季度累计净利润 ≥ 基本目标 × 1.5', desc: '把基本目标再翻一半。', metric: 'netProfitQ', compare: 'gte', ratioFromBasic: 1.5, points: 20 },
-      { id: 'RC2', climate: 'recovery', kind: 'challenge', name: '季度末现金 ≥ 20w 且无逾期借款', desc: '现金充裕，且不拖欠任何款项。', metric: 'cashEnd', compare: 'gte', value: 200, points: 15 },
+      { id: 'RC2', climate: 'recovery', kind: 'challenge', name: '季度末现金 ≥ 上季度末 × 1.2', desc: '把现金滚起来（下限 10w）。', metric: 'cashEnd', compare: 'gte', growth: { base: 'cashEnd', factor: 1.2, plus: 100 }, points: 15 },
       { id: 'RC3', climate: 'recovery', kind: 'challenge', name: '本季度完成 2 次研发立项', desc: '连续推进两个研发项目。', metric: 'rndStartsQ', compare: 'gte', value: 2, points: 20 },
-      { id: 'RC4', climate: 'recovery', kind: 'challenge', name: '本季度至少 2 个月毛利 ≥ 6w', desc: '稳定的毛利能力。', metric: 'grossProfitMonths', compare: 'gte', value: 2, param: 60, points: 20 },
-      { id: 'RC5', climate: 'recovery', kind: 'challenge', name: '季度末员工总数 ≥ 8', desc: '扩张团队。', metric: 'staffTotal', compare: 'gte', value: 8, points: 15 },
+      { id: 'RC4', climate: 'recovery', kind: 'challenge', name: '本季度至少 2 个月毛利 ≥ 12w', desc: '稳定的毛利能力。', metric: 'grossProfitMonths', compare: 'gte', value: 2, param: 120, points: 20 },
+      { id: 'RC5', climate: 'recovery', kind: 'challenge', name: '季度末员工总数 ≥ 12', desc: '扩张团队。', metric: 'staffTotal', compare: 'gte', value: 12, points: 15 },
       { id: 'RC6', climate: 'recovery', kind: 'challenge', name: '季度销售收入 ≥ 上季度 × 1.3', desc: '销售收入增长三成。', metric: 'revenueQ', compare: 'gte', growth: { base: 'revenueQ', factor: 1.3 }, points: 20 },
     ],
   },
   boom: {
     basic: [
-      { id: 'PB1', climate: 'boom', kind: 'basic', name: '季度累计收入 ≥ 上季度 × 1.2 + 5w', desc: '繁荣期要把规模做上去。', metric: 'revenueQ', compare: 'gte', growth: { base: 'revenueQ', factor: 1.2, plus: 50 }, points: 10 },
-      { id: 'PB2', climate: 'boom', kind: 'basic', name: '季度累计净利润 ≥ 上季度 × 1.15 + 2w', desc: '收入与利润同步增长。', metric: 'netProfitQ', compare: 'gte', growth: { base: 'netProfitQ', factor: 1.15, plus: 20 }, points: 10 },
-      { id: 'PB3', climate: 'boom', kind: 'basic', name: '季度末净资产 ≥ 上季度末 × 1.1 + 5w', desc: '把利润沉到资产里。', metric: 'netAssetsEnd', compare: 'gte', growth: { base: 'netAssetsEnd', factor: 1.1, plus: 50 }, points: 10 },
+      { id: 'PB1', climate: 'boom', kind: 'basic', name: '季度累计收入 ≥ 上季度 × 1.1 + 3w', desc: '繁荣期要把规模做上去。', metric: 'revenueQ', compare: 'gte', growth: { base: 'revenueQ', factor: 1.1, plus: 30 }, points: 10 },
+      { id: 'PB2', climate: 'boom', kind: 'basic', name: '本季度累计净利润 ≥ 20w', desc: '繁荣期利润跟上规模。', metric: 'netProfitQ', compare: 'gte', value: 200, points: 10 },
+      { id: 'PB3', climate: 'boom', kind: 'basic', name: '季度末净资产 ≥ 上季度末 × 1.05 + 3w', desc: '把利润沉到资产里。', metric: 'netAssetsEnd', compare: 'gte', growth: { base: 'netAssetsEnd', factor: 1.05, plus: 30 }, points: 10 },
     ],
     challenge: [
       { id: 'PC1', climate: 'boom', kind: 'challenge', name: '季度累计收入 ≥ 基本目标 × 1.4', desc: '把收入目标再推高四成。', metric: 'revenueQ', compare: 'gte', ratioFromBasic: 1.4, points: 20 },
-      { id: 'PC2', climate: 'boom', kind: 'challenge', name: '本季度至少 2 个月需求满足率 ≥ 90%', desc: '不要让到手的订单跑掉。', metric: 'demandFillMonths', compare: 'gte', value: 2, param: 90, points: 20 },
+      { id: 'PC2', climate: 'boom', kind: 'challenge', name: '本季度至少 2 个月需求满足率 ≥ 80%', desc: '不要让到手的订单跑掉。', metric: 'demandFillMonths', compare: 'gte', value: 2, param: 80, points: 20 },
       { id: 'PC3', climate: 'boom', kind: 'challenge', name: '季度末设备总数 ≥ 3', desc: '产能是繁荣期的瓶颈。', metric: 'equipmentCount', compare: 'gte', value: 3, points: 15 },
       { id: 'PC4', climate: 'boom', kind: 'challenge', name: '本季度高端产品收入 ≥ 总收入的 30%', desc: '把产品结构往上推。', metric: 'highEndShare', compare: 'gte', value: 30, points: 25 },
-      { id: 'PC5', climate: 'boom', kind: 'challenge', name: '本季度连续 3 个月毛利 ≥ 8w', desc: '整季每月毛利都在 8w 以上。', metric: 'grossProfitMonths', compare: 'gte', value: 3, param: 80, points: 25 },
+      { id: 'PC5', climate: 'boom', kind: 'challenge', name: '本季度连续 3 个月毛利 ≥ 12w', desc: '整季每月毛利都在 12w 以上。', metric: 'grossProfitMonths', compare: 'gte', value: 3, param: 120, points: 25 },
       { id: 'PC6', climate: 'boom', kind: 'challenge', name: '季度末员工总数 ≥ 10', desc: '把团队扩到十人。', metric: 'staffTotal', compare: 'gte', value: 10, points: 15 },
     ],
   },
@@ -805,7 +805,7 @@ export const GOAL_POOL: Record<Climate, { basic: GoalDef[]; challenge: GoalDef[]
       { id: 'OC1', climate: 'overheat', kind: 'challenge', name: '本季度连续 3 个月毛利 ≥ 6w', desc: '整季每月毛利 6w 以上。', metric: 'grossProfitMonths', compare: 'gte', value: 3, param: 60, points: 25 },
       { id: 'OC2', climate: 'overheat', kind: 'challenge', name: '季度累计净利润 ≥ 上季度 × 1.2', desc: '过热期也要增长。', metric: 'netProfitQ', compare: 'gte', growth: { base: 'netProfitQ', factor: 1.2 }, points: 20 },
       { id: 'OC3', climate: 'overheat', kind: 'challenge', name: '季度末负债 ≤ 总资产 × 0.4', desc: '别在利率高点加杠杆。', metric: 'debtToAssets', compare: 'lte', value: 40, points: 15 },
-      { id: 'OC4', climate: 'overheat', kind: 'challenge', name: '本季度至少 1 个月需求满足率 ≥ 95%', desc: '把需求吃干净。', metric: 'demandFillBest', compare: 'gte', value: 95, points: 20 },
+      { id: 'OC4', climate: 'overheat', kind: 'challenge', name: '本季度至少 1 个月需求满足率 ≥ 85%', desc: '把需求吃干净。', metric: 'demandFillBest', compare: 'gte', value: 85, points: 20 },
       { id: 'OC5', climate: 'overheat', kind: 'challenge', name: '签订并生效 1 份长期供货协议', desc: '长期协议为提案能力：打出【长期协议】/ 相关事件即可。', metric: 'agreementsSigned', compare: 'gte', value: 1, points: 15 },
       { id: 'OC6', climate: 'overheat', kind: 'challenge', name: '季度末存货 ≤ 上季度末 × 0.8', desc: '把库存降下来。', metric: 'inventory', compare: 'lte', growth: { base: 'inventory', factor: 0.8 }, points: 15 },
     ],
@@ -818,8 +818,8 @@ export const GOAL_POOL: Record<Climate, { basic: GoalDef[]; challenge: GoalDef[]
     ],
     challenge: [
       { id: 'SC1', climate: 'stagflation', kind: 'challenge', name: '季度累计净利润 ≥ 上季度 × 1.1', desc: '滞涨期仍要增长。', metric: 'netProfitQ', compare: 'gte', growth: { base: 'netProfitQ', factor: 1.1 }, points: 20 },
-      { id: 'SC2', climate: 'stagflation', kind: 'challenge', name: '季度末负债 ≤ 净资产 × 0.3', desc: '控制资产负债结构。', metric: 'debtToEquity', compare: 'lte', value: 30, points: 20 },
-      { id: 'SC3', climate: 'stagflation', kind: 'challenge', name: '本季度至少 2 个月毛利 ≥ 4w', desc: '守住基本毛利。', metric: 'grossProfitMonths', compare: 'gte', value: 2, param: 40, points: 15 },
+      { id: 'SC2', climate: 'stagflation', kind: 'challenge', name: '季度末负债 ≤ 净资产 × 0.2', desc: '控制资产负债结构。', metric: 'debtToEquity', compare: 'lte', value: 20, points: 20 },
+      { id: 'SC3', climate: 'stagflation', kind: 'challenge', name: '本季度至少 2 个月毛利 ≥ 5w', desc: '守住基本毛利。', metric: 'grossProfitMonths', compare: 'gte', value: 2, param: 50, points: 15 },
       { id: 'SC4', climate: 'stagflation', kind: 'challenge', name: '本季度薪酬支出 ≤ 上季度 × 0.9', desc: '把人力成本压下去。', metric: 'salaryQ', compare: 'lte', growth: { base: 'salaryQ', factor: 0.9 }, points: 15 },
       { id: 'SC5', climate: 'stagflation', kind: 'challenge', name: '本季度研发成功 1 项', desc: '完成任意一个研发项目。', metric: 'rndSuccessQ', compare: 'gte', value: 1, points: 20 },
       { id: 'SC6', climate: 'stagflation', kind: 'challenge', name: '季度末存货 ≤ 上季度末 × 0.7', desc: '大幅压缩库存。', metric: 'inventory', compare: 'lte', growth: { base: 'inventory', factor: 0.7 }, points: 15 },
@@ -828,14 +828,14 @@ export const GOAL_POOL: Record<Climate, { basic: GoalDef[]; challenge: GoalDef[]
   recession: {
     basic: [
       { id: 'DB1', climate: 'recession', kind: 'basic', name: '季度末现金 ≥ 10w', desc: '衰退期现金是命。', metric: 'cashEnd', compare: 'gte', value: 100, points: 10 },
-      { id: 'DB2', climate: 'recession', kind: 'basic', name: '本季度薪酬支出 ≤ 上季度 × 0.9', desc: '控制固定成本。', metric: 'salaryQ', compare: 'lte', growth: { base: 'salaryQ', factor: 0.9 }, points: 10 },
+      { id: 'DB2', climate: 'recession', kind: 'basic', name: '本季度薪酬支出 ≤ 上季度 × 1.05', desc: '低谷期把编制基本控住，不扩员。', metric: 'salaryQ', compare: 'lte', growth: { base: 'salaryQ', factor: 1.05 }, points: 10 },
       { id: 'DB3', climate: 'recession', kind: 'basic', name: '本季度完成 1 次设备购买或研发立项', desc: '在低谷储备资产。', metric: 'capexOrRndQ', compare: 'gte', value: 1, points: 10 },
     ],
     challenge: [
       { id: 'DC1', climate: 'recession', kind: 'challenge', name: '季度累计净利润 ≥ 上季度 × 1.2', desc: '逆势增长。', metric: 'netProfitQ', compare: 'gte', growth: { base: 'netProfitQ', factor: 1.2 }, points: 20 },
-      { id: 'DC2', climate: 'recession', kind: 'challenge', name: '季度末负债 ≤ 净资产 × 0.25', desc: '紧缩资产负债表。', metric: 'debtToEquity', compare: 'lte', value: 25, points: 20 },
-      { id: 'DC3', climate: 'recession', kind: 'challenge', name: '本季度研发成功率 ≥ 50%，或完成 1 项研发', desc: '低谷是研发的窗口。', metric: 'rndSuccessQ', compare: 'gte', value: 1, points: 20 },
-      { id: 'DC4', climate: 'recession', kind: 'challenge', name: '本季度至少 2 个月毛利 ≥ 5w', desc: '保住毛利。', metric: 'grossProfitMonths', compare: 'gte', value: 2, param: 50, points: 20 },
+      { id: 'DC2', climate: 'recession', kind: 'challenge', name: '季度末负债 ≤ 净资产 × 0.2', desc: '紧缩资产负债表。', metric: 'debtToEquity', compare: 'lte', value: 20, points: 20 },
+      { id: 'DC3', climate: 'recession', kind: 'challenge', name: '本季度完成 2 项研发', desc: '低谷是研发的窗口。', metric: 'rndSuccessQ', compare: 'gte', value: 2, points: 20 },
+      { id: 'DC4', climate: 'recession', kind: 'challenge', name: '本季度至少 2 个月毛利 ≥ 40w', desc: '保住毛利。', metric: 'grossProfitMonths', compare: 'gte', value: 2, param: 400, points: 20 },
       { id: 'DC5', climate: 'recession', kind: 'challenge', name: '季度末设备总数 ≥ 3', desc: '抄底产能。', metric: 'equipmentCount', compare: 'gte', value: 3, points: 15 },
       { id: 'DC6', climate: 'recession', kind: 'challenge', name: '季度销售收入 ≥ 上季度 × 1.1', desc: '收入逆势上行。', metric: 'revenueQ', compare: 'gte', growth: { base: 'revenueQ', factor: 1.1 }, points: 20 },
     ],
@@ -847,12 +847,12 @@ export const GOAL_POOL: Record<Climate, { basic: GoalDef[]; challenge: GoalDef[]
       { id: 'XB3', climate: 'depression', kind: 'basic', name: '本季度完成 1 次设备抄底或知识产权收购', desc: '买入比卖出更有价值。', metric: 'capexOrRndQ', compare: 'gte', value: 1, points: 10 },
     ],
     challenge: [
-      { id: 'XC1', climate: 'depression', kind: 'challenge', name: '季度末现金 ≥ 30w', desc: '把现金堆起来。', metric: 'cashEnd', compare: 'gte', value: 300, points: 20 },
-      { id: 'XC2', climate: 'depression', kind: 'challenge', name: '本季度累计净利润 ≥ 0', desc: '萧条中不亏就是赢。', metric: 'netProfitQ', compare: 'gte', value: 0, points: 20 },
-      { id: 'XC3', climate: 'depression', kind: 'challenge', name: '季度末负债 ≤ 净资产 × 0.2', desc: '近乎无债经营。', metric: 'debtToEquity', compare: 'lte', value: 20, points: 25 },
+      { id: 'XC1', climate: 'depression', kind: 'challenge', name: '季度末现金 ≥ 上季度末 × 1.5 + 2w', desc: '萧条里也要把现金滚起来（下限 20w）。', metric: 'cashEnd', compare: 'gte', growth: { base: 'cashEnd', factor: 1.5, plus: 200 }, points: 20 },
+      { id: 'XC2', climate: 'depression', kind: 'challenge', name: '本季度累计净利润 ≥ 100w', desc: '萧条里也要留下利润。', metric: 'netProfitQ', compare: 'gte', value: 1000, points: 20 },
+      { id: 'XC3', climate: 'depression', kind: 'challenge', name: '季度末负债 ≤ 净资产 × 0.15', desc: '近乎无债经营。', metric: 'debtToEquity', compare: 'lte', value: 15, points: 25 },
       { id: 'XC4', climate: 'depression', kind: 'challenge', name: '本季度完成 2 次低价资产购买', desc: '买设备，或者买技术。', metric: 'capexQ', compare: 'gte', value: 2, points: 20 },
       { id: 'XC5', climate: 'depression', kind: 'challenge', name: '本季度研发成功 1 项，且成本 ≤ 3w', desc: '用最少的钱推进研发。', metric: 'rndSuccessQ', compare: 'gte', value: 1, points: 20 },
-      { id: 'XC6', climate: 'depression', kind: 'challenge', name: '下季度开始前，现金 ≥ 上季度末 × 1.5', desc: '把现金堆到上季度的一倍半。', metric: 'cashEnd', compare: 'gte', growth: { base: 'cashEnd', factor: 1.5 }, points: 25 },
+      { id: 'XC6', climate: 'depression', kind: 'challenge', name: '下季度开始前，现金 ≥ 上季度末 × 2', desc: '把现金翻倍。', metric: 'cashEnd', compare: 'gte', growth: { base: 'cashEnd', factor: 2 }, points: 25 },
     ],
   },
 }

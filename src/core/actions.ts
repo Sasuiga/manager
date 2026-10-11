@@ -101,6 +101,8 @@ export function hire(state: GameState, dept: Dept): ActionResult {
   }
   state.depts[dept].staff += 1
   state.depts[dept].hired += 1
+  // 招聘计数（hiresQ 目标口径）：累计器，与 depts.hired 同步，季度快照在 settle.snapshotQuarter
+  state.flags['hiresTotal'] = (state.flags['hiresTotal'] ?? 0) + 1
   if (dept === 'ops' && state.monthFlags.includes('opsApImmediate')) {
     // M6 即时授权：新招管理人员的 AP 上限 +1 本月即时生效（正常下月生效）
     state.ap += 1
@@ -1954,6 +1956,7 @@ export function applyEventOption(state: GameState, optionIndex: number): ActionR
     if (opt.extra.includes('管理人员 +1') && state.depts.ops.staff < 5) {
       state.depts.ops.staff += 1
       state.depts.ops.hired += 1
+      state.flags['hiresTotal'] = (state.flags['hiresTotal'] ?? 0) + 1 // 事件赠员也计入招聘计数（hiresQ）
       state.flags['opsHired'] = (state.flags['opsHired'] ?? 0) + 1
       checkAchievements(state)
     }
@@ -2044,6 +2047,7 @@ function applyModSideEffects(state: GameState, mods: MonthMods, equipmentConside
     if (note.includes('管理人员 +1') && state.depts.ops.staff < 5) {
       state.depts.ops.staff += 1
       state.depts.ops.hired += 1
+      state.flags['hiresTotal'] = (state.flags['hiresTotal'] ?? 0) + 1 // 事件赠员也计入招聘计数（hiresQ）
       state.flags['opsHired'] = (state.flags['opsHired'] ?? 0) + 1
       checkAchievements(state)
     }

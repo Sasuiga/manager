@@ -164,6 +164,8 @@ export function drawBoardGoals(state: GameState, rng: Rng) {
     state.challengeOffered = offered.map((d) => makeTrack(state, d))
     state.challengeGoal = null
   }
+  // 招聘计数基准同步：flags['hiresTotal'] 为累计器（hire/事件赠员时递增，snapshotQuarter 记录季末值），
+  // 季度首月与 depts.hired 累计对齐，防历史局（flag 缺失）首季误判
   state.flags['hiresTotal'] = Object.values(state.depts).reduce((a, d) => a + d.hired, 0)
   state.boardPrompted = false
   if (state.basicGoal) {

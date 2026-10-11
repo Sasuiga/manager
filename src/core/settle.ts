@@ -855,6 +855,8 @@ function snapshotQuarter(state: GameState): Partial<Record<string, Money>> {
     rndSuccessQ: state.flags['rndSuccessQ'] ?? 0,
     capexQ: state.flags['capexQ'] ?? 0,
     agreementsSigned: state.flags['agreementsSigned'] ?? 0,
+    /** 招聘累计（hiresTotal）：与 flags 同形的季度计数基准，缺失时 hiresQ delta 会错计 */
+    hiresTotal: state.flags['hiresTotal'] ?? 0,
   }
 }
 
