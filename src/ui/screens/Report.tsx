@@ -41,6 +41,12 @@ export function ReportSheet({ g, onAdvance }: { g: Game; onAdvance: () => void }
         <Row k="单位成本" v={wan(rep.production.unitCost)} />
         <Row k="订单交付" v={rep.sales.orders.length ? `${rep.sales.orders.reduce((a, s) => a + s.qty, 0)} 件` : '无'} />
         <Row k="现货成交" v={rep.sales.spots.length ? `${rep.sales.spots.reduce((a, s) => a + s.qty, 0)} 件` : '无'} />
+        {rep.sales.receivableCollected > 0 ? (
+          <Row k="应收回款（上月挂账）" v={wan(rep.sales.receivableCollected)} />
+        ) : null}
+        {rep.sales.receivablePosted > 0 ? (
+          <Row k="订单挂账（次月回款）" v={wan(rep.sales.receivablePosted)} />
+        ) : null}
         <Row
           k="需求满足率"
           v={`${(rep.sales.fillRate * 100).toFixed(0)}%`}
@@ -136,6 +142,7 @@ export function ReportSheet({ g, onAdvance }: { g: Game; onAdvance: () => void }
           <Row k="原料存货" v={wan(bal.inventoryMaterial)} />
           <Row k="成品存货" v={wan(bal.inventoryProduct)} />
           <Row k="固定资产净值" v={wan(bal.equipmentGross - bal.equipmentAccum + bal.warehouseGross - bal.warehouseAccum)} />
+          <Row k="应收账款" v={wan(bal.receivable)} />
           <Row k="资产合计" v={wan(bal.totalAssets)} bold />
         </div>
         <div className="section-label" style={{ marginTop: 'var(--s4)' }}>

@@ -114,6 +114,7 @@ export function newGame(seed: number): GameState {
     overtimePaid: 0,
     pendingIncome: 0,
     pendingCost: 0,
+    receivable: 0,
     eventCashGift: 0,
     wagePayableBy: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 },
     hireFeeBy: { ops: 0, buy: 0, make: 0, sell: 0, rnd: 0 },
@@ -251,7 +252,7 @@ export function fixedAssetNet(state: GameState): Money {
 }
 
 export function totalAssets(state: GameState): Money {
-  return state.cash + inventoryValue(state) + fixedAssetNet(state) + state.pendingIncome
+  return state.cash + inventoryValue(state) + fixedAssetNet(state) + state.pendingIncome + state.receivable
 }
 
 /** 应付职工薪酬合计（上月计提、次月实付的挂账负债）。 */
@@ -278,7 +279,8 @@ export function balanceSheet(state: GameState): BalanceSheet {
     equipmentAccum: accum,
     warehouseGross: grossWh,
     warehouseAccum: whAccum,
-    totalAssets: state.cash + matv + prodv + netEquip + warehouseNet(state) + state.pendingIncome,
+    totalAssets: state.cash + matv + prodv + netEquip + warehouseNet(state) + state.pendingIncome + state.receivable,
+    receivable: state.receivable,
     debt: state.debt + state.pendingCost,
     wagePayable: wagePayableOf(state),
     equity: equityOf(state),

@@ -547,6 +547,9 @@ export const MONTHLY_RATE = 0.05 // 月利率 5%（3 个月期限，见 LOAN_TER
 export const LOAN_TERM_MONTHS = 3 // 借款期限（月）：第 M 月借款，M + 期限 − 1 月末到期，未还部分强制全额归还
 export const RATE_SHIFT_UNIT: Money = 10 // 利率档位：每档 1w
 export const TAX_RATE = 0.1 // 所得税，亏损不计
+/** 应收保理（销售特殊行动，1 AP + 1w）：按应收账款余额 90% 收回现金，10% 为折价损失（营业外） */
+export const FACTOR_RECOVERY = 0.9
+export const FACTOR_FEE = 10 // 1w 保理手续费（财务费用）
 export const RND_COST_PER_PROJECT: Money = 30 // 每个研发项目每月固定投入 3w（计入研发费用）
 /** 招聘费按 6 个月摊销，每月摊销额 = 招聘费 / 6，四舍五入到 0.1w */
 export const RECRUIT_AMORT_MONTHS = 6

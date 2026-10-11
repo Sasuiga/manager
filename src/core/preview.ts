@@ -31,7 +31,7 @@ export interface ProductPreview {
 }
 
 /**
- * 本期现金计划分解（确定性，不含销售回款与所得税）：
+ * 本期现金计划分解（确定性，不含销售回款、应收回款与所得税）：
  * 以当前现金（state.cash）为基期，按资金时间序列出各扣减项：
  *   已实收/实付（已计入 state.cash）：招聘费 / 杂项支出 / 设备购置（即时） / 还款 / 采购与贸易商实付 / 加班（安排时即付）/ 借款（到账）；
  *   结算时付（尚未发生，从 state.cash 中预留）：采购计划（核心）/ 协议 / 研发 / 利息 / 上月工资。
@@ -72,6 +72,8 @@ export interface PreSettleCash {
   interest: Money
   /** 上月工资实付（当月计提、次月实付） */
   wagePaid: Money
+  /** 应收回款（上月订单赊销挂账，本月结算期初批量到账，确定性） */
+  arCollection: Money
   /**
    * = state.cash − (purchasePlan + agreementSpend + rndInvest + interest + wagePaid)。
    * 以当前现金为基期（与「期初 + 实收（含借款）− 实付（含加班/设备）」勾稽等价，直接取真值更稳健）；
@@ -112,7 +114,8 @@ export function preSettleCash(state: GameState): PreSettleCash {
    * 仓容口径：结算时采购计划先入库、协议后执行，因此协议的可用仓容要按「计划后库存」计算；
    * 完整模式采购已在行动时入库，直接按当前库存计算。
    */
-  const cashBase = state.cash - purchasePlan
+  /** 协议到货在结算 §0 段执行，此时应收回款（上月挂账，结算期初到账）已并入现金，故现金基数含应收回款。 */
+  const cashBase = state.cash + state.receivable - purchasePlan
   let cash = cashBase
   let agreementSpend = 0
   for (const ag of state.agreements) {
@@ -154,6 +157,7 @@ export function preSettleCash(state: GameState): PreSettleCash {
     rndInvest,
     interest,
     wagePaid,
+    arCollection: state.receivable,
     cashAfter,
   }
 }

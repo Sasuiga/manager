@@ -126,8 +126,9 @@ function PreSettleCashBreakdown({ preview }: { preview: E.OperatingPreview }) {
       <div className="section-label" style={{ marginTop: 'var(--s2)' }}>
         本期结算 → 下期期初
       </div>
-      {preview.orderRevenue > 0 ? <Row k="+ 订单回款" v={wan(preview.orderRevenue)} /> : null}
       {preview.spotRevenue.max > 0 ? <Row k="+ 现货回款" v={moneyRange(preview.spotRevenue)} /> : null}
+      {ps.arCollection > 0 ? <Row k="+ 应收回款（上月赊销挂账，本期结算到账）" v={wan(ps.arCollection)} cls="green" /> : null}
+      {preview.orderRevenue > 0 ? <Row k="· 本期订单挂账（应收，下期结算回款，未含在上数）" v={wan(preview.orderRevenue)} cls="faint" /> : null}
       {preview.tax.max > 0 ? <Row k="− 所得税" v={moneyRange(preview.tax)} /> : null}
       <Row k="预计下期期初现金" v={moneyRange(preview.cashEnd)} bold />
       <div className="section-label" style={{ marginTop: 'var(--s2)' }}>
@@ -143,7 +144,8 @@ function PreSettleCashBreakdown({ preview }: { preview: E.OperatingPreview }) {
       ) : null}
       {gap > 0 ? (
         <div className="warn">
-          下期资金缺口 {wan(gap)}，可由下期回款弥补
+          下期资金缺口 {wan(gap)}
+          {preview.orderRevenue > 0 ? `，其中本期订单挂账 ${wan(preview.orderRevenue)} 下期结算回款可部分弥补` : '，可由下期回款弥补'}
         </div>
       ) : null}
     </>

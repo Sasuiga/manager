@@ -643,6 +643,20 @@ export function derive(state: GameState): DerivedTotals {
     if (state.wagePayableBy[dp] > 0) {
       rows.push({ item: '工资支付（上月计提）', debit: '应付职工薪酬', debitAmt: state.wagePayableBy[dp], credit: '现金', creditAmt: state.wagePayableBy[dp] })
     }
+    // 应收账款回款（上月订单赊销挂账，本月结算期初批量到账：借 现金 / 贷 应收账款，损益中性）
+    if (dp === 'sell' && state.receivable > 0) {
+      rows.push({
+        item: '应收账款回款（上月赊销）',
+        debit: '现金',
+        debitAmt: state.receivable,
+        credit: '应收账款',
+        creditAmt: state.receivable,
+        detail: [
+          '订单销售为赊销（30 天账期）：收入上月已确认，现金本月结算期初到账',
+          '需提前回款可用「特殊行动 · 应收保理」（1 AP + 1w，按 90% 收回，10% 折价损失）',
+        ],
+      })
+    }
     // 设备折旧（非现金）
     if (dp === 'make' && makeDepreciation > 0) {
       rows.push({ item: '设备折旧', debit: '制造费用', debitAmt: makeDepreciation, credit: '累计折旧', creditAmt: makeDepreciation })

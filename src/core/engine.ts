@@ -104,6 +104,7 @@ export {
   rndActiveThisMonth,
   borrow,
   repay,
+  factorReceivable,
   applyEventOption,
   skipEvent,
   acceptChance,

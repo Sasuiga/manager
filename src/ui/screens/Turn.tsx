@@ -182,7 +182,7 @@ export function TurnScreen({
     ops: s.hand.length > 0 && s.ap > 0,
     buy: E.allocUsed(s) >= 0 && d.materials.pkg && Object.values(s.materials).some((m) => !m.chosenLot && m.qty === 0),
     make: E.maxProducible(s, 'low') > 0,
-    sell: s.orders.length > 0,
+    sell: s.orders.length > 0 || s.receivable > 0, // 有订单待接，或有应收挂账待回款/保理
     rnd: E.activeResearch(s) === null && s.depts.rnd.staff > 0,
   }
 
@@ -1370,6 +1370,14 @@ function SellPage({ g }: { g: Game }) {
     <>
       <LedgerSection g={g} dept="sell" />
 
+      {gs.receivable > 0 ? (
+        <div className="info" style={{ marginBottom: 'var(--s2)' }}>
+          <div className="xs">
+            应收账款 {wan(gs.receivable)}：上月订单赊销挂账，本月结算期初批量回款；需提前回款可用「特殊行动 · 应收保理」（1 AP + 1w，按 90% 收回、10% 折价损失）。
+          </div>
+        </div>
+      ) : null}
+
       {/*
         需求与售价面板放在加点面板之前：玩家下方加点时，
         本页「需求 A + B = C」的数字随 derive 实时变化。
@@ -1476,7 +1484,7 @@ function SellPage({ g }: { g: Game }) {
       {/* 刺激需求 / 上调售价（各 1 AP 结算，两个原子行动，草稿态调整）已移入「特殊行动」面板 */}
       {gs.orders.length ? (
         <div className="hint" style={{ padding: 'var(--s2) 0' }}>
-          订单来源：{gs.orders.map((o) => o.from).filter((v, i, a) => a.indexOf(v) === i).join('、')}
+          订单来源：{gs.orders.map((o) => o.from).filter((v, i, a) => a.indexOf(v) === i).join('、')}· 订单销售为赊销（30 天账期）：收入结算当月确认、挂应收账款，次月结算回款；现货为现款销售。
         </div>
       ) : null}
     </>

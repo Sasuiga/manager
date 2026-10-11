@@ -615,6 +615,8 @@ export interface BalanceSheet {
   inventoryProduct: Money
   /** 待摊招聘费 */
   prepaid: Money
+  /** 应收账款（订单赊销挂账：上月结算挂账、本月结算期初回款；保理后清零） */
+  receivable: Money
   equipmentGross: Money
   equipmentAccum: Money
   /** 仓库固定资产（原值/累计折旧，口径同设备） */
@@ -731,6 +733,13 @@ export interface GameState {
    * 但金额与现金流水、利润表科目、存货账面严格勾稽。
    */
   monthLedger: { dept: Dept; item: string; debit: string; credit: string; debitAmt: Money; creditAmt: Money; detail?: string[] }[]
+  /**
+   * 应收账款（订单赊销挂账）：订单销售收入结算当月挂账（收入确认、现金未收），
+   * 次月结算期初批量回款（现金 +、挂账冲销，损益中性）；
+   * 玩家可用「应收保理」（1 AP + 1w，按 90% 收回）提前变现，10% 折价损失进营业外。
+   * 与工资计提（应付）同形的收入侧浮存：双向 1 月挂账构成现金流张力。
+   */
+  receivable: Money
   /** 一次性收益将在下月到账 */
   /**
    * 跨月挂账：当月确认、次月收付现金。

@@ -4,6 +4,8 @@ import {
   STAFF,
   LOAN_TERM_MONTHS,
   MATERIALS,
+  FACTOR_RECOVERY,
+  FACTOR_FEE,
   BUY_PRICE_NEGOTIATE_STAFF,
   SELL_PRICE_RAISE_STAFF,
   BUY_TRADER_EXTRA_STAFF,
@@ -45,6 +47,7 @@ type OpenId =
   | 'equip'
   | 'sellDemand'
   | 'sellRaise'
+  | 'sellFactor'
 
 /**
  * 特殊行动：部门本职之外的 AP 消耗型行动。
@@ -223,6 +226,19 @@ export function SpecialActions({ g, dept }: { g: Game; dept: E.Dept }) {
               ? `1 AP · 提价（价）· 需销售 ${SELL_PRICE_RAISE_STAFF} 人解锁（当前 ${s.depts.sell.staff} 人）`
               : `1 AP · 提价（价）${d.sellRaiseCost} 点/档 · 与刺激需求共用池`,
       },
+      {
+        id: 'sellFactor',
+        name: '应收保理',
+        disabled: s.receivable <= 0 || s.ap < 1 || s.cash < FACTOR_FEE,
+        sub:
+          s.receivable <= 0
+            ? `暂无应收（上月订单赊销在结算时挂账）`
+            : s.ap < 1
+              ? 'AP 不足（结算 1 AP）'
+              : s.cash < FACTOR_FEE
+                ? '现金不足 1w（保理手续费）'
+                : `1 AP + 1w · 按应收 ${wan(s.receivable)} 的 ${(FACTOR_RECOVERY * 100).toFixed(0)}% 收回现金 ${wan(Math.round(s.receivable * FACTOR_RECOVERY))}（次月结算自动回款）`,
+      },
       hireItem,
     ]
   } else {
@@ -267,6 +283,7 @@ export function SpecialActions({ g, dept }: { g: Game; dept: E.Dept }) {
       {open === 'warehouse' ? <WarehousePickSheet g={g} onClose={() => setOpen(null)} /> : null}
       {open === 'sellDemand' ? <SellDemandSheet g={g} onClose={() => setOpen(null)} /> : null}
       {open === 'sellRaise' ? <SellRaiseSheet g={g} onClose={() => setOpen(null)} /> : null}
+      {open === 'sellFactor' ? <FactorSheet g={g} onClose={() => setOpen(null)} /> : null}
     </div>
   )
 }
@@ -938,6 +955,50 @@ function SellRaiseSheet({ g, onClose }: { g: Game; onClose: () => void }) {
         {staff < SELL_PRICE_RAISE_STAFF ? `提价需销售 ${SELL_PRICE_RAISE_STAFF} 人解锁（当前 ${staff} 人）。` : ''}
         点「结算」确认并扣 1 AP（再调整需再 1 AP）；「关闭」取消，草稿不生效。
       </div>
+    </Sheet>
+  )
+}
+
+/* ══════════════ 应收保理（1 AP + 1w） ══════════════ */
+
+/** 把当前应收账款余额卖给银行：按 90% 收回现金，10% 折价损失（营业外）+ 1w 手续费（财务费用）；关闭即取消。 */
+function FactorSheet({ g, onClose }: { g: Game; onClose: () => void }) {
+  const gs = g.s
+  const ar = gs.receivable
+  const proceeds = Math.round(ar * FACTOR_RECOVERY)
+  const loss = ar - proceeds
+  const reason = ar <= 0 ? '暂无应收账款' : gs.ap < 1 ? 'AP 不足' : gs.cash < FACTOR_FEE ? '现金不足 1w' : null
+  return (
+    <Sheet
+      title="应收保理"
+      sub="应收账款卖给银行：提前变现，放弃次月自动回款"
+      onClose={onClose}
+      footer={
+        <button
+          className="btn btn-primary"
+          disabled={reason !== null}
+          onClick={() => {
+            const r = g.act((st) => E.factorReceivable(st))
+            if (r.ok) {
+              g.setToast(r.msg ?? '保理完成')
+              onClose()
+            }
+          }}
+        >
+          <span className="btn-main">结算 · 确认保理</span>
+          <span className="btn-sub">{reason ?? `1 AP + 1w · 收回 ${wan(proceeds)}`}</span>
+        </button>
+      }
+    >
+      <div className="stack-sm">
+        <Row k="应收账款余额（上月赊销挂账）" v={wan(ar)} />
+        <Row k="现金收回（90%）" v={wan(proceeds)} cls="green" />
+        <Row k="折价损失（10%，营业外·非现金）" v={wan(loss)} cls="red" />
+        <Row k="保理手续费（财务费用，发生时即付）" v={wan(FACTOR_FEE)} cls="red" />
+      </div>
+      <p className="hint" style={{ marginTop: 'var(--s2)' }}>
+        保理后应收账款清零：本月结算不再自动回款；不保理则次月结算期初全额到账（无费用）。
+      </p>
     </Sheet>
   )
 }

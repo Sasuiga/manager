@@ -168,6 +168,15 @@ function FundsSheet({ g, onClose }: { g: Game; onClose: () => void }) {
         {ps.interest > 0 ? <Row k="− 借款利息" v={wan(ps.interest)} /> : null}
         {ps.wagePaid > 0 ? <Row k="− 上月工资" v={wan(ps.wagePaid)} /> : null}
         <Row k="期末资金（回款前）" v={wan(ps.cashAfter)} cls={over ? 'red' : ''} bold />
+        {ps.arCollection > 0 ? (
+          <>
+            <Row k="+ 应收回款（上月赊销挂账，本期结算到账）" v={wan(ps.arCollection)} cls="green" />
+            <Row k="期末资金（结算到账 · 本期销售回款前）" v={wan(ps.cashAfter + ps.arCollection)} cls={ps.cashAfter + ps.arCollection < 0 ? 'red' : ''} bold />
+          </>
+        ) : null}
+        <p className="hint" style={{ marginTop: 'var(--s2)' }}>
+          订单销售为赊销（30 天账期）：本月订单收入结算时挂应收账款、次月回款；需提前回款可用「应收保理」（1 AP + 1w，按 90% 收回）。
+        </p>
         {over ? (
           <div className="warn">
             期末资金（回款前）为负 {wan(-ps.cashAfter)}

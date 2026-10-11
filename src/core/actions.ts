@@ -3,6 +3,8 @@ import {
   BUY_PRICE_NEGOTIATE_STAFF,
   BUY_TRADER_EXTRA_STAFF,
   CARD_BY_ID,
+  FACTOR_FEE,
+  FACTOR_RECOVERY,
   MATERIAL_BY_ID,
   CARDS,
   DEPT_NAMES,
@@ -1638,6 +1640,56 @@ export function toggleOrder(state: GameState, orderId: string): ActionResult {
   state.acceptedOrders.push(orderId)
   attachFlex(o)
   return { ok: true, msg: '已接取订单' }
+}
+
+/**
+ * 应收保理（销售特殊行动，1 AP + 1w 手续费）：把当前应收账款余额卖给银行。
+ *
+ * 会计处理（资产侧形态转换 + 当期费用化，与协议手续费/供应商开发同形）：
+ *   借 现金  90%×应收（FACTOR_RECOVERY 收回）
+ *   借 财务费用  1w 手续费（发生时已付现金，miscExpense 结算确认）
+ *   借 营业外支出 10%×应收 折价损失（非现金，冲 miscIncome 结算确认）
+ *   贷 应收账款  全额（应收清零，本月结算不再自动回款）
+ * 现金净变动 = +90%×应收 − 1w；资产 = 现金 + 90%AR − AR = −（10%AR + 1w），与费用同额，恒等式不破。
+ */
+export function factorReceivable(state: GameState): ActionResult {
+  const ar = state.receivable
+  if (ar <= 0) return fail('暂无应收账款（上月订单赊销在结算时挂账）')
+  if (state.ap < 1) return fail('AP 不足（保理 1 AP）')
+  if (state.cash < FACTOR_FEE) return fail('现金不足 1w（保理手续费）')
+  const proceeds = Math.round(ar * FACTOR_RECOVERY)
+  const loss = ar - proceeds
+  state.ap -= 1
+  state.cash += proceeds - FACTOR_FEE
+  state.receivable = 0
+  state.miscExpense += FACTOR_FEE // 手续费 → 财务费用（结算确认，现金已付）
+  state.miscIncome -= loss // 折价损失 → 营业外（结算确认，非现金）
+  state.monthLedger.push({
+    dept: 'sell',
+    item: '应收保理',
+    debit: '现金',
+    credit: '应收账款',
+    debitAmt: proceeds,
+    creditAmt: proceeds,
+    detail: [
+      `按应收账款余额 ${(ar / 10).toFixed(2)}w 的 ${(FACTOR_RECOVERY * 100).toFixed(0)}% 收回现金 ${(proceeds / 10).toFixed(2)}w`,
+      `折价损失 ${(loss / 10).toFixed(2)}w（非现金，进营业外）；应收清零后本月结算不再自动回款`,
+    ],
+  })
+  state.monthLedger.push({
+    dept: 'sell',
+    item: '保理手续费',
+    debit: '财务费用',
+    credit: '现金',
+    debitAmt: FACTOR_FEE,
+    creditAmt: FACTOR_FEE,
+    detail: ['手续费 1w 当期费用化进财务费用（发生时已付现金）'],
+  })
+  pushLog(state, 'action', `应收保理：收回现金 ${(proceeds / 10).toFixed(2)}w`, [
+    `应收余额 ${(ar / 10).toFixed(2)}w 按 ${(FACTOR_RECOVERY * 100).toFixed(0)}% 出售给银行`,
+    `折价损失 ${(loss / 10).toFixed(2)}w + 手续费 ${(FACTOR_FEE / 10).toFixed(2)}w（1 AP）`,
+  ])
+  return { ok: true, msg: `收回现金 ${(proceeds / 10).toFixed(2)}w（应收 ${(FACTOR_RECOVERY * 100).toFixed(0)}%）` }
 }
 
 // ════════════════════════════════════════════════════════════

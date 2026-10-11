@@ -63,6 +63,10 @@ export interface SettleReport {
     filled: Record<Tier, number>
     lost: Record<Tier, number>
     fillRate: number
+    /** 本月订单赊销挂账额（收入确认、现金次月结算回款） */
+    receivablePosted: Money
+    /** 本月结算期初回款额（上月挂账；保理后为 0） */
+    receivableCollected: Money
   }
   /** 在研项目逐条结果；空数组 = 本月无在研 */
   rnd: { projectId: string; name: string; progress: number; need: number; rate: number; success: boolean | null }[]
@@ -84,6 +88,30 @@ export interface SettleOptions {
 export function settle(state: GameState, options: SettleOptions = {}): SettleReport {
   const d = derive(state)
   const warnings: string[] = []
+
+  /**
+   * 应收账款回款（上月订单赊销挂账，30 天账期）：本月结算期初批量现金到账。
+   * 纯资产形态转换：收入已在挂账当月确认（损益中性）；若玩家已「应收保理」
+   * （90% 提前收回、10% 折价损失），receivable 已清零、本月不再回款。
+   * 放在 §0 之前：回款现金可供协议到货与采购的现金检查使用（账期流动性）。
+   */
+  const arCollected = state.receivable
+  if (arCollected > 0) {
+    state.cash += arCollected
+    state.receivable = 0
+    state.monthLedger.push({
+      dept: 'sell',
+      item: '应收账款回款（上月赊销）',
+      debit: '现金',
+      credit: '应收账款',
+      debitAmt: arCollected,
+      creditAmt: arCollected,
+      detail: [
+        `上月订单销售收入挂账（赊销 30 天），本月结算批量回款 ${(arCollected / 10).toFixed(2)}w`,
+        '资产形态转换：收入上月已确认，损益中性',
+      ],
+    })
+  }
 
   // 普通采购在经营阶段只是计划，正式结算时先付款入库。
   // 设备购置已即时化（行动阶段选定即实付入库），不再随结算执行。
@@ -343,7 +371,8 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
     const unitValue = p.value / Math.max(1, p.qty)
     p.value -= unitValue * deliver
     p.qty -= deliver
-    state.cash += unit * deliver
+    /** 订单赊销（30 天账期）：收入当月确认、现金未收 → 挂应收账款，次月结算期初回款（可用保理提前 90% 收回）。 */
+    state.receivable += unit * deliver
     orders.push({ tier: o.tier, qty: deliver, unitPrice: unit, unitCost: Math.round(unitValue), cost: unitValue * deliver, revenue: unit * deliver, channel: 'order' })
     // 灵活交付（K2）：接单时承诺量含 +5/+10（可接超出库存+排产的订单），
     // 月末交付缺口按接单时订单单价 × 20%（强化 10%）付违约金（财务费用）。
@@ -385,27 +414,40 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
     filled[t] += sell
   }
 
-  // 2.3 销售账务：收入与成本结转分别入账（借 现金/销售成本，贷 销售收入/存货），
-  // 各行金额与利润表「销售收入 / 销售成本」及存货减记严格相等，
-  // 与生产入库（借 存货）同科目勾稽：存货借方合计 − 贷方合计 = 期末成品存货。
+  // 2.3 销售账务：收入按回款方式分账——订单赊销挂应收账款（次月回款）、现货现款当月到账；
+  // 成本结转按账面均价全额出账（借 销售成本 / 贷 存货），与生产入库（借 存货）同科目勾稽。
   for (const t of TIERS) {
     const rec = [...orders, ...spots].filter((r) => r.tier === t)
     if (rec.length === 0) continue
-    const rev = rec.reduce((a, r) => a + r.revenue, 0)
     const cost = rec.reduce((a, r) => a + (r.cost ?? Math.round(r.qty * r.unitCost)), 0)
     const soldQty = rec.reduce((a, r) => a + r.qty, 0)
-    if (rev > 0) {
+    const orderRecs = orders.filter((r) => r.tier === t)
+    const orderRev = orderRecs.reduce((a, r) => a + r.revenue, 0)
+    const orderQty = orderRecs.reduce((a, r) => a + r.qty, 0)
+    const spotRev = rec.reduce((a, r) => a + (r.channel === 'spot' ? r.revenue : 0), 0)
+    if (orderRev > 0) {
       state.monthLedger.push({
         dept: 'sell',
-        item: `销售收入 ${TIER_LABEL[t]}`,
+        item: `应收挂账 销售收入 ${TIER_LABEL[t]}`,
+        debit: '应收账款',
+        credit: '销售收入',
+        debitAmt: orderRev,
+        creditAmt: orderRev,
+        detail: [
+          `订单交付 ${orderQty} 件（${orderRecs.length} 笔，赊销 30 天）`,
+          '收入当月确认、现金未收：挂应收账款，次月结算期初回款（可用「应收保理」提前 90% 收回）',
+        ],
+      })
+    }
+    if (spotRev > 0) {
+      state.monthLedger.push({
+        dept: 'sell',
+        item: `销售收入 现货 ${TIER_LABEL[t]}`,
         debit: '现金',
         credit: '销售收入',
-        debitAmt: rev,
-        creditAmt: rev,
-        detail: [
-          `订单 + 现货成交 ${soldQty} 件`,
-          '现金增加额 = 利润表「销售收入」',
-        ],
+        debitAmt: spotRev,
+        creditAmt: spotRev,
+        detail: [`现货现款销售 ${soldQty - orderQty} 件，当月现金到账`],
       })
     }
     if (cost > 0) {
@@ -671,7 +713,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
       unitCost: producedUnitCost,
       lines: productionLines,
     },
-    sales: { orders, spots, revenue, demand: d.demand, filled, lost, fillRate: demandTotal ? TIERS.reduce((a, t) => a + filled[t], 0) / demandTotal : 1 },
+    sales: { orders, spots, revenue, demand: d.demand, filled, lost, fillRate: demandTotal ? TIERS.reduce((a, t) => a + filled[t], 0) / demandTotal : 1, receivablePosted: state.receivable, receivableCollected: arCollected },
     rnd: rndResults,
     ledger,
     balance,
@@ -921,7 +963,8 @@ export function unitLabel(metric: string): 'w' | '件' | '人' | '%' {
 export function computeScore(state: GameState): ScoreBreakdown {
   const profitSum = state.ledgers.reduce((a, l) => a + l.netProfit, 0)
   // 期末净资产：应付职工薪酬（上月计提未付部分）仍是负债，需从资产侧扣减
-  const assetsEnd = state.cash + inventoryValue(state) + equipmentNet(state) - state.debt - wagePayableOf(state)
+  // 期末应收按 9 折计入终局净资产（与保理回收率同口径，防末期赊销挂账刷净资产）
+  const assetsEnd = state.cash + inventoryValue(state) + equipmentNet(state) - state.debt - wagePayableOf(state) + Math.round(state.receivable * 0.9)
   // 盈利分：12 个月累计净利润 ÷ 10w；资产分：期末净资产 ÷ 10w
   const profit = Math.round((profitSum / 100) * 1.5)
   const assets = Math.round((assetsEnd / 100) * 1.0)
