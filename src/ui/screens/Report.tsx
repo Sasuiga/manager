@@ -135,7 +135,7 @@ export function ReportSheet({ g, onAdvance }: { g: Game; onAdvance: () => void }
           <Row k="现金" v={wan(bal.cash)} cls={bal.cash < 0 ? 'red' : ''} />
           <Row k="原料存货" v={wan(bal.inventoryMaterial)} />
           <Row k="成品存货" v={wan(bal.inventoryProduct)} />
-          <Row k="设备净值" v={wan(bal.equipmentGross - bal.equipmentAccum)} />
+          <Row k="固定资产净值" v={wan(bal.equipmentGross - bal.equipmentAccum + bal.warehouseGross - bal.warehouseAccum)} />
           <Row k="资产合计" v={wan(bal.totalAssets)} bold />
         </div>
         <div className="section-label" style={{ marginTop: 'var(--s4)' }}>
@@ -215,6 +215,7 @@ function DrillSheet({
       lines.push(['采购人员薪酬', wan(p['采购人员薪酬'] ?? 0)])
       lines.push(['招聘费（净）', wan(p['招聘费'] ?? 0)])
       lines.push(['提案费用', wan(p['提案费用'] ?? 0)])
+      lines.push(['仓库折旧', wan(p['仓库折旧'] ?? 0)])
       break
     case '研发费用':
       lines.push(['研发人员薪酬', wan(p['研发人员薪酬'] ?? 0)])

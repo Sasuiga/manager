@@ -1419,46 +1419,146 @@ describe('董事会目标层（核心模式：board 阶段恢复）', () => {
   })
 })
 
-describe('特殊行动：资源分配确认（1 AP）', () => {
-  it('confirmBuyResourceAlloc：供给加点/议价草稿写回并扣 1 AP', () => {
+describe('特殊行动：资源分配确认（原子行动，各 1 AP）', () => {
+  it('confirmBuySupplyAlloc：扩大供应写回并扣 1 AP，不动价格谈判（议价）', () => {
     const s = preparedCoreState()
     s.depts.buy.staff = 3
     s.depts.buy.hired = 3
     s.ap = 3
-    const r = E.confirmBuyResourceAlloc(s, { supply: { pkg: 2 }, price: { pkg: 1 } })
+    const r = E.confirmBuySupplyAlloc(s, { pkg: 2 })
     expect(r.ok).toBe(true)
     expect(s.ap).toBe(2)
+    expect(s.buySupplyAlloc.pkg).toBe(2)
+    expect(s.buyPriceAlloc.pkg ?? 0).toBe(0)
+    const d = E.derive(s)
+    expect(d.buySupplyPush.pkg).toBe(2)
+    expect(d.buyPricePush.pkg).toBe(0)
+  })
+
+  it('confirmBuyPriceAlloc：价格谈判写回并扣 1 AP，与扩大供应共用池（3 人 6 点池）', () => {
+    const s = preparedCoreState()
+    s.depts.buy.staff = 3
+    s.depts.buy.hired = 3
+    s.ap = 3
+    // 供给先占 2 点，定价再确认：6 点池 − 2 点 = 4 点，恰可 1 档
+    expect(E.confirmBuySupplyAlloc(s, { pkg: 2 }).ok).toBe(true)
+    s.ap = 2
+    const r = E.confirmBuyPriceAlloc(s, { pkg: 1 })
+    expect(r.ok).toBe(true)
+    expect(s.ap).toBe(1)
     expect(s.buySupplyAlloc.pkg).toBe(2)
     expect(s.buyPriceAlloc.pkg).toBe(1)
     const d = E.derive(s)
     expect(d.buySupplyPush.pkg).toBe(2)
     expect(d.buyPricePush.pkg).toBe(1)
+    expect(d.buyResourceUsed).toBe(6)
   })
 
-  it('confirmBuyResourceAlloc：AP 不足被拒，草稿不写回', () => {
+  it('分配确认：AP 不足被拒，草稿不写回', () => {
     const s = preparedCoreState()
     s.depts.buy.staff = 3
     s.depts.buy.hired = 3
     s.ap = 0
-    const r = E.confirmBuyResourceAlloc(s, { supply: { pkg: 2 } })
+    const r = E.confirmBuySupplyAlloc(s, { pkg: 2 })
     expect(r.ok).toBe(false)
     expect(s.buySupplyAlloc.pkg ?? 0).toBe(0)
   })
 
-  it('confirmSellResourceAlloc：需求加点/提价草稿写回并扣 1 AP；AP 不足被拒', () => {
+  it('confirmSellDemandAlloc / confirmSellPriceAlloc：刺激需求与上调售价各 1 AP；AP 不足被拒', () => {
     const s = preparedCoreState()
-    s.depts.sell.staff = 2
-    s.depts.sell.hired = 2
+    s.depts.sell.staff = 4
+    s.depts.sell.hired = 4
+    s.salesAlloc = { low: 0, mid: 0, high: 0, special: 0 }
     s.ap = 3
-    const lowCost = E.derive(s).salesPushCost.low
-    const r = E.confirmSellResourceAlloc(s, { demand: { low: lowCost * 2 } })
+    const d0 = E.derive(s)
+    const r = E.confirmSellDemandAlloc(s, { low: d0.salesPushCost.low * 2 })
     expect(r.ok).toBe(true)
     expect(s.ap).toBe(2)
-    expect(s.salesAlloc.low).toBe(lowCost * 2)
+    expect(s.salesAlloc.low).toBe(d0.salesPushCost.low * 2)
+    // 提价：共用池（剩余 = 池 − 需求加点），4 人可 2 档上限
+    const d1 = E.derive(s)
+    const maxTiers = Math.min(d1.sellRaiseCap, Math.floor(Math.max(0, d1.salesResource - E.allocUsed(s)) / d1.sellRaiseCost))
+    const r2 = E.confirmSellPriceAlloc(s, { low: maxTiers })
+    expect(r2.ok).toBe(true)
+    expect(s.ap).toBe(1)
+    expect(E.derive(s).sellPriceRaise.low).toBe(maxTiers)
     s.ap = 0
-    const midCost = E.derive(s).salesPushCost.mid
-    const r2 = E.confirmSellResourceAlloc(s, { demand: { mid: midCost * 2 } })
-    expect(r2.ok).toBe(false)
+    const r3 = E.confirmSellDemandAlloc(s, { mid: d0.salesPushCost.mid })
+    expect(r3.ok).toBe(false)
     expect(s.salesAlloc.mid ?? 0).toBe(0)
+  })
+})
+
+describe('仓库层（采购部特殊行动 + 固定资产抽象）', () => {
+  function fresh(seed = 601) {
+    const s = E.newGame(seed)
+    E.startGame(s)
+    return s
+  }
+
+  it('仓库扩建：现金即付、每类原料库存上限 +10 当月生效，借款额度 +3w', () => {
+    const s = fresh()
+    const d0 = E.derive(s)
+    expect(d0.materials.pkg.cap).toBe(40) // 基础上限
+    expect(E.buyWarehouse(s, 'wh-std', 1).ok).toBe(true)
+    expect(s.warehouses).toHaveLength(1)
+    expect(s.warehouses[0].model).toBe('wh-std')
+    expect(s.warehouses[0].matCap).toBe(10)
+    const d = E.derive(s)
+    expect(d.warehouseCapBonus).toBe(10)
+    expect(d.materials.pkg.cap).toBe(50) // 40 + 10
+    expect(d.materials.resin.cap).toBe(40) // 30 + 10
+    expect(d.materials.chip.cap).toBe(18) // 8 + 10
+    expect(d.creditLine).toBe(d0.creditLine + 30) // 额度 +3w
+  })
+
+  it('仓 cap 实际约束大批入库：仓满截断随仓库提升', () => {
+    const s = fresh(602)
+    s.materials.pkg.qty = 39
+    s.materials.pkg.value = 390
+    let d = E.derive(s)
+    let supply = d.materials.pkg.supply
+    const added0 = E.addMaterial(s, 'pkg', supply, E.lotPrice(s, 'pkg', 'large'))
+    expect(added0).toBe(1) // 仓 cap 40：只装 1 件
+    expect(E.buyWarehouse(s, 'wh-std', 1).ok).toBe(true)
+    d = E.derive(s)
+    supply = d.materials.pkg.supply
+    const added1 = E.addMaterial(s, 'pkg', supply, E.lotPrice(s, 'pkg', 'large'))
+    expect(added1).toBe(10) // cap 50：已入 40，只剩 10 仓容
+    expect(s.materials.pkg.qty).toBe(50)
+    expect(s.materials.pkg.qty).toBe(E.derive(s).materials.pkg.cap)
+  })
+
+  it('结算：仓库折旧非现金进管理费用，资产负债含仓库净值', () => {
+    const s = fresh(603)
+    s.materials.pkg.qty = 40
+    s.materials.pkg.value = 400
+    s.materials.resin.qty = 20
+    s.materials.resin.value = 200
+    expect(E.buyWarehouse(s, 'wh-std', 1).ok).toBe(true)
+    E.setPlan(s, 'low', 12)
+    const rep = E.settleMonth(s)
+    expect(rep.ledger.parts['仓库折旧']).toBe(5) // 0.5w/月
+    expect(s.warehouses[0].accumulated).toBe(5)
+    const bal = E.balanceSheet(s)
+    expect(bal.warehouseGross).toBe(30)
+    expect(bal.warehouseAccum).toBe(5)
+    expect(bal.totalAssets).toBe(bal.cash + bal.inventoryMaterial + bal.inventoryProduct + bal.equipmentGross - bal.equipmentAccum + bal.warehouseGross - bal.warehouseAccum + s.pendingIncome)
+  })
+
+  it('门槛：AP 或现金不足则整次失败；单型号每次最多 5 座', () => {
+    const f = fresh(604)
+    f.ap = 0
+    expect(E.canBuyWarehouse(f, 'wh-std', 1).ok).toBe(false) // AP 不足
+    f.ap = 1
+    f.cash = 29
+    expect(E.canBuyWarehouse(f, 'wh-std', 1).ok).toBe(false) // 现金不足
+    f.cash = 30
+    expect(E.canBuyWarehouse(f, 'wh-std', 1).ok).toBe(true)
+    expect(E.canBuyWarehouse(f, 'wh-std', 6).ok).toBe(false)
+    f.cash = 60
+    expect(E.buyWarehouse(f, 'wh-lg', 1).ok).toBe(true) // 扩建仓库型号（非商店在售，API 直购亦可入账）
+    expect(f.warehouses).toHaveLength(1)
+    expect(f.warehouses[0].matCap).toBe(20)
   })
 })

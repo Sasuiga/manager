@@ -16,7 +16,7 @@ import {
   TIERS,
   overtimeGainOf,
 } from '../data/game'
-import { derive, mergeMods, rndProjectOutcome } from './derive'
+import { derive, materialCapOf, mergeMods, rndProjectOutcome } from './derive'
 import { balanceSheet, equipmentNet, equityOf, inventoryValue, wagePayableOf } from './game'
 import { executePlannedPurchases, issueMaterials, postProductionInbound, pushLog } from './actions'
 import { checkMilestones } from './milestones'
@@ -94,8 +94,8 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
   for (const ag of state.agreements) {
     if (ag.monthsLeft <= 0) continue
     const unit = priceAt(ag.materialId, ag.priceTierShift)
-    // 按仓库还能容纳的数量执行，避免付了钱却装不下
-    const cap = d.materials[ag.materialId]?.cap ?? state.materials[ag.materialId].cap
+    // 按仓库还能容纳的数量执行，避免付了钱却装不下（cap 口径同 addMaterial：基础 + 库存管理 IP + 仓库固定资产）
+    const cap = d.materials[ag.materialId]?.cap ?? materialCapOf(state, ag.materialId)
     const room = Math.max(0, cap - state.materials[ag.materialId].qty)
     const want = Math.min(ag.qty, room)
     if (want <= 0) {
@@ -449,6 +449,13 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
     e.accumulated += charge
     depreciation += charge
   }
+  /** 仓库固定资产折旧（非现金，归管理费用；提足原值即停，口径同设备） */
+  let warehouseDepreciation = 0
+  for (const w of state.warehouses) {
+    const charge = Math.min(w.depreciation, Math.max(0, w.cost - w.accumulated))
+    w.accumulated += charge
+    warehouseDepreciation += charge
+  }
 
   // 加班费已在生产阶段扣过现金，这里只作为费用进入损益
   // 加班费（发生时已直接支付，此处确认损益；金额 = 安排时锁定的 2× 生产工资）
@@ -480,7 +487,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
 
   const mfgExpense = salaryBy.make + depreciation + overtimeCost + prodVariance
   const sellExpense = salaryBy.sell
-  const adminExpense = salaryBy.ops + salaryBy.buy + hireFee + cardFees
+  const adminExpense = salaryBy.ops + salaryBy.buy + hireFee + cardFees + warehouseDepreciation
   const rndExpense = salaryBy.rnd + projectCost
   const financeExpense = d.interest + (misc - cardFees)
   const otherIncome = state.miscIncome
@@ -576,6 +583,7 @@ export function settle(state: GameState, options: SettleOptions = {}): SettleRep
       '销售人员薪酬': salaryBy.sell,
       '运营人员薪酬': salaryBy.ops,
       '采购人员薪酬': salaryBy.buy,
+      '仓库折旧': warehouseDepreciation,
       '招聘费': hireFee,
       '提案费用': cardFees,
       '研发人员薪酬': salaryBy.rnd,
@@ -767,7 +775,7 @@ function applyResearchSuccess(state: GameState, projectId: string) {
           tierShift: 0,
           qty: 0,
           value: 0,
-          cap: m.baseCapacity,
+          cap: materialCapOf(state, m.id), // 基础上限 + 库存管理 IP + 仓库固定资产（口径同基础料）
           chosenLot: null,
         }
       }

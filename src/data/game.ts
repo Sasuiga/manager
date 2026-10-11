@@ -365,17 +365,14 @@ export function makerCapacityPerStaff(staff: number, equipCap = 0): number {
   return v
 }
 
-/**
- * 设备产线型号（设备层差异化）：
- * - 标准设备 eq-line：商店唯一在售型号（单型号起步，5w/月折旧 2w/每人 +4）；
- * - 二手产线 eq-used：事件 D9 低价设备（折旧减半 1w，每人 +4 同标准）；
- * - 清算产线 eq-liquidation：事件 X9 资产抄底（8w，每人 +6，额度 8w）——比 D9 强但更贵。
- */
-export interface EquipmentModel {
+/** 固定资产类型：设备（产能）/ 仓库（原料仓容）；未来新类型按同形扩展。 */
+export type FixedAssetKind = 'equipment' | 'warehouse'
+
+/** 固定资产型号公共字段：购置即资本化（price），逐月折旧，提供借款额度。 */
+export interface FixedAssetModel {
   id: string
+  kind: FixedAssetKind
   name: string
-  /** 每台设备为每名生产人员提供的产能 */
-  cap: number
   /** 每月折旧（角） */
   depreciation: Money
   /** 可提供的借款额度（角，随融资层生效） */
@@ -385,14 +382,49 @@ export interface EquipmentModel {
   desc: string
 }
 
+/**
+ * 设备产线型号（设备层差异化）：
+ * - 标准设备 eq-line：商店唯一在售型号（单型号起步，5w/月折旧 2w/每人 +4）；
+ * - 二手产线 eq-used：事件 D9 低价设备（折旧减半 1w，每人 +4 同标准）；
+ * - 清算产线 eq-liquidation：事件 X9 资产抄底（8w，每人 +6，额度 8w）——比 D9 强但更贵。
+ */
+export interface EquipmentModel extends FixedAssetModel {
+  kind: 'equipment'
+  /** 每台设备为每名生产人员提供的产能 */
+  cap: number
+}
+
 export const EQUIPMENT_MODELS: Record<string, EquipmentModel> = {
-  'eq-line': { id: 'eq-line', name: '标准设备', cap: EQUIP_CAP_PER_WORKER, depreciation: 20, creditLine: 50, price: 50, desc: '每名生产人员产能 +4 · 月折旧 2w · 额度 5w' },
-  'eq-used': { id: 'eq-used', name: '二手产线', cap: EQUIP_CAP_PER_WORKER, depreciation: 10, creditLine: 50, price: 50, desc: '每名生产人员产能 +4 · 月折旧 1w（折旧减半）· 额度 5w' },
-  'eq-liquidation': { id: 'eq-liquidation', name: '清算产线', cap: 6, depreciation: 20, creditLine: 80, price: 80, desc: '每名生产人员产能 +6 · 月折旧 2w · 额度 8w' },
+  'eq-line': { id: 'eq-line', kind: 'equipment', name: '标准设备', cap: EQUIP_CAP_PER_WORKER, depreciation: 20, creditLine: 50, price: 50, desc: '每名生产人员产能 +4 · 月折旧 2w · 额度 5w' },
+  'eq-used': { id: 'eq-used', kind: 'equipment', name: '二手产线', cap: EQUIP_CAP_PER_WORKER, depreciation: 10, creditLine: 50, price: 50, desc: '每名生产人员产能 +4 · 月折旧 1w（折旧减半）· 额度 5w' },
+  'eq-liquidation': { id: 'eq-liquidation', kind: 'equipment', name: '清算产线', cap: 6, depreciation: 20, creditLine: 80, price: 80, desc: '每名生产人员产能 +6 · 月折旧 2w · 额度 8w' },
 }
 
 /** 商店在售型号（单型号起步；型号差异化随事件产线落地，X9 清算产线 / D9 二手产线不进商店） */
 export const EQUIPMENT_SHOP: EquipmentModel[] = [EQUIPMENT_MODELS['eq-line']]
+
+/**
+ * 仓库型号（采购部固定资产：抬升每类原料库存上限，支撑大批采购与跨月囤料）：
+ * - 标准仓库 wh-std：商店在售（3w/月折旧 0.5w/每料 cap +10/额度 3w）；
+ * - 扩建仓库 wh-lg：预留事件/未来（6w/月折旧 1w/每料 cap +20/额度 6w），暂不进商店。
+ * 折旧远轻于设备：仓库买的是“仓容期权”（便宜月多囤、贵月不吃仓满截断），不是每月产能。
+ */
+export interface WarehouseModel extends FixedAssetModel {
+  kind: 'warehouse'
+  /** 每类原料库存上限提升（全部原料，含研发解锁的新材料） */
+  matCap: number
+}
+
+export const WAREHOUSE_MODELS: Record<string, WarehouseModel> = {
+  'wh-std': { id: 'wh-std', kind: 'warehouse', name: '标准仓库', matCap: 10, depreciation: 5, creditLine: 30, price: 30, desc: '每类原料库存上限 +10 · 月折旧 0.5w · 额度 3w' },
+  'wh-lg': { id: 'wh-lg', kind: 'warehouse', name: '扩建仓库', matCap: 20, depreciation: 10, creditLine: 60, price: 60, desc: '每类原料库存上限 +20 · 月折旧 1w · 额度 6w' },
+}
+
+/** 固定资产型号注册表（设备 + 仓库；未来新类型在此并入，购置/入账统一走 pushFixedAsset） */
+export const FIXED_ASSETS: Record<string, FixedAssetModel> = { ...EQUIPMENT_MODELS, ...WAREHOUSE_MODELS }
+
+/** 仓库商店在售型号（单型号起步，同设备商店；扩建仓库预留事件） */
+export const WAREHOUSE_SHOP: WarehouseModel[] = [WAREHOUSE_MODELS['wh-std']]
 
 /**
  * 加班：一次性支付 2× 本月生产工资计提额（含事件/卡牌薪酬修正），

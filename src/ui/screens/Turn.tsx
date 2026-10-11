@@ -635,7 +635,7 @@ function BuyPage({ g }: { g: Game }) {
         </table>
       </div>
 
-      {/* 采购资源（点）：供给加点（量）+ 议价（价）分配已移入「特殊行动·采购资源分配」（结算 1 AP，草稿态调整） */}
+      {/* 采购资源（点）：扩大供应（量）与价格谈判（价）拆为两个原子行动，已移入「特殊行动」（各结算 1 AP，草稿态调整） */}
 
       {/* C13 材料聚焦：指定 1 种原料（供给 +6/+10、价格 −1/−2 档），本月点数不再用于供给加点 */}
       {d.matFocusActive ? (
@@ -1117,7 +1117,7 @@ function MakePage({ g }: { g: Game }) {
     <>
       <LedgerSection g={g} dept="make" />
 
-      {/* 产能分配：与销售资源分配面板同款，已分配产能可在已解锁产品线间自由腾挪 */}
+      {/* 产能分配：与「特殊行动」分配弹框同款，已分配产能可在已解锁产品线间自由腾挪 */}
       <div className="card">
         <h3>产能分配</h3>
         <div className="title-rule" />
@@ -1473,7 +1473,7 @@ function SellPage({ g }: { g: Game }) {
         </div>
       </div>
 
-      {/* 销售资源分配（需求加点 / 提价）已移入「特殊行动」面板（结算 1 AP，草稿态调整） */}
+      {/* 刺激需求 / 上调售价（各 1 AP 结算，两个原子行动，草稿态调整）已移入「特殊行动」面板 */}
       {gs.orders.length ? (
         <div className="hint" style={{ padding: 'var(--s2) 0' }}>
           订单来源：{gs.orders.map((o) => o.from).filter((v, i, a) => a.indexOf(v) === i).join('、')}

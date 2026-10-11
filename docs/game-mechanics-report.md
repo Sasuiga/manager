@@ -110,7 +110,7 @@ startGame / nextMonth（engine.ts:116/303）：
   phase='event'（每月 1 张事件，池按 needs 过滤：融资类事件全模式保留（融资层已落地）、卡牌参数类两模式保留——核心也有立项抽卡阶段）
   → 确认后 enterDraw 进入立项（抽卡）阶段（抽 N 选 M）→ 经营阶段。
   generateMonthlyOrders（订单数 = 销售人数 + 知产 + 卡牌驱动，见 §8）。
-  董事会阶段（季度首月先行、目标随气候池）；设备购置为特殊行动（1 AP、现金即付当月生效、不形成计划）；知产拥有即生效（槽位制已废）；AP = 3 + 管理人数−1。
+  董事会阶段（季度首月先行、目标随气候池）；设备引进为特殊行动（1 AP、现金即付当月生效、不形成计划）；知产拥有即生效（槽位制已废）；AP = 3 + 管理人数−1。
   经营阶段底部不是「结算」而是「预算」tab（TurnScreen 轨道按钮，Turn.tsx:207）：
     预算页（PreviewPage）= 只读汇总 + 区间 → 点「确认本月方案并结算」直接 settleMonth →
     报表 → 进入下月。
@@ -128,7 +128,7 @@ startGame / nextMonth（engine.ts:116/303）：
 | 气候名 | `state.climate`（6 气候之一，季度切换时改变） |
 | 动能 | `state.momentum`（扩张/停滞/收缩，`MOMENTUM_NAMES` 显示；季度切换时按当前气候 `MOMENTUM_ODDS` 掷出，决定本季度气候移动方向，见 §5.1） |
 | 期末资金 | `preSettleCash(state).cashAfter`（角 → w）：期初资金 + 事件收益 − 已付/结算时付各项（招聘/杂项/资本性/还款/采购实付/采购计划/协议/加班/研发/利息/上月工资），即「期末现金（回款前）」，随当月计划实时变化。按钮点击展开明细 Sheet（期初资金 → 期末现金桥接，与预算页同口径）；预算页「预计下期期初现金」直接用此结果、不再逐项列示 |
-| AP `x/max` | `state.ap / d.apMax`：max = 3 + max(0, 管理人数−1) + 事件修正（derive.ts:379）。AP 消耗：招聘 1、贸易商购买 1/次、采购/销售资源分配确认 1、供应商开发 1、签协议 1、加班安排 1、借/还款各 1、事件选项 0~2 |
+| AP `x/max` | `state.ap / d.apMax`：max = 3 + max(0, 管理人数−1) + 事件修正（derive.ts:379）。AP 消耗：招聘 1、贸易商采购 1/次（每次结算 1 个品种）、采购扩大供应/价格谈判各 1、销售刺激需求/上调售价各 1、供应商开发 1、签协议 1、加班安排 1、设备引进/仓库扩建 1/型号、申请/归还贷款各 1、事件选项 0~2 |
 | 提案 `x/max` | `state.plays / d.playsMax`：打牌次数，max = 管理≥4人?3:2 + 事件修正（derive.ts:380）。每月打牌数与 AP 独立 |
 | 目标胶囊 | 基本目标达标状态 + 挑战目标完成百分比（`goalDisplay`，engine.ts:390） |
 
@@ -142,10 +142,10 @@ HUD **不显示**：当前现金 `state.cash`（结算确认弹窗 / 采购页�
 
 **部门页结构：本职 + 配套信息 + 特殊行动。** 页面上半为部门本职工作与既有配套信息；下半为「特殊行动」面板（SpecialActions.tsx `SpecialActions`，各部门 AP 消耗型行动，各一个按钮 → 专属弹框，弹框底部「结算」（确认执行、扣 AP）/「关闭」（取消，草稿不生效））：
 
-- 运营：借款（1 AP）、还款（1 AP）、招聘（1 AP + 招聘费）——融资卡只留状态展示；
-- 采购：贸易商（1 AP/次，选定品种后统一结算）、采购资源分配（草稿态调整，结算 1 AP，`confirmBuyResourceAlloc`）、签订长期协议（1 AP + 1w）、开发供应商（1 AP + 3w）、招聘；
-- 生产：安排加班（1 AP + 加班费，`toggleOvertime` 现含 AP 检查）、生产设备购置（1 AP/型号，现金即付当月生效，`EquipmentPickSheet` 草稿+结算，`buyEquipment`/`canBuyEquipment`）、招聘；
-- 销售：销售资源分配（草稿态调整，结算 1 AP，`confirmSellResourceAlloc`）、招聘；
+- 运营：申请贷款（1 AP）、归还贷款（1 AP）、招聘（1 AP + 招聘费）——融资卡只留状态展示；
+- 采购：贸易商采购（1 AP/次，每次结算 1 个品种）、扩大供应（草稿态调整，结算 1 AP，`confirmBuySupplyAlloc`，供给加点·量）、价格谈判（草稿态调整，结算 1 AP，`confirmBuyPriceAlloc`，议价·价）、签订长期协议（1 AP + 1w）、开发供应商（1 AP + 3w）、仓库扩建（单型号选定，结算 1 AP，现金即付当月生效，`WarehousePickSheet` 草稿+结算，`buyWarehouse`/`canBuyWarehouse`）、招聘；
+- 生产：安排加班（1 AP + 加班费，`toggleOvertime` 现含 AP 检查）、设备引进（单型号选定，结算 1 AP，现金即付当月生效，`EquipmentPickSheet` 草稿+结算，`buyEquipment`/`canBuyEquipment`）、招聘；
+- 销售：刺激需求（草稿态调整，结算 1 AP，`confirmSellDemandAlloc`，需求·量）、上调售价（草稿态调整，结算 1 AP，`confirmSellPriceAlloc`，提价·价）、招聘；
 - 研发：招聘。
 
 人员信息（人数/解锁轨道/固定与解锁说明）由 `StaffCard`（SpecialActions.tsx）展示，招聘行动移入特殊行动面板（`HireSheet`，原 HireBlock 拆分）。卡牌授予的免 AP 手段（紧急采购/清仓/原料替换、材料聚焦、压价代价、定价权、双档采购）仍在本职区随旗标展示。
@@ -167,7 +167,7 @@ HUD **不显示**：当前现金 `state.cash`（结算确认弹窗 / 采购页�
 - **生产单位成本**（`productionUnitCosts`，actions.ts:667）：每线 = 材料成本（BOM 消耗 × 采购计划后原料均价 × 降本系数）+ 固定分摊（生产工资 + 折旧 + 加班费 ÷ 本月总排产量，排产为 0 则不分摊）。销售页的「单件毛利」与预算页的「预计毛利」都用这个数。
 - **加班**（生产 ≥3 人解锁，「特殊行动」面板结算，1 AP）：确认后本月产能 +1× 员工产能（人数 × 每人产能，含设备加成）、**安排时发生即付** 2× 生产工资计提（`state.overtimePaid` 锁定；一经选定不可取消、费用不退还，清生产计划不影响；月初清零；actions.ts `toggleOvertime`/`clearProductionPlan`）。
 - **设备**：三种产线（见 §7.4）。
-- 设备购置为特殊行动：弹框内台数为草稿，「结算」按型号 1 AP/次、单型号每次 ≤5 台，现金即付、资本化入库，当月产能/折旧/借款额度即生效（`buyEquipment`/`canBuyEquipment`）；不形成计划（全游戏计划仅采购+生产），无「确认生产安排」即时路径。
+- 设备引进为特殊行动：弹框内单型号选定 + 台数草稿，「结算」1 AP/次、单型号每次 ≤5 台，现金即付、资本化入库，当月产能/折旧/借款额度即生效（`buyEquipment`/`canBuyEquipment`）；不形成计划（全游戏计划仅采购+生产），无「确认生产安排」即时路径。
 
 #### 销售部
 - **本月需求与售价** 表（SellPage，Turn.tsx:1238 起）：每层一行 6 列 = 需求数（`d.demand`，含销售资源加点）、上限（`demandBase + pushCap`，超配显示「超 n」）、市价（`d.price`）、单件毛利（市价 − 生产单位成本，正金负红）、可承诺量（`committable − 强制订单占用 − 已接订单占用`；committable = 库存 + 本月排产，`committableProductQty`）。
@@ -350,7 +350,7 @@ HUD **不显示**：当前现金 `state.cash`（结算确认弹窗 / 采购页�
 | 二手产线 eq-used | 5w（事件对价） | 1w（折旧减半） | +4 | 5w | 事件 D9 低价设备 |
 | 清算产线 eq-liquidation | 8w（事件对价） | 2w | +6 | 8w | 事件 X9 资产抄底 |
 
-产能生效：每人产能 = 基础 + 解锁 + Σ（各设备型号 cap + IP I2/J1 每台加成）（`equipmentCapTotal` + `ip.equipCapacity`，derive 层）；购置资本化为固定资产（不进当期损益），折旧逐月进生产费用（提足原值即停）；设备额度计入借款额度（§14.4，§18-A8 关闭）。事件 P6/D9/X9 送设备按型号入账（notes 标记 eq-line/eq-used/eq-liquidation，按对价入账，免费则按公允价值 5w 确认营业外收入，actions.ts `pushEquipment`/`equipmentModelOf`）。设备购置：`buyEquipment(state, modelId, count≤5)` 特殊行动（1 AP，现金即付、立即入库、当月产能/折旧/额度生效），`canBuyEquipment` 供 UI 判可用；不再走计划（`plan.equipment` 已退场，预演/桥接的「设备购置计划」行随之删除，实付计入 `paidCapex`）。
+产能生效：每人产能 = 基础 + 解锁 + Σ（各设备型号 cap + IP I2/J1 每台加成）（`equipmentCapTotal` + `ip.equipCapacity`，derive 层）；购置资本化为固定资产（不进当期损益），折旧逐月进生产费用（提足原值即停）；设备额度计入借款额度（§14.4，§18-A8 关闭）。事件 P6/D9/X9 送设备按型号入账（notes 标记 eq-line/eq-used/eq-liquidation，按对价入账，免费则按公允价值 5w 确认营业外收入，actions.ts `pushEquipment`/`equipmentModelOf`）。设备引进：`buyEquipment(state, modelId, count≤5)` 特殊行动（1 AP，现金即付、立即入库、当月产能/折旧/额度生效），`canBuyEquipment` 供 UI 判可用；不再走计划（`plan.equipment` 已退场，预演/桥接的「设备购置计划」行随之删除，实付计入 `paidCapex`）。
 「安置 1 人」的描述文案是旧槽位模型遗留，新模型无槽位概念。
 
 ### 7.5 加班（`toggleOvertime`，actions.ts:1120）
@@ -778,7 +778,7 @@ HUD **不显示**：当前现金 `state.cash`（结算确认弹窗 / 采购页�
 
 ### 17.2 统一模式的规则要点
 
-- 董事会、事件（每月 1 张）、立项（抽卡）阶段与管理部门全部保留；设备购置为特殊行动（1 AP、现金即付当月生效，不作为计划；即时购置 API 保留供事件/测试）；知产拥有即生效。
+- 董事会、事件（每月 1 张）、立项（抽卡）阶段与管理部门全部保留；设备引进为特殊行动（1 AP、现金即付当月生效，不作为计划；即时购置 API 保留供事件/测试）；知产拥有即生效。
 - 采购 = 计划制（结算执行）；生产 = 结算执行；订单可承诺量含排产；现货按公开需求 100% 成交（已移除原 50%~100% 随机因子）。
 - 预算页是唯一的结算入口（确定值 + 两段现金桥 + 研发判定预览）。
 - 订单数由销售人数 + 知产 + 卡牌驱动。
@@ -856,7 +856,7 @@ HUD **不显示**：当前现金 `state.cash`（结算确认弹窗 / 采购页�
 
 ---
 
-*报告完。所有公式以当前工作区代码为准；设备层即时购置改后 §7.4 已重核（设备购置 1 AP 即付、`plan.equipment` 退场、预演「设备购置计划」行删除；J5 复制、S4 裁员入口、设备额度不变）。*
+*报告完。所有公式以当前工作区代码为准；设备层即时购置改后 §7.4 已重核（设备引进 1 AP 即付、`plan.equipment` 退场、预演「设备购置计划」行删除；J5 复制、S4 裁员入口、设备额度不变）。*
 
 ---
 

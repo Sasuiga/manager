@@ -11,6 +11,7 @@ import {
   LOAN_TERM_MONTHS,
   MATERIALS,
   NEW_MATERIALS,
+  WAREHOUSE_MODELS,
   buyNegotiateCapOf,
   overtimeCostOf,
   overtimeGainOf,
@@ -25,6 +26,7 @@ import {
   tierUnlockedOf,
   TIERS,
 } from '../data/game'
+import type { FixedAssetKind } from '../data/game'
 import { cardEffectToMods, derive, makerPerStaff, mergeMods, unitCost } from './derive'
 import { materialPriceAt, priceAtProduct } from './settle'
 import { preSettleCash } from './preview'
@@ -857,7 +859,11 @@ export function addMaterial(
   const mat = state.materials[materialId]
   if (!mat) return 0
   const d = derive(state)
-  const cap = d.materials[materialId]?.cap ?? mat.cap
+  // 仓 cap 单一口径：4 种基础料取 derive 现算值（已含气候/知产/仓库修正）；新材料（复合材/微机电）不在 d.materials，
+  // 用 基础产能上限 + 库存管理 IP + 仓库加成 现算，避免解锁时快照过期。
+  const cap =
+    d.materials[materialId]?.cap ??
+    (MATERIAL_BY_ID[materialId] ? MATERIAL_BY_ID[materialId].baseCapacity + d.ipCapacityBonus + d.warehouseCapBonus : mat.cap)
   const canTake = ignoreCap ? qty : Math.min(qty, cap - mat.qty)
   const added = Math.max(0, canTake)
   if (added <= 0) return 0
@@ -1119,6 +1125,27 @@ export function buyEquipment(state: GameState, shopId: string, count = 1): Actio
   return { ok: true, msg: `已购置 ${model.name} ×${count}：现金 ${((model.price * count) / 10).toFixed(2)}w 即付资本化，本月产能与折旧生效（−1 AP）` }
 }
 
+/** 仓库购置（采购部特殊行动「仓库扩建」）：现金即付资本化，每类原料库存上限 +matCap 当月生效，月折旧逐月进管理费用。 */
+export function buyWarehouse(state: GameState, shopId: string, count = 1): ActionResult {
+  const gate = canBuyWarehouse(state, shopId, count)
+  if (!gate.ok) return gate
+  const model = WAREHOUSE_MODELS[shopId]
+  state.ap -= 1
+  state.cash -= model.price * count
+  for (let i = 0; i < count; i++) pushFixedAsset(state, 'warehouse', model.id, model.price, '商店购置')
+  return { ok: true, msg: `已购置 ${model.name} ×${count}：现金 ${((model.price * count) / 10).toFixed(2)}w 即付资本化，每类原料库存上限 +${model.matCap * count} 当月生效（−1 AP）` }
+}
+
+/** 仓库购置可行性（UI 判断按钮可用）：型号有效、台数范围、AP、现金（即时支付口径）。 */
+export function canBuyWarehouse(state: GameState, modelId: string, count: number): ActionResult {
+  const model = WAREHOUSE_MODELS[modelId]
+  if (!model) return fail('未知仓库型号')
+  if (count < 1 || count > 5) return fail('单型号每次最多购置 5 台')
+  if (state.ap < 1) return fail('AP 不足（仓库购置 1 AP/次）')
+  if (state.cash < model.price * count) return fail('现金不足')
+  return { ok: true }
+}
+
 /** 购置可行性（UI 判断按钮可用）：型号有效、台数范围、AP、现金（即时支付口径）。 */
 export function canBuyEquipment(state: GameState, modelId: string, count: number): ActionResult {
   const model = EQUIPMENT_MODELS[modelId]
@@ -1129,40 +1156,80 @@ export function canBuyEquipment(state: GameState, modelId: string, count: number
   return { ok: true }
 }
 
-/** 设备入账公共路径（商店 / 事件 / 设备计划）：资本化实付对价，型号决定产能/折旧/额度；事件白送设备传 withLedger=false（资产由营业外收入平衡）。 */
-function pushEquipment(state: GameState, modelId: string, paid: Money, source: string, withLedger = true): void {
-  const model = EQUIPMENT_MODELS[modelId]
-  if (!model) return
-  state.equipment.push({
-    id: `${modelId}-${state.month}-${state.equipment.length}`,
-    model: modelId,
-    name: model.name,
-    cap: model.cap,
-    depreciation: model.depreciation,
-    creditLine: model.creditLine,
-    cost: paid,
-    accumulated: 0,
-    purchasedAt: state.month,
-  })
+/**
+ * 固定资产入账公共路径（设备 / 仓库；商店 / 事件 / 卡牌）：资本化实付对价，型号决定效果/折旧/额度；
+ * 事件白送资产传 withLedger=false（资产由营业外收入平衡）。未来新固定资产类型在此扩展。
+ */
+function pushFixedAsset(state: GameState, kind: FixedAssetKind, modelId: string, paid: Money, source: string, withLedger = true): void {
+  const dept: Dept = kind === 'equipment' ? 'make' : 'buy'
+  if (kind === 'equipment') {
+    const model = EQUIPMENT_MODELS[modelId]
+    if (!model) return
+    state.equipment.push({
+      id: `${modelId}-${state.month}-${state.equipment.length}`,
+      model: modelId,
+      name: model.name,
+      cap: model.cap,
+      depreciation: model.depreciation,
+      creditLine: model.creditLine,
+      cost: paid,
+      accumulated: 0,
+      purchasedAt: state.month,
+    })
+  } else {
+    const model = WAREHOUSE_MODELS[modelId]
+    if (!model) return
+    state.warehouses.push({
+      id: `${modelId}-${state.month}-${state.warehouses.length}`,
+      model: modelId,
+      name: model.name,
+      matCap: model.matCap,
+      depreciation: model.depreciation,
+      creditLine: model.creditLine,
+      cost: paid,
+      accumulated: 0,
+      purchasedAt: state.month,
+    })
+  }
   state.flags['capexQ'] = (state.flags['capexQ'] ?? 0) + 1
   if (withLedger) {
     state.monthLedger.push({
-      dept: 'make',
-      item: `设备购置 ${model.name}`,
+      dept,
+      item: kind === 'equipment' ? `设备购置 ${EQUIPMENT_MODELS[modelId].name}` : `仓库购置 ${WAREHOUSE_MODELS[modelId].name}`,
       debit: '固定资产',
       credit: '现金',
       debitAmt: paid,
       creditAmt: paid,
-      detail: [
-        `现金支出 ${(paid / 10).toFixed(2)}w 资本化为固定资产（不计入当期损益）[${source}]`,
-        `月折旧 ${(model.depreciation / 10).toFixed(2)}w 为非现金费用，逐月进生产费用`,
-      ],
+      detail:
+        kind === 'equipment'
+          ? [
+              `现金支出 ${(paid / 10).toFixed(2)}w 资本化为固定资产（不计入当期损益）[${source}]`,
+              `月折旧 ${(EQUIPMENT_MODELS[modelId].depreciation / 10).toFixed(2)}w 为非现金费用，逐月进生产费用`,
+            ]
+          : [
+              `现金支出 ${(paid / 10).toFixed(2)}w 资本化为固定资产（不计入当期损益）[${source}]`,
+              `每类原料库存上限 +${WAREHOUSE_MODELS[modelId].matCap}（当月生效）· 月折旧 ${(WAREHOUSE_MODELS[modelId].depreciation / 10).toFixed(2)}w 为非现金费用，逐月进管理费用`,
+            ],
     })
   }
-  pushLog(state, 'action', `购置设备【${model.name}】`, [
-    `${(paid / 10).toFixed(2)}w（${source}）`,
-    `每名生产人员产能 +${model.cap}${state.depts.make.staff > 0 ? `（现有 ${state.depts.make.staff} 人：本月产能 +${state.depts.make.staff * model.cap}）` : '（暂无生产人员，产能不增益）'}`,
-  ])
+  if (kind === 'equipment') {
+    const model = EQUIPMENT_MODELS[modelId]
+    pushLog(state, 'action', `购置设备【${model.name}】`, [
+      `${(paid / 10).toFixed(2)}w（${source}）`,
+      `每名生产人员产能 +${model.cap}${state.depts.make.staff > 0 ? `（现有 ${state.depts.make.staff} 人：本月产能 +${state.depts.make.staff * model.cap}）` : '（暂无生产人员，产能不增益）'}`,
+    ])
+  } else {
+    const model = WAREHOUSE_MODELS[modelId]
+    pushLog(state, 'action', `购置仓库【${model.name}】`, [
+      `${(paid / 10).toFixed(2)}w（${source}）`,
+      `每类原料库存上限 +${model.matCap}（当月生效，含新材料）· 月折旧 ${(model.depreciation / 10).toFixed(2)}w`,
+    ])
+  }
+}
+
+/** 设备入账（商店 / 事件 / 卡牌入口，保留原签名）。 */
+function pushEquipment(state: GameState, modelId: string, paid: Money, source: string, withLedger = true): void {
+  pushFixedAsset(state, 'equipment', modelId, paid, source, withLedger)
 }
 
 /** 事件/卡牌 note 中的设备型号标记（'设备 +1 · eq-xxx'）；无标记 = 商店标准设备。 */
@@ -1399,45 +1466,73 @@ export function setBuyPriceAlloc(state: GameState, matId: string, tiers: number)
 }
 
 /**
- * 确认本月采购资源分配（特殊行动，1 AP）：供给加点（件数）与议价（档数）草稿写回后生效。
+ * 确认本月扩大供应（特殊行动，1 AP）：供给加点（量）草稿写回后生效，与价格谈判（议价）共用池。
  * 结算前可再次确认（再调整需再 1 AP）；弹框内草稿取消/关闭则不生效。
  */
-export function confirmBuyResourceAlloc(
-  state: GameState,
-  draft: { supply?: Record<string, number>; price?: Record<string, number> },
-): ActionResult {
+export function confirmBuySupplyAlloc(state: GameState, supply: Record<string, number>): ActionResult {
   if (state.ap < 1) return fail('AP 不足（确认分配 1 AP）')
-  for (const m of MATERIALS) setBuySupplyAlloc(state, m.id, draft.supply?.[m.id] ?? 0)
-  for (const m of MATERIALS) setBuyPriceAlloc(state, m.id, draft.price?.[m.id] ?? 0)
+  for (const m of MATERIALS) setBuySupplyAlloc(state, m.id, supply[m.id] ?? 0)
   state.ap -= 1
   const d = derive(state)
   const supplyUnits = MATERIALS.reduce((a, m) => a + (d.buySupplyPush[m.id] ?? 0), 0)
-  const priceTiers = MATERIALS.reduce((a, m) => a + (d.buyPricePush[m.id] ?? 0), 0)
-  pushLog(state, 'action', '采购资源分配确认', [
-    `1 AP：供给加点 ${supplyUnits} 件 · 议价 ${priceTiers} 档（共用池 ${d.buyResource} 点，已用 ${d.buyResourceUsed} 点）`,
+  pushLog(state, 'action', '扩大供应确认', [
+    `1 AP：供给加点 ${supplyUnits} 件（与价格谈判共用池 ${d.buyResource} 点，已用 ${d.buyResourceUsed} 点）`,
   ])
-  return { ok: true, msg: `采购资源分配已确认（供给 +${supplyUnits} 件 / 议价 ${priceTiers} 档，-1 AP）` }
+  return { ok: true, msg: `扩大供应已确认（供给 +${supplyUnits} 件，-1 AP）` }
 }
 
 /**
- * 确认本月销售资源分配（特殊行动，1 AP）：需求加点（点数）与提价（档数）草稿写回后生效。
+ * 确认本月价格谈判（特殊行动，1 AP）：议价（价）草稿写回后生效，与扩大供应共用池。
  * 结算前可再次确认（再调整需再 1 AP）；弹框内草稿取消/关闭则不生效。
  */
-export function confirmSellResourceAlloc(
-  state: GameState,
-  draft: { demand?: Partial<Record<Tier, number>>; raise?: Partial<Record<Tier, number>> },
-): ActionResult {
+export function confirmBuyPriceAlloc(state: GameState, price: Record<string, number>): ActionResult {
   if (state.ap < 1) return fail('AP 不足（确认分配 1 AP）')
-  for (const t of TIERS) setAlloc(state, t, draft.demand?.[t] ?? 0)
-  for (const t of TIERS) setSellPriceAlloc(state, t, draft.raise?.[t] ?? 0)
+  for (const m of MATERIALS) setBuyPriceAlloc(state, m.id, price[m.id] ?? 0)
   state.ap -= 1
   const d = derive(state)
-  const demandPoints = allocUsed(state)
-  const raisePoints = TIERS.reduce((a, t) => a + (state.sellPriceAlloc[t] ?? 0) * d.sellRaiseCost, 0)
-  pushLog(state, 'action', '销售资源分配确认', [
-    `1 AP：需求加点 ${demandPoints} 点 · 提价 ${raisePoints} 点（共用池 ${d.salesResource} 点）`,
+  const priceTiers = MATERIALS.reduce((a, m) => a + (d.buyPricePush[m.id] ?? 0), 0)
+  pushLog(state, 'action', '价格谈判确认', [
+    `1 AP：议价 ${priceTiers} 档（与扩大供应共用池 ${d.buyResource} 点，已用 ${d.buyResourceUsed} 点）`,
   ])
-  return { ok: true, msg: `销售资源分配已确认（需求 ${demandPoints} 点 / 提价 ${raisePoints} 点，-1 AP）` }
+  return { ok: true, msg: `价格谈判已确认（议价 ${priceTiers} 档，-1 AP）` }
+}
+
+/**
+ * 确认本月刺激需求（特殊行动，1 AP）：需求加点（量，点数）草稿写回后生效，与上调售价共用池。
+ * 草稿按「总池 − 已确认提价点数」截断；结算前可再次确认（再调整需再 1 AP）；弹框内草稿取消/关闭则不生效。
+ */
+export function confirmSellDemandAlloc(state: GameState, demand: Partial<Record<Tier, number>>): ActionResult {
+  if (state.ap < 1) return fail('AP 不足（确认分配 1 AP）')
+  const d = derive(state)
+  const priceUsed = TIERS.reduce((a, t) => a + (d.sellPriceRaise[t] ?? 0) * d.sellRaiseCost, 0)
+  let remaining = Math.max(0, d.salesResource - priceUsed)
+  for (const t of TIERS) {
+    const want = Math.max(0, Math.min(demand[t] ?? 0, remaining))
+    state.salesAlloc[t] = want
+    remaining -= want
+  }
+  state.ap -= 1
+  const demandPoints = allocUsed(state)
+  pushLog(state, 'action', '刺激需求确认', [
+    `1 AP：需求加点 ${demandPoints} 点（与上调售价共用池 ${d.salesResource} 点，已用 ${demandPoints + priceUsed} 点）`,
+  ])
+  return { ok: true, msg: `刺激需求已确认（${demandPoints} 点，-1 AP）` }
+}
+
+/**
+ * 确认本月上调售价（特殊行动，1 AP）：提价（价，档数）草稿写回后生效，与刺激需求共用池。
+ * 结算前可再次确认（再调整需再 1 AP）；弹框内草稿取消/关闭则不生效。
+ */
+export function confirmSellPriceAlloc(state: GameState, raise: Partial<Record<Tier, number>>): ActionResult {
+  if (state.ap < 1) return fail('AP 不足（确认分配 1 AP）')
+  for (const t of TIERS) setSellPriceAlloc(state, t, raise[t] ?? 0)
+  state.ap -= 1
+  const d = derive(state)
+  const raiseTiers = TIERS.reduce((a, t) => a + (d.sellPriceRaise[t] ?? 0), 0)
+  pushLog(state, 'action', '上调售价确认', [
+    `1 AP：提价 ${raiseTiers} 档（与刺激需求共用池 ${d.salesResource} 点，已用 ${allocUsed(state) + raiseTiers * d.sellRaiseCost} 点）`,
+  ])
+  return { ok: true, msg: `上调售价已确认（${raiseTiers} 档，-1 AP）` }
 }
 
 /** 设置某层本月提价档数（0~上限；需销售 ≥2；消耗销售资源，与需求加点共用池；档上限随人数 2 人 1 档 / 4 人 2 档；仅现货、该层需求 −1；S12/S15 可降点数/升上限）。 */

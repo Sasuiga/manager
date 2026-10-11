@@ -17,8 +17,8 @@ import type { SettleReport } from './settle'
 import type { Climate, GameEventDef, GameState, GoalDef, GoalTrack, Ledger, Money } from './types'
 
 export * from './types'
-export { derive, mergeMods, unitCost, rndProjectOutcome, activeIps, equipmentCapTotal, equipmentCreditLine } from './derive'
-export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, equityOf, buildDeck, wagePayableOf } from './game'
+export { derive, mergeMods, unitCost, rndProjectOutcome, activeIps, equipmentCapTotal, equipmentCreditLine, materialCapOf } from './derive'
+export { newGame, balanceSheet, inventoryValue, netAssets, equipmentNet, warehouseNet, fixedAssetNet, equityOf, buildDeck, wagePayableOf } from './game'
 export { goalCurrent, checkGoal, goalProgress, computeScore, unitLabel, quarterLedgers, priceAtProduct, materialPriceAt } from './settle'
 export type { SettleReport } from './settle'
 export { previewOperations, preSettleCash } from './preview'
@@ -69,6 +69,8 @@ export {
   developSupplier,
   buyEquipment,
   canBuyEquipment,
+  buyWarehouse,
+  canBuyWarehouse,
   setPlan,
   planCapacity,
   plannedTotal,
@@ -94,8 +96,10 @@ export {
   activeResearch,
   setRndAssign,
   confirmRndAssignments,
-  confirmBuyResourceAlloc,
-  confirmSellResourceAlloc,
+  confirmBuySupplyAlloc,
+  confirmBuyPriceAlloc,
+  confirmSellDemandAlloc,
+  confirmSellPriceAlloc,
   rndAssignedTotal,
   rndActiveThisMonth,
   borrow,
@@ -434,7 +438,7 @@ export function cumulative(ledgers: Ledger[]) {
   )
 }
 
-export { STAFF, RND_PROJECTS, CARD_BY_ID, EQUIPMENT_SHOP, IP_BY_ID, TIER_COST, TIER_STAFF, tierUnlockedOf } from '../data/game'
+export { STAFF, RND_PROJECTS, CARD_BY_ID, EQUIPMENT_SHOP, WAREHOUSE_SHOP, IP_BY_ID, TIER_COST, TIER_STAFF, tierUnlockedOf } from '../data/game'
 export { MILESTONES, MILESTONE_BY_ID, MILESTONE_SHAPES } from '../data/game'
 export { IP_SETS } from '../data/game'
 export { allMilestoneProgress, milestoneProgress } from './milestones'

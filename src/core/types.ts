@@ -104,25 +104,38 @@ export interface DeptState {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 设备与生产
+// 固定资产（设备 / 仓库 / 未来扩展）与生产
 // ─────────────────────────────────────────────────────────────
 
-export interface Equipment {
+/**
+ * 固定资产实例公共形状：购置即资本化（cost），逐月折旧（accumulated），提供借款额度（creditLine）。
+ * 新增固定资产类型（物流/办公等）：定义 kind 专属字段的子接口 + state 数组，
+ * 折旧/额度/净值统一走 FixedAsset 公共字段（见 game.warehouseNet / derive.creditLine）。
+ */
+export interface FixedAsset {
   id: string
-  /** 设备型号（EQUIPMENT_MODELS 键；产线型号差异化：产能/折旧/额度各不相同） */
+  /** 型号键（FIXED_ASSETS 键；型号差异化：效果/折旧/额度各不相同） */
   model: string
   name: string
-  /** 每台设备为每名生产人员提供的产能（型号差异化；无此字段的旧数据按 EQUIP_CAP_PER_WORKER） */
-  cap: number
+  /** 购置成本（角） */
+  cost: Money
   /** 每月折旧（角） */
   depreciation: Money
   /** 可提供的借款额度（角） */
   creditLine: Money
-  /** 购置成本（角） */
-  cost: Money
   /** 累计折旧，用于净资产计算 */
   accumulated: Money
   purchasedAt: number
+}
+
+export interface Equipment extends FixedAsset {
+  /** 每台设备为每名生产人员提供的产能（型号差异化；无此字段的旧数据按 EQUIP_CAP_PER_WORKER） */
+  cap: number
+}
+
+export interface Warehouse extends FixedAsset {
+  /** 每类原料库存上限提升（全部原料，含研发解锁的新材料） */
+  matCap: number
 }
 
 export interface BomDef {
@@ -604,6 +617,9 @@ export interface BalanceSheet {
   prepaid: Money
   equipmentGross: Money
   equipmentAccum: Money
+  /** 仓库固定资产（原值/累计折旧，口径同设备） */
+  warehouseGross: Money
+  warehouseAccum: Money
   totalAssets: Money
   debt: Money
   /** 应付职工薪酬（上月计提、次月实付，挂账负债） */
@@ -672,6 +688,8 @@ export interface GameState {
   materials: Record<string, MaterialState>
   products: Record<Tier, ProductState>
   equipment: Equipment[]
+  /** 仓库固定资产（采购部特殊行动「仓库扩建」）：每类原料库存上限 +matCap，月折旧 */
+  warehouses: Warehouse[]
 
   salesResource: number
   salesAlloc: Record<Tier, number>

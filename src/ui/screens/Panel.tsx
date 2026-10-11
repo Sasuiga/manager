@@ -220,7 +220,7 @@ function balRows(cur: E.BalanceSheet, prev: E.BalanceSheet | undefined): RowDef[
     L('现金', (b) => b.cash, { sign: 'neg' }),
     L('原料存货', (b) => b.inventoryMaterial),
     L('成品存货', (b) => b.inventoryProduct),
-    L('设备净值', (b) => b.equipmentGross - b.equipmentAccum),
+    L('固定资产净值', (b) => b.equipmentGross - b.equipmentAccum + b.warehouseGross - b.warehouseAccum),
     L('资产合计', (b) => b.totalAssets, { bold: true }),
     { kind: 'section', label: '负债与权益' },
     L('借款', (b) => b.debt),

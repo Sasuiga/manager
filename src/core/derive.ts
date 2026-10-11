@@ -15,6 +15,7 @@ import {
   IP_BY_ID,
   EQUIP_CAP_PER_WORKER,
   MAKER_CAP_BASE,
+  MATERIAL_BY_ID,
   MATERIALS,
   OWNER_CAPACITY,
   MONTHLY_RATE,
@@ -92,6 +93,11 @@ export interface DerivedTotals {
   creditLine: number
   /** 可用借款（额度 - 已借） */
   creditAvailable: number
+  /** 仓库固定资产：每类原料库存上限加成（购置即生效，全部原料含新材料） */
+  warehouseCapBonus: number
+  /** 库存管理 IP（I6）：原料/成品库存上限加成（新原料 cap 初始化用，口径同 4 种基础料） */
+  ipCapacityBonus: number  /** 仓库固定资产：本月仓库折旧预览（管理费用，非现金） */
+  warehouseDepreciation: number
   noBorrow: boolean
   /** 销售资源（点，每名销售人员每月产出：基础 4 点、5 人 8 点，需求加点/提价共用池，含员工联动增效） */
   salesResource: number
@@ -446,6 +452,8 @@ export function derive(state: GameState): DerivedTotals {
   }
 
   // ── 原料（采购人员不再提供供应加成：增量供给走供应商开发/气候/事件/采购资源加点）──
+  // 仓库固定资产：每类原料库存上限 +matCap（含研发解锁的新材料；新材料在 state.materials 初始化时取当时值）
+  const warehouseCapBonus = state.warehouses.reduce((a, w) => a + w.matCap, 0)
   const materials: DerivedTotals['materials'] = {}
   for (const m of MATERIALS) {
     const mm = mods.materials?.[m.id] ?? { supply: 0, tierShift: 0 }
@@ -465,7 +473,7 @@ export function derive(state: GameState): DerivedTotals {
     if (state.focusMat === m.id && matFocusActive) shift -= matFocusPlus ? 2 : 1 // C13 材料聚焦：指定原料价格 −1/−2 档
     shift += ip.buyTierShift // 大宗集采（J9）：所有原料价格降 1 档（质量认证 I8 只作用于产品售价，不作用于原料）
     shift = Math.max(-3, Math.min(3, shift))
-    const cap = m.baseCapacity + ip.capacityBonus
+    const cap = m.baseCapacity + ip.capacityBonus + warehouseCapBonus
     materials[m.id] = { supply, tierShift: shift, price: priceOf(m, shift), cap }
   }
 
@@ -543,8 +551,9 @@ export function derive(state: GameState): DerivedTotals {
   const rate = Math.max(0, MONTHLY_RATE + (mods.rateShift ?? 0) * 0.001 - ip.rateSave * 0.001)
   // 借款当月不计提利息（次月才支付），到期/还款时剩余本金与当月利息一并还掉
   const interest = state.month === state.loanStartMonth ? 0 : Math.max(0, Math.round(state.debt * rate) - ip.interestSave)
-  const equipCredit = equipmentCreditLine(state.equipment)
-  const creditLine = Math.round((BASE_CREDIT_LINE + ip.creditLine + (state.flags['extraCredit'] ?? 0) + equipCredit) * (mods.creditFactor ?? 1))
+  // 固定资产额度（设备 + 仓库，未来新类型并入）
+  const fixedCredit = equipmentCreditLine([...state.equipment, ...state.warehouses])
+  const creditLine = Math.round((BASE_CREDIT_LINE + ip.creditLine + (state.flags['extraCredit'] ?? 0) + fixedCredit) * (mods.creditFactor ?? 1))
 
   // ── 销售 ──
   // 品牌加成计入资源池（新模型下品牌 = 更多推力）
@@ -598,6 +607,10 @@ export function derive(state: GameState): DerivedTotals {
   for (const e of state.equipment) {
     makeDepreciation += Math.min(e.depreciation, Math.max(0, e.cost - e.accumulated))
   }
+  let warehouseDepreciation = 0
+  for (const w of state.warehouses) {
+    warehouseDepreciation += Math.min(w.depreciation, Math.max(0, w.cost - w.accumulated))
+  }
   /** 招聘费当月直接计入管理费用，按本月招聘人数 × 招聘费展示 */
   const hireThisMonth: Record<Dept, number> = {
     ops: state.flags[`hireMonth:ops:${state.month}`] ?? 0,
@@ -633,6 +646,10 @@ export function derive(state: GameState): DerivedTotals {
     // 设备折旧（非现金）
     if (dp === 'make' && makeDepreciation > 0) {
       rows.push({ item: '设备折旧', debit: '制造费用', debitAmt: makeDepreciation, credit: '累计折旧', creditAmt: makeDepreciation })
+    }
+    // 仓库折旧（非现金，归采购部/管理费用）
+    if (dp === 'buy' && warehouseDepreciation > 0) {
+      rows.push({ item: '仓库折旧', debit: '管理费用', debitAmt: warehouseDepreciation, credit: '累计折旧', creditAmt: warehouseDepreciation })
     }
     // 加班费（结算时现金支付）
     if (dp === 'make' && overtimeCost > 0) {
@@ -719,6 +736,9 @@ export function derive(state: GameState): DerivedTotals {
     interest,
     creditLine,
     creditAvailable: Math.max(0, creditLine - state.debt),
+    warehouseCapBonus,
+    ipCapacityBonus: ip.capacityBonus,
+    warehouseDepreciation,
     noBorrow,
     salesResource,
     brandBonus,
@@ -807,6 +827,17 @@ export function equipmentCapTotal(equipment: { cap?: number }[]): number {
 /** 设备可提供的借款额度合计（§18-A8，随融资层生效）。 */
 export function equipmentCreditLine(equipment: { creditLine?: number }[]): number {
   return equipment.reduce((sum, e) => sum + (e.creditLine ?? 0), 0)
+}
+
+/**
+ * 原料库存上限（单一口径）：基础上限 + 库存管理 IP（I6） + 仓库固定资产。
+ * 4 种基础料直接取 d.materials[id].cap（已按此计算）；新材料（复合材/微机电）解锁初始化用。
+ */
+export function materialCapOf(state: GameState, matId: string): number {
+  const def = MATERIAL_BY_ID[matId]
+  if (!def) return 0
+  const d = derive(state)
+  return def.baseCapacity + d.ipCapacityBonus + d.warehouseCapBonus
 }
 
 export function collectFlags(state: GameState, mods: MonthMods): string[] {

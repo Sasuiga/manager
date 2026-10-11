@@ -88,6 +88,7 @@ export function newGame(seed: number): GameState {
     ) as GameState['products'],
 
     equipment: [],
+    warehouses: [],
 
     salesResource: BASE_SALES_RESOURCE,
     salesAlloc: { low: 0, mid: 0, high: 0, special: 0 },
@@ -239,8 +240,18 @@ export function equipmentNet(state: GameState): Money {
   return state.equipment.reduce((a, e) => a + Math.max(0, e.cost - e.accumulated), 0)
 }
 
+/** 仓库净值 = Σ max(0, 原值 − 累计折旧)（口径同设备净值）。 */
+export function warehouseNet(state: GameState): Money {
+  return state.warehouses.reduce((a, w) => a + Math.max(0, w.cost - w.accumulated), 0)
+}
+
+/** 固定资产净值合计（设备 + 仓库；未来新类型在此并入）。 */
+export function fixedAssetNet(state: GameState): Money {
+  return equipmentNet(state) + warehouseNet(state)
+}
+
 export function totalAssets(state: GameState): Money {
-  return state.cash + inventoryValue(state) + equipmentNet(state) + state.pendingIncome
+  return state.cash + inventoryValue(state) + fixedAssetNet(state) + state.pendingIncome
 }
 
 /** 应付职工薪酬合计（上月计提、次月实付的挂账负债）。 */
@@ -256,6 +267,8 @@ export function balanceSheet(state: GameState): BalanceSheet {
   const grossEquip = state.equipment.reduce((a, e) => a + e.cost, 0)
   const accum = state.equipment.reduce((a, e) => a + Math.min(e.accumulated, e.cost), 0)
   const netEquip = equipmentNet(state)
+  const grossWh = state.warehouses.reduce((a, w) => a + w.cost, 0)
+  const whAccum = state.warehouses.reduce((a, w) => a + Math.min(w.accumulated, w.cost), 0)
   return {
     cash: state.cash,
     inventoryMaterial: matv,
@@ -263,7 +276,9 @@ export function balanceSheet(state: GameState): BalanceSheet {
     prepaid: state.prepaid,
     equipmentGross: grossEquip,
     equipmentAccum: accum,
-    totalAssets: state.cash + matv + prodv + netEquip + state.pendingIncome,
+    warehouseGross: grossWh,
+    warehouseAccum: whAccum,
+    totalAssets: state.cash + matv + prodv + netEquip + warehouseNet(state) + state.pendingIncome,
     debt: state.debt + state.pendingCost,
     wagePayable: wagePayableOf(state),
     equity: equityOf(state),
